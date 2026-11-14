@@ -43,10 +43,25 @@ function names(sp) {
 }
 const fullName = (sp) => `${sp.english} · ${sp.finnish}`;
 
+// A slow board must not leave requests hanging: every fetch gives up after 4 s.
 async function getJSON(url) {
-  const r = await fetch(url, { cache: "no-store" });
-  if (!r.ok) throw new Error(`${url}: ${r.status}`);
-  return r.json();
+  const abort = new AbortController();
+  const timer = setTimeout(() => abort.abort(), 4000);
+  try {
+    const r = await fetch(url, { cache: "no-store", signal: abort.signal });
+    if (!r.ok) throw new Error(`${url}: ${r.status}`);
+    return await r.json();
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+// Runs `fn`, then schedules the next run only once it finished, so polls never overlap.
+function every(ms, fn) {
+  const run = async () => {
+    try { await fn(); } finally { setTimeout(run, ms); }
+  };
+  run();
 }
 
 /* ---------- live ---------- */
@@ -59,6 +74,7 @@ function renderLive() {
   $("hour-span").textContent = `${pad(t.h)}–${pad(t.h + 1)}`;
   $("scale-sim").textContent = spanText(live.time_scale);
   $("model-name").textContent = live.detector;
+  if (!modelCard || !modelCard.name) $("card-name").textContent = live.detector;
   $("model-ms").textContent = msText(live.detect_ms);
   $("card-ms").textContent = `${msText(live.detect_ms)} per frame`;
   $("unidentified").textContent = live.unidentified
@@ -146,6 +162,7 @@ function renderTables() {
       h.species.length ? el("span", { class: "members" }, h.species.join(", ")) : null);
   }));
   renderLive();
+  renderModel(); // species names in the accuracy table come from the tables
 }
 
 async function pollTables() {
@@ -161,7 +178,8 @@ let evidenceKey = "";
 async function pollEvidence() {
   let rows;
   try { rows = await getJSON("/api/evidence"); } catch { return; }
-  const key = rows.map((e) => `${e.url}@${e.ts}`).join("|");
+  // names come from the tables, so redraw once they have arrived
+  const key = (tables ? "named|" : "") + rows.map((e) => `${e.url}@${e.ts}`).join("|");
   if (key === evidenceKey) return;
   evidenceKey = key;
   const byKey = Object.fromEntries((tables ? tables.species : []).map((s) => [s.key, s]));
@@ -180,11 +198,23 @@ async function pollEvidence() {
 
 /* ---------- model card ---------- */
 
-function pct(x) { return `${Math.round(x * 100)}%`; }
+const DASH = "–"; // not measured
+const pct = (x) => (x == null ? DASH : `${Math.round(x * 100)}%`);
+
+function sentence(text) {
+  const t = text.trim();
+  return t.charAt(0).toUpperCase() + t.slice(1) + (/[.!?]$/.test(t) ? "" : ".");
+}
 
 async function loadModel() {
-  try { modelCard = await getJSON("/api/model"); } catch { return; }
-  $("card-name").textContent = modelCard.name;
+  try { modelCard = await getJSON("/api/model"); } catch { return false; }
+  renderModel();
+  return true;
+}
+
+function renderModel() {
+  if (!modelCard) return;
+  $("card-name").textContent = modelCard.name || (live ? live.detector : DASH);
   const m = modelCard.metrics;
   const line = m ? "Measured on footage the model had not seen." : "Accuracy not yet measured on this footage.";
   $("accuracy-short").textContent = line;
@@ -193,23 +223,26 @@ async function loadModel() {
     $("card-board").textContent = `${msText(modelCard.board_ms)} per frame`;
     $("card-board-row").hidden = false;
   }
-  if (!m) return;
-  if (m.count_exact != null) {
-    $("card-exact").textContent = pct(m.count_exact);
-    $("card-exact-row").hidden = false;
+  if (modelCard.count_threshold != null) {
+    const source = modelCard.threshold_source ? ` ${sentence(modelCard.threshold_source)}` : "";
+    $("card-threshold").textContent = `Counted at confidence ≥ ${modelCard.count_threshold.toFixed(2)}.${source}`;
+    $("card-threshold").hidden = false;
   }
+  if (!m) return;
+  $("card-exact").textContent = pct(m.count_exact);
+  $("card-exact-row").hidden = false;
   const per = m.per_species || {};
   const keys = Object.keys(per);
   if (!keys.length) return;
   const byKey = Object.fromEntries((tables ? tables.species : []).map((s) => [s.key, s]));
   const table = $("metrics");
   table.replaceChildren(
-    el("thead", {}, el("tr", {}, ...["Species", "Precision", "Recall", "Birds checked"].map((h) => el("th", { scope: "col" }, h)))),
+    el("thead", {}, el("tr", {}, ...["Species", "Precision", "Recall", "Boxes"].map((h) => el("th", { scope: "col" }, h)))),
     el("tbody", {}, ...keys.map((k) => el("tr", {},
       el("th", { scope: "row" }, byKey[k] ? fullName(byKey[k]) : k),
       el("td", {}, pct(per[k].precision)),
       el("td", {}, pct(per[k].recall)),
-      el("td", {}, String(per[k].val_boxes))))));
+      el("td", {}, per[k].val_boxes == null ? DASH : String(per[k].val_boxes))))));
   table.hidden = false;
 }
 
@@ -226,13 +259,13 @@ function startFeed() {
   img.src = "/stream.mjpg";
 }
 
-async function start() {
+function start() {
   startFeed();
-  await pollTables();
-  await pollLive();
-  loadModel();
-  pollEvidence();
-  setInterval(pollLive, 1000);
-  setInterval(() => { pollTables(); pollEvidence(); }, 5000);
+  every(1000, pollLive);
+  every(5000, pollTables);
+  every(5000, pollEvidence);
+  // the card does not change while the server runs; retry only until it loads
+  const model = async () => { if (!(await loadModel())) setTimeout(model, 5000); };
+  model();
 }
 start();

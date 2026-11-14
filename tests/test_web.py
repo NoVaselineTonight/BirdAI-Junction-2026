@@ -21,7 +21,7 @@ NAMES = {s.key: s.english for s in SPECIES}
 GT = {"species": "great_tit", "confidence": 0.9, "box": [10, 10, 60, 60]}
 
 
-def scripted_app(tmp_path, make_video, detector_species, frames, detections):
+def scripted_app(tmp_path, make_video, detector_species, frames, detections, model_card=None):
     """A web app over a scripted pipeline that has run `detections` detections inline."""
     detector = ScriptedDetector({"species": detector_species, "frames": frames})
     store = Store(tmp_path / "census.db", detector.species)
@@ -42,7 +42,7 @@ def scripted_app(tmp_path, make_video, detector_species, frames, detections):
             break
         pipeline.step()
     assert calls >= detections, "pipeline never ran the detections"
-    return create_app(pipeline, store, SPECIES, settings, model_card=None), store, pipeline
+    return create_app(pipeline, store, SPECIES, settings, model_card=model_card), store, pipeline
 
 
 @pytest.fixture
@@ -138,3 +138,16 @@ def test_live_state_reports_a_stopped_pipeline(web, client):
     assert client.get("/api/live").json()["error"] is None
     web[2].error = RuntimeError("camera lost")
     assert client.get("/api/live").json()["error"] == "camera lost"
+
+
+def test_model_card_is_passed_through_with_unmeasured_rates(tmp_path, make_video):
+    card = {
+        "name": "Feeder student 640", "count_threshold": 0.6,
+        "threshold_source": "default: too few validation boxes to pick", "board_ms": 412,
+        "metrics": {"count_exact": None, "per_species": {
+            "great_tit": {"precision": 0.94, "recall": 0.71, "val_boxes": 132},
+            "blue_tit": {"precision": None, "recall": None, "val_boxes": 0}}},
+    }
+    app, _, _ = scripted_app(tmp_path, make_video, ["great_tit", "blue_tit"], [[GT]], 1, model_card=card)
+    with TestClient(app) as c:
+        assert c.get("/api/model").json() == card
