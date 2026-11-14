@@ -5,6 +5,7 @@ import pytest
 from evaluate import (
     Tally,
     build_curves,
+    build_tallies,
     choose,
     evaluate_candidate,
     frame_is_exact,
@@ -31,21 +32,53 @@ def test_predictions_on_unidentified_truth_are_not_errors():
     r = match_frame([det("great_tit", A)], [det("unidentified", A)])
     assert r.get("great_tit", Tally(0, 0, 0)) == Tally(0, 0, 0)
 
-def test_pick_threshold_takes_the_lowest_sure_one():
-    curves = {"great_tit": [(0.50, 0.85, 0.9), (0.55, 0.91, 0.88), (0.60, 0.95, 0.8)],
-              "blue_tit": [(0.50, 0.92, 0.7), (0.55, 0.93, 0.7), (0.60, 0.97, 0.6)]}
-    assert pick_threshold(curves, {"great_tit": 80, "blue_tit": 40}) == 0.55
+def pooled(**per_threshold):
+    """Tallies by threshold: `pooled(t60={"great_tit": (500, 20)})` is {0.60: {"great_tit": Tally(500, 20, 0)}}."""
+    return {float(k[1:]) / 100: {s: Tally(tp, fp, 0) for s, (tp, fp) in v.items()} for k, v in per_threshold.items()}
 
-def test_pick_threshold_ignores_species_with_few_examples():
-    curves = {"great_tit": [(0.50, 0.95, 0.9)], "jay": [(0.50, 0.10, 0.5)]}
-    assert pick_threshold(curves, {"great_tit": 80, "jay": 3}) == 0.50
 
-def test_pick_threshold_falls_back_to_0_90():
-    assert pick_threshold({"great_tit": [(0.50, 0.5, 0.9), (0.90, 0.6, 0.2)]}, {"great_tit": 80}) == 0.90
+def test_pick_threshold_takes_the_lowest_threshold_that_reaches_the_pooled_bar():
+    tallies = pooled(t50={"great_tit": (80, 20), "blue_tit": (40, 10)},   # 120 / 150 = 0.80
+                     t55={"great_tit": (80, 8), "blue_tit": (40, 4)},     # 120 / 132 = 0.909
+                     t60={"great_tit": (70, 1), "blue_tit": (30, 0)})     # later and better, but not the lowest
+    assert pick_threshold(tallies, {"great_tit": 80, "blue_tit": 40}) == 0.55
+
+
+def test_a_small_judged_class_stuck_below_the_bar_does_not_block_the_pick():
+    # great_tit 500 / 520 = 0.96, jay 17 / 21 = 0.81 on its own; pooled 517 / 541 = 0.956
+    tallies = pooled(t50={"great_tit": (520, 120), "jay": (20, 20)},
+                     t60={"great_tit": (500, 20), "jay": (17, 4)},
+                     t90={"great_tit": (200, 5), "jay": (6, 4)})
+    assert pick_threshold(tallies, {"great_tit": 500, "jay": 23}) == 0.60
+
+
+def test_pick_threshold_pools_hits_and_false_alarms_exactly_at_the_bar():
+    tallies = pooled(t50={"a": (45, 3), "b": (45, 7)})  # 90 / 100 = 0.90 exactly
+    assert pick_threshold(tallies, {"a": 50, "b": 50}) == 0.50
+
+
+def test_pick_threshold_falls_back_to_0_90_when_pooled_precision_is_below_the_bar_everywhere():
+    tallies = pooled(t50={"great_tit": (50, 50)}, t70={"great_tit": (89, 11)}, t90={"great_tit": (60, 7)})
+    assert pick_threshold(tallies, {"great_tit": 80}) == 0.90
+    # 0.90 is also what the fallback returns when the 0.90 entry itself is below the bar
+    assert pick_threshold(pooled(t50={"great_tit": (1, 1)}), {"great_tit": 80}) == 0.90
+
+
+def test_pick_threshold_leaves_species_with_few_boxes_out_of_the_pool():
+    # jay (3 boxes) has 100 false alarms; pooled with it the precision would be 0.46, without it 0.95
+    tallies = pooled(t50={"great_tit": (95, 5), "jay": (3, 100)})
+    assert pick_threshold(tallies, {"great_tit": 80, "jay": 3}) == 0.50
+
+
+def test_pick_threshold_with_nothing_predicted_does_not_qualify_that_threshold():
+    tallies = pooled(t50={"great_tit": (0, 0)}, t55={"great_tit": (0, 0), "blue_tit": (0, 0)},
+                     t60={"great_tit": (19, 1)})
+    assert pick_threshold(tallies, {"great_tit": 80, "blue_tit": 40}) == 0.60
+    assert pick_threshold(pooled(t50={"great_tit": (0, 0)}), {"great_tit": 80}) == 0.90
 
 
 def test_pick_threshold_without_any_species_with_enough_boxes_is_0_90():
-    assert pick_threshold({"jay": [(0.50, 1.0, 1.0)]}, {"jay": 3}) == 0.90
+    assert pick_threshold(pooled(t50={"jay": (10, 0)}), {"jay": 3}) == 0.90
 
 
 def test_match_frame_is_one_to_one_and_ignores_unidentified_predictions():
@@ -126,10 +159,12 @@ def test_build_curves_with_no_detections_has_zero_precision_and_recall():
     assert all(p == 0.0 and r == 0.0 for _, p, r in curves["great_tit"])
 
 
-def test_pick_threshold_on_curves_built_from_detections():
+def test_pick_threshold_on_tallies_built_from_detections():
     frames = frames_for_curves()
-    curves = build_curves(frames, ["great_tit"])
-    assert pick_threshold(curves, {"great_tit": 20}) == 0.75
+    tallies = build_tallies(frames, ["great_tit"])
+    assert list(tallies) == [0.50, 0.55, 0.60, 0.65, 0.70, 0.75, 0.80, 0.85, 0.90]
+    assert tallies[0.50]["great_tit"] == Tally(tp=2, fp=1, fn=0) and tallies[0.60]["great_tit"] == Tally(1, 1, 1)
+    assert pick_threshold(tallies, {"great_tit": 20}) == 0.75
 
 
 def test_score_frames_reports_per_species_numbers_at_one_threshold():
@@ -171,34 +206,46 @@ def test_unknown_rates_reach_the_card_as_json_null(tmp_path):
     per = score_frames([([], [])], 0.6, ["great_tit"])["per_species"]
     r = {"frames": 1, "footage": ["demo"], "count_exact": 1.0, "per_species": per, "threshold": 0.6,
          "threshold_source": "fixed", "board_ms": None}
-    _promote(tmp_path, "two_stage", "because", r, None, CountingDetector())
+    _promote(tmp_path, "two_stage", "because", r, None, CountingDetector(), qualified=False)
     card = json.loads((tmp_path / "model_card.json").read_text())
     assert card["metrics"]["per_species"]["great_tit"] == {"precision": None, "recall": None, "val_boxes": 0}
     assert card["threshold_source"] == "fixed"
+    assert card["metrics"]["qualified"] is False
 
 
-def ok_curves():
-    return {"great_tit": [(t, 0.95, 0.9) for t in (0.50, 0.55, 0.60, 0.65, 0.70, 0.75, 0.80, 0.85, 0.90)]}
+def ok_tallies():
+    return pooled(**{f"t{round(t * 100)}": {"great_tit": (95, 5)} for t in (0.50, 0.55, 0.60, 0.65, 0.70, 0.75, 0.80, 0.85, 0.90)})
+
+
+PICKED = ("picked on validation footage: the lowest threshold where at least 90% of named birds were right, "
+          "all judged species together")
+FALLBACK = ("fallback 0.90: no threshold reached 0.90 precision on validation footage, "
+            "all judged species together")
 
 
 def test_student_threshold_picked_on_validation_footage():
-    curves = {"great_tit": [(0.50, 0.85, 0.9), (0.55, 0.91, 0.88)] + ok_curves()["great_tit"][2:]}
-    assert student_threshold(curves, {"great_tit": 80}, default=0.60) == (0.55, "picked on validation footage")
+    tallies = {**ok_tallies(), 0.50: {"great_tit": Tally(85, 15, 0)}, 0.55: {"great_tit": Tally(91, 9, 0)}}
+    assert student_threshold(tallies, {"great_tit": 80}, default=0.60) == (0.55, PICKED)
 
 
 def test_student_threshold_at_exactly_0_90_is_still_a_pick_when_it_reaches_the_bar():
-    curves = {"great_tit": [(t, 0.5, 0.9) for t in (0.5, 0.55, 0.6, 0.65, 0.7, 0.75, 0.8, 0.85)] + [(0.90, 0.95, 0.4)]}
-    assert student_threshold(curves, {"great_tit": 80}, default=0.60) == (0.90, "picked on validation footage")
+    tallies = {t: {"great_tit": Tally(50, 50, 0)} for t in (0.5, 0.55, 0.6, 0.65, 0.7, 0.75, 0.8, 0.85)}
+    tallies[0.90] = {"great_tit": Tally(95, 5, 0)}
+    assert student_threshold(tallies, {"great_tit": 80}, default=0.60) == (0.90, PICKED)
 
 
 def test_student_threshold_fallback_when_no_threshold_reaches_the_bar():
-    curves = {"great_tit": [(0.50, 0.5, 0.9), (0.90, 0.6, 0.2)]}
-    assert student_threshold(curves, {"great_tit": 80}, default=0.60) == (
-        0.90, "fallback 0.90: no threshold reached 0.90 precision on validation footage")
+    tallies = pooled(t50={"great_tit": (50, 50)}, t90={"great_tit": (60, 40)})
+    assert student_threshold(tallies, {"great_tit": 80}, default=0.60) == (0.90, FALLBACK)
+
+
+def test_student_threshold_is_picked_when_a_small_class_alone_would_have_failed():
+    tallies = pooled(t60={"great_tit": (500, 20), "jay": (17, 4)})
+    assert student_threshold(tallies, {"great_tit": 500, "jay": 23}, default=0.60) == (0.60, PICKED)
 
 
 def test_student_threshold_keeps_the_default_when_val_has_too_few_boxes():
-    assert student_threshold(ok_curves(), {"great_tit": 19}, default=0.60) == (
+    assert student_threshold(ok_tallies(), {"great_tit": 19}, default=0.60) == (
         0.60, "default: too few validation boxes to pick")
     assert student_threshold({}, {}, default=0.60) == (0.60, "default: too few validation boxes to pick")
 
@@ -225,26 +272,54 @@ def test_qualifies_needs_three_species_with_both_precision_and_recall():
 def test_choose_picks_the_qualifying_student_with_the_highest_count_exact():
     results = {"two_stage": result("two_stage", 0.70), "student:640": result("student", 0.80),
                "student:416": result("student", 0.85)}
-    name, reason = choose(results)
+    name, reason, qualified = choose(results)
     assert name == "student:416" and "416" in reason and isinstance(reason, str)
+    assert qualified is True
 
 
-def test_choose_ships_two_stage_when_no_student_qualifies():
+def test_choose_ships_two_stage_when_no_student_qualifies_and_none_counts_better():
+    results = {"two_stage": result("two_stage", 0.242),
+               "student:640": result("student", 0.20, qualifying=False)}
+    name, reason, qualified = choose(results)
+    assert name == "two_stage" and "no student qualifies" in reason and "two-stage detector ships" in reason
+    assert qualified is False
+
+
+def test_choose_ships_two_stage_when_a_non_qualifying_student_only_ties_it():
     results = {"two_stage": result("two_stage", 0.50),
-               "student:640": result("student", 0.99, qualifying=False)}
-    name, reason = choose(results)
-    assert name == "two_stage" and "qualif" in reason
+               "student:640": result("student", 0.50, qualifying=False)}
+    name, reason, qualified = choose(results)
+    assert name == "two_stage" and qualified is False
+
+
+def test_choose_ships_the_better_counting_student_below_the_bar_and_says_so():
+    results = {"two_stage": result("two_stage", 0.242),
+               "student:640": result("student", 0.40, qualifying=False),
+               "student:416": result("student", 0.570, qualifying=False)}
+    name, reason, qualified = choose(results)
+    assert name == "student:416" and qualified is False
+    assert reason == ("no student reaches the bar (at least 3 species with precision 0.90 and recall 0.50 on unseen "
+                      "footage); student:416 still counts exactly in 0.570 of unseen frames against the two-stage "
+                      "detector's 0.242, so it ships, marked as below the bar.")
+
+
+def test_choose_below_the_bar_only_considers_students_fast_enough():
+    results = {"two_stage": result("two_stage", 0.242, board_ms=2000.0),
+               "student:640": result("student", 0.90, board_ms=1600.0, qualifying=False),
+               "student:416": result("student", 0.30, board_ms=900.0, qualifying=False)}
+    name, reason, qualified = choose(results)
+    assert name == "student:416" and "below the bar" in reason and qualified is False
 
 
 def test_choose_skips_a_student_slower_than_1500_ms():
     results = {"two_stage": result("two_stage", 0.50, board_ms=2000.0),
                "student:640": result("student", 0.99, board_ms=1501.0),
                "student:416": result("student", 0.80, board_ms=1500.0)}
-    name, _ = choose(results)
-    assert name == "student:416"
+    name, _, qualified = choose(results)
+    assert name == "student:416" and qualified is True
     results["student:416"]["board_ms"] = 1600.0
-    name, reason = choose(results)
-    assert name == "two_stage" and "1500" in reason
+    name, reason, qualified = choose(results)
+    assert name == "two_stage" and "1500" in reason and qualified is False
 
 
 def test_choose_ships_two_stage_when_the_student_is_below_it():
@@ -323,7 +398,7 @@ def test_evaluate_candidate_picks_the_threshold_on_val_and_reports_test(tmp_path
     assert detector.calls == 3  # val once, test twice
     # on val the single bird is found at every threshold, so the lowest one is picked
     assert out["threshold"] == 0.50
-    assert out["threshold_source"] == "picked on validation footage"
+    assert out["threshold_source"] == PICKED
     assert out["val_boxes"] == {"great_tit": 1}
     assert out["frames"] == 2
 
@@ -398,7 +473,9 @@ def test_main_promotes_the_winning_student(tmp_path, monkeypatch, capsys):
     student = json.loads((models / "student" / "feeder.json").read_text())
     assert student["count_threshold"] == card["count_threshold"]
     assert student["threshold_source"] == "picked on validation footage"
-    assert json.loads((models / "eval.json").read_text())["decision"]["ship"] == "student:640"
+    decision = json.loads((models / "eval.json").read_text())["decision"]
+    assert decision["ship"] == "student:640" and decision["qualified"] is True
+    assert card["metrics"]["qualified"] is True and student["metrics"]["qualified"] is True
 
 
 def test_main_without_promote_writes_only_eval_json(tmp_path, monkeypatch, capsys):
@@ -417,3 +494,43 @@ def test_main_promote_without_a_timing_for_every_candidate_exits_2(tmp_path, mon
         run_main(tmp_path, monkeypatch, capsys, ["--board-ms", "two_stage=900", "--promote"])
     assert stop.value.code == 2
     assert "student:640" in capsys.readouterr().err
+
+
+def test_main_promotes_a_below_the_bar_student_and_records_it(tmp_path, monkeypatch, capsys):
+    import json
+    import evaluate
+    dataset, _ = make_dataset(tmp_path / "dataset")
+    make_dataset_classes(dataset)
+
+    def weak_evaluate(detector, dataset, classes, pick):
+        out = fake_evaluate(detector, dataset, classes, pick)
+        if pick:  # a student that counts better than the two-stage detector but has only one good species
+            out["count_exact"] = 0.57
+            out["per_species"] = {**out["per_species"], "b": {"precision": 0.5, "recall": 0.2, "val_boxes": 30},
+                                  "c": {"precision": 0.5, "recall": 0.2, "val_boxes": 30}}
+        else:
+            out["count_exact"] = 0.242
+        return out
+
+    monkeypatch.setattr(evaluate, "evaluate_candidate", weak_evaluate)
+    models = tmp_path / "models"
+    monkeypatch.setattr(evaluate, "_build", fake_build(models))
+    evaluate.main(["--dataset", str(dataset), "--candidates", "two_stage", "student:640",
+                   "--models-dir", str(models), "--board-ms", "two_stage=900,640=700", "--promote"])
+    decision = json.loads((models / "eval.json").read_text())["decision"]
+    assert decision["ship"] == "student:640" and decision["qualified"] is False
+    assert "below the bar" in decision["reason"]
+    card = json.loads((models / "model_card.json").read_text())
+    assert card["kind"] == "student" and card["metrics"]["qualified"] is False
+    assert json.loads((models / "student" / "feeder.json").read_text())["metrics"]["qualified"] is False
+
+
+def test_main_records_qualified_false_when_the_two_stage_detector_ships(tmp_path, monkeypatch, capsys):
+    import json
+    (tmp_path / "dataset").mkdir()
+    make_dataset_classes(tmp_path / "dataset")
+    models, _ = run_main(tmp_path, monkeypatch, capsys, ["--board-ms", "two_stage=900,640=2000", "--promote"])
+    assert json.loads((models / "eval.json").read_text())["decision"] == {
+        "ship": "two_stage", "reason": json.loads((models / "model_card.json").read_text())["note"],
+        "promoted": True, "qualified": False}
+    assert json.loads((models / "model_card.json").read_text())["metrics"]["qualified"] is False

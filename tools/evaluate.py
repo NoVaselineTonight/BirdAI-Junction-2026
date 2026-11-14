@@ -119,12 +119,18 @@ def _tally_frames(frames: Sequence[Frame], threshold: float, species: Sequence[s
     return total
 
 
+def build_tallies(frames: Sequence[Frame], species: Sequence[str],
+                  thresholds: Sequence[float] = THRESHOLDS) -> dict[float, dict[str, Tally]]:
+    """Per threshold, the per-species hits, false alarms and misses over `frames`."""
+    return {threshold: _tally_frames(frames, threshold, species) for threshold in thresholds}
+
+
 def build_curves(frames: Sequence[Frame], species: Sequence[str],
                  thresholds: Sequence[float] = THRESHOLDS) -> dict[str, list[tuple[float, float, float]]]:
     """Per species, (threshold, precision, recall) over `frames` for every threshold."""
     curves: dict[str, list[tuple[float, float, float]]] = {s: [] for s in species}
-    for threshold in thresholds:
-        for key, t in _tally_frames(frames, threshold, species).items():
+    for threshold, tallies in build_tallies(frames, species, thresholds).items():
+        for key, t in tallies.items():
             curves[key].append((threshold, *_rates(t)))
     return curves
 
@@ -133,17 +139,32 @@ def count_boxes(frames: Sequence[Frame], species: Sequence[str]) -> dict[str, in
     return {s: sum(1 for _, truth in frames for t in truth if t.species == s) for s in species}
 
 
-def pick_threshold(curves: Mapping[str, Sequence[tuple[float, float, float]]], val_boxes: Mapping[str, int],
-                   min_precision: float = 0.90, min_val_boxes: int = 20) -> float:
-    """The lowest threshold at which every species with enough boxes reaches `min_precision`.
+def _lowest_pooled(tallies: Mapping[float, Mapping[str, Tally]], val_boxes: Mapping[str, int],
+                   min_precision: float, min_val_boxes: int) -> float | None:
+    """The lowest threshold whose pooled precision over the judged species reaches `min_precision`, else None.
 
-    0.90 when no threshold does, and also when no species has enough boxes to judge by.
+    Judged species are those with at least `min_val_boxes` validation boxes. Pooled precision is the summed
+    hits over the summed hits and false alarms; with nothing predicted it is undefined and does not qualify.
     """
-    judged = {s: {t: p for t, p, _ in points} for s, points in curves.items() if val_boxes.get(s, 0) >= min_val_boxes}
-    for threshold in sorted({t for by_t in judged.values() for t in by_t}):
-        if all(by_t.get(threshold, 0.0) >= min_precision for by_t in judged.values()):
+    for threshold in sorted(tallies):
+        judged = [t for s, t in tallies[threshold].items() if val_boxes.get(s, 0) >= min_val_boxes]
+        hits = sum(t.tp for t in judged)
+        named = hits + sum(t.fp for t in judged)
+        if named and hits / named >= min_precision:
             return threshold
-    return FALLBACK_THRESHOLD
+    return None
+
+
+def pick_threshold(tallies: Mapping[float, Mapping[str, Tally]], val_boxes: Mapping[str, int],
+                   min_precision: float = 0.90, min_val_boxes: int = 20) -> float:
+    """The lowest threshold at which at least `min_precision` of the named birds were right, judged species pooled.
+
+    `tallies[threshold][species]` are the validation hits and false alarms (see `build_tallies`). One small
+    species cannot hold the cut-off up on its own: only the pooled precision counts. 0.90 when no threshold
+    reaches it, and also when no species has enough boxes to judge by.
+    """
+    found = _lowest_pooled(tallies, val_boxes, min_precision, min_val_boxes)
+    return FALLBACK_THRESHOLD if found is None else found
 
 
 def score_frames(frames: Sequence[Frame], threshold: float, species: Sequence[str]) -> dict:
@@ -192,27 +213,27 @@ def run_split(detector, dataset: Path, split: str, classes: Sequence[str]) -> tu
     return frames, sorted(footage)
 
 
-SOURCE_PICKED = "picked on validation footage"
-SOURCE_FALLBACK = "fallback 0.90: no threshold reached 0.90 precision on validation footage"
+SOURCE_PICKED = ("picked on validation footage: the lowest threshold where at least 90% of named birds were right, "
+                 "all judged species together")
+SOURCE_FALLBACK = ("fallback 0.90: no threshold reached 0.90 precision on validation footage, "
+                   "all judged species together")
 SOURCE_DEFAULT = "default: too few validation boxes to pick"
 
 
-def student_threshold(curves: Mapping[str, Sequence[tuple[float, float, float]]], val_boxes: Mapping[str, int],
+def student_threshold(tallies: Mapping[float, Mapping[str, Tally]], val_boxes: Mapping[str, int],
                       default: float, min_val_boxes: int = 20) -> tuple[float, str]:
     """The student's count threshold and where it came from.
 
     Picked when species with at least `min_val_boxes` validation boxes exist and some grid threshold gives
-    them all precision 0.90; 0.90 as a labelled fallback when none does; `default` (the card's own
-    threshold) when no species has enough validation boxes, since then nothing was measured to pick by.
+    them, pooled together, precision 0.90; 0.90 as a labelled fallback when none does; `default` (the card's
+    own threshold) when no species has enough validation boxes, since then nothing was measured to pick by.
     """
-    judged = [s for s in curves if val_boxes.get(s, 0) >= min_val_boxes]
-    if not judged:
+    if not any(val_boxes.get(s, 0) >= min_val_boxes for by_species in tallies.values() for s in by_species):
         return default, SOURCE_DEFAULT
-    threshold = pick_threshold(curves, val_boxes, min_val_boxes=min_val_boxes)
-    at = {s: {t: p for t, p, _ in curves[s]} for s in judged}
-    if all(by_t.get(threshold, 0.0) >= QUALIFY_PRECISION for by_t in at.values()):
-        return threshold, SOURCE_PICKED
-    return threshold, SOURCE_FALLBACK
+    found = _lowest_pooled(tallies, val_boxes, QUALIFY_PRECISION, min_val_boxes)
+    if found is None:
+        return FALLBACK_THRESHOLD, SOURCE_FALLBACK
+    return found, SOURCE_PICKED
 
 
 def evaluate_candidate(detector, dataset: Path, classes: Sequence[str], pick: bool,
@@ -229,7 +250,7 @@ def evaluate_candidate(detector, dataset: Path, classes: Sequence[str], pick: bo
     if pick:
         val_frames, _ = run_split(detector, dataset, "val", classes)
         val_boxes = count_boxes(val_frames, species)
-        threshold, source = student_threshold(build_curves(val_frames, species), val_boxes,
+        threshold, source = student_threshold(build_tallies(val_frames, species), val_boxes,
                                               detector.count_threshold, min_val_boxes)
     else:
         threshold, source = detector.count_threshold, "fixed"
@@ -246,29 +267,37 @@ def qualifies(per_species: Mapping[str, Mapping[str, float | None]]) -> bool:
     return len(good) >= MIN_QUALIFYING_SPECIES
 
 
-def choose(results: Mapping[str, Mapping]) -> tuple[str, str]:
-    """The candidate to ship and a one-sentence reason. `results` has "two_stage" and any "student:<size>".
+def choose(results: Mapping[str, Mapping]) -> tuple[str, str, bool]:
+    """The candidate to ship, a one-sentence reason, and whether the shipped model qualified.
 
-    A student without a board timing counts as eligible (timings are optional until --promote).
+    `results` has "two_stage" and any "student:<size>". A student without a board timing counts as eligible
+    (timings are optional until --promote). When no fast student qualifies, the fast student with the highest
+    count_exact still ships if it counts exactly in more frames than the two-stage detector, marked as below
+    the bar (qualified False); otherwise the two-stage detector ships (qualified is False for it too).
     """
     two = results["two_stage"]["count_exact"]
     students = {n: r for n, r in results.items() if r["kind"] == "student"}
     fast = {n: r for n, r in students.items() if r["board_ms"] is None or r["board_ms"] <= MAX_BOARD_MS}
     good = {n: r for n, r in fast.items() if qualifies(r["per_species"])}
     if not students:
-        return "two_stage", "no student model was evaluated, so the two-stage detector ships."
+        return "two_stage", "no student model was evaluated, so the two-stage detector ships.", False
     if not fast:
-        return "two_stage", f"every student takes more than {MAX_BOARD_MS:g} ms per frame on the board, so the two-stage detector ships."
+        return "two_stage", f"every student takes more than {MAX_BOARD_MS:g} ms per frame on the board, so the two-stage detector ships.", False
     if not good:
-        return "two_stage", (f"no student qualifies (at least {MIN_QUALIFYING_SPECIES} species with precision "
-                             f"{QUALIFY_PRECISION:.2f} and recall {QUALIFY_RECALL:.2f} on unseen footage), "
-                             "so the two-stage detector ships.")
+        bar = (f"at least {MIN_QUALIFYING_SPECIES} species with precision "
+               f"{QUALIFY_PRECISION:.2f} and recall {QUALIFY_RECALL:.2f} on unseen footage")
+        top = max(fast, key=lambda n: fast[n]["count_exact"])
+        if fast[top]["count_exact"] > two:
+            return top, (f"no student reaches the bar ({bar}); {top} still counts exactly in "
+                         f"{fast[top]['count_exact']:.3f} of unseen frames against the two-stage detector's "
+                         f"{two:.3f}, so it ships, marked as below the bar."), False
+        return "two_stage", f"no student qualifies ({bar}), so the two-stage detector ships.", False
     best = max(good, key=lambda n: good[n]["count_exact"])
     if good[best]["count_exact"] < two:
         return "two_stage", (f"the best qualifying student ({best}) counts exactly in {good[best]['count_exact']:.3f} "
-                             f"of frames, below the two-stage detector's {two:.3f}, so the two-stage detector ships.")
+                             f"of frames, below the two-stage detector's {two:.3f}, so the two-stage detector ships."), False
     return best, (f"{best} qualifies and counts exactly in {good[best]['count_exact']:.3f} of unseen frames, "
-                  f"at least the two-stage detector's {two:.3f}.")
+                  f"at least the two-stage detector's {two:.3f}."), True
 
 
 def parse_board_ms(text: str) -> dict[str, float]:
@@ -327,9 +356,10 @@ def _print_table(name: str, r: Mapping) -> None:
               + ", ".join(f"{k} {n}" for k, n in r["val_boxes"].items()))
 
 
-def _promote(models_dir: Path, name: str, reason: str, r: Mapping, card: Mapping | None, detector) -> None:
+def _promote(models_dir: Path, name: str, reason: str, r: Mapping, card: Mapping | None, detector,
+             *, qualified: bool) -> None:
     metrics = {"frames": r["frames"], "footage": r["footage"], "count_exact": r["count_exact"],
-               "per_species": r["per_species"], "labels": LABELS}
+               "per_species": r["per_species"], "labels": LABELS, "qualified": qualified}
     if name == "two_stage":
         shipped = {"name": detector.name, "kind": "two_stage", "species": list(detector.species)}
     else:
@@ -393,14 +423,14 @@ def main(argv: list[str] | None = None) -> None:
         }
         _print_table(candidate, results[candidate])
 
-    winner, reason = choose(results)
+    winner, reason, qualified = choose(results)
     win = results[winner]
     args.models_dir.mkdir(parents=True, exist_ok=True)
     (args.models_dir / "eval.json").write_text(json.dumps(
         {"dataset": str(args.dataset), "candidates": results, "timings": timings,
-         "decision": {"ship": winner, "reason": reason, "promoted": args.promote}}, indent=2) + "\n")
+         "decision": {"ship": winner, "reason": reason, "promoted": args.promote, "qualified": qualified}}, indent=2) + "\n")
     if args.promote:
-        _promote(args.models_dir, winner, reason, win, built[winner][1], built[winner][0])
+        _promote(args.models_dir, winner, reason, win, built[winner][1], built[winner][0], qualified=qualified)
     print(f"\n{reason}")
     print(f"SHIP: {winner} (count_exact={win['count_exact']:.3f}, threshold={win['threshold']:.2f})"
           + ("" if args.promote else " [not promoted]"))
