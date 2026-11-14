@@ -3,7 +3,9 @@ import os
 import shutil
 import subprocess
 import sys
+import threading
 import time
+import warnings
 from concurrent.futures.process import BrokenProcessPool
 from pathlib import Path
 
@@ -663,3 +665,68 @@ def test_an_exception_while_finishing_one_video_fails_only_that_video(make_video
     assert "train/a.mp4" in err and "cv2 blew up" in err
     assert len(list((out / "demo" / "b").iterdir())) == 3
     assert [r["video"] for r in _rows(out)] == ["b"] * 3
+
+
+# pool workers are spawned, never forked ---------------------------------------------------------
+
+_PARENT_ONLY: dict = {}
+
+
+def _what_the_worker_inherited():
+    return _PARENT_ONLY.get("marker")
+
+
+def test_pool_workers_are_started_fresh_so_a_threaded_parent_cannot_deadlock_them():
+    """A forked worker would copy this process's memory (and its locks); a spawned one starts empty."""
+    _PARENT_ONLY["marker"] = "set in the parent"
+    stop = threading.Event()
+    thread = threading.Thread(target=stop.wait, daemon=True)  # the parent is multi-threaded, as with torch or onnxruntime
+    thread.start()
+    runner = mine_frames.Runner(2)
+    try:
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            inherited = runner.submit(_what_the_worker_inherited).result(timeout=30)
+        assert inherited is None
+        assert not [w for w in caught if "fork" in str(w.message).lower()]
+    finally:
+        runner.close()
+        stop.set()
+        _PARENT_ONLY.clear()
+
+
+def _write_fake_modules(folder: Path) -> None:
+    """Stand-ins for torch and ultralytics: a subprocess finds them first and `load_scan_fn` runs for real."""
+    folder.mkdir()
+    log = "import os; open(os.environ['FAKE_IMPORT_LOG'], 'a').write(f'{os.getpid()}\\n')\n"  # who imported me
+    (folder / "torch.py").write_text(log + "import types\ncuda = types.SimpleNamespace(is_available=lambda: False)\n")
+    (folder / "ultralytics.py").write_text(
+        log + "import numpy as np\n"
+        "class _Boxes:\n"
+        "    conf = type('C', (), {'cpu': lambda self: self, 'numpy': lambda self: np.array([0.9, 0.1])})()\n"
+        "class _Result:\n"
+        "    boxes = _Boxes()\n"
+        "class YOLO:\n"
+        "    def __init__(self, name): pass\n"
+        "    def predict(self, frames, **kw):\n"
+        "        assert kw['classes'] == [14] and kw['conf'] == 0.05\n"
+        "        return [_Result() for _ in frames]\n")
+
+
+def test_the_script_runs_as_main_with_spawned_workers(make_video, tmp_path):
+    make_video("videos/train/a.mp4", seconds=3.0)
+    make_video("videos/demo/b.mp4", seconds=3.0)
+    _write_fake_modules(tmp_path / "fakes")
+    out = tmp_path / "frames"
+    result = subprocess.run(
+        [sys.executable, str(ROOT / "tools" / "mine_frames.py"), "--videos", str(tmp_path / "videos"),
+         "--out", str(out), "--workers", "2", "--min-gap-s", "0"],
+        cwd=tmp_path, env={**os.environ, "PYTHONPATH": str(tmp_path / "fakes"),
+                                       "FAKE_IMPORT_LOG": str(tmp_path / "imports.txt")}, capture_output=True, text=True,
+        timeout=120)
+    assert result.returncode == 0, result.stderr
+    assert sorted(p.name for p in (out / "train" / "a").iterdir()) == [
+        "a_00000000.jpg", "a_00001000.jpg", "a_00002000.jpg"]
+    assert len(list((out / "demo" / "b").iterdir())) == 3
+    assert len(set((tmp_path / "imports.txt").read_text().split())) == 1  # torch and ultralytics: main process only
+    assert {(r["n_boxes"], r["max_conf"]) for r in _rows(out)} == {("1", "0.9000")}  # 0.9 counts, 0.1 is below 0.15

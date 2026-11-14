@@ -24,6 +24,7 @@ Runs on the GPU machine under `uv run --group train`.
 import argparse
 import csv
 import math
+import multiprocessing
 import os
 import shutil
 import subprocess
@@ -284,7 +285,7 @@ class Runner:
 
     def __init__(self, workers: int, max_rebuilds: int = MAX_POOL_REBUILDS):
         self.workers, self.max_rebuilds, self.rebuilds = workers, max_rebuilds, 0
-        self.pool = ProcessPoolExecutor(workers) if workers > 1 else None
+        self.pool = self._new_pool() if workers > 1 else None
         self.broken = False
         self.gave_up = False
 
@@ -320,9 +321,15 @@ class Runner:
         print(f"warning: a worker process died; starting a new pool ({self.rebuilds}/{self.max_rebuilds})",
               file=sys.stderr)
         self.pool.shutdown(wait=True, cancel_futures=True)
-        self.pool = ProcessPoolExecutor(self.workers)
+        self.pool = self._new_pool()
         self.broken = False
         return True
+
+    def _new_pool(self) -> ProcessPoolExecutor:
+        # "spawn", never the Linux default "fork": by the time a pool exists the parent runs threads (torch,
+        # CUDA, OpenCV) and a forked copy of a process with threads can deadlock. Everything submitted must
+        # therefore be a module-level function with picklable arguments, and workers import only this module.
+        return ProcessPoolExecutor(self.workers, mp_context=multiprocessing.get_context("spawn"))
 
     def close(self) -> None:
         if self.pool:
