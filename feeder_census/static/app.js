@@ -79,6 +79,8 @@ function renderLive() {
   $("card-ms").textContent = `${msText(live.detect_ms)} per frame`;
   $("unidentified").textContent = `Unidentified in frame: ${live.unidentified}`;
   $("unidentified").hidden = !live.unidentified;
+  $("footage-note").textContent = live.footage_note || "";
+  $("footage-note").hidden = !live.footage_note;
 
   const stopped = $("stopped");
   if (live.error) {
@@ -117,15 +119,23 @@ function renderTally(t) {
     line.replaceChildren(el("span", { class: "lead" }, "Watched for, none today:"), " ",
       unseen.map(fullName).join(", "));
   }
+  line.dataset.unwatched = watched ? "" : "1";
   line.hidden = watched && unseen.length === 0;
 }
 
 async function pollLive() {
   try {
-    live = await getJSON("/api/live");
+    const j = await getJSON("/api/live");
+    // an older or partial server may leave fields out: treat them as empty
+    j.day_max = j.day_max || {};
+    j.visits_today = j.visits_today || {};
+    j.footage_note = j.footage_note || null;
+    live = j;
     delete $("stopped").dataset.lost;
     renderLive();
   } catch {
+    // without the counter the page cannot know that today was not watched
+    if ($("unseen").dataset.unwatched) $("unseen").hidden = true;
     const s = $("stopped");
     s.dataset.lost = "1";
     $("stopped-msg").textContent = "This page cannot reach the counter.";
@@ -162,6 +172,8 @@ function renderTables() {
   countTable($("days"), t.days, t.species, "Day", t.day);
   const currentPeriod = t.periods.find((p) => p.label === t.period);
   countTable($("periods"), t.periods, t.species, "Period", currentPeriod && currentPeriod.key);
+  // more than four species columns do not fit two tables side by side: stack them at full width
+  $("ledger").classList.toggle("wide", t.species.length > 4);
 
   const watched = t.hours.reduce((s, r) => s + r.hours_watched, 0);
   $("watched-today").textContent = `${hours1(watched)} h`;

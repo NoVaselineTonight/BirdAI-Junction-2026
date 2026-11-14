@@ -64,11 +64,23 @@ if [ ${#CLIPS[@]} -eq 0 ]; then
     exit 1
 fi
 
+# A clip cut by tools/mine_frames.py --highlights has CLIP.segments.csv beside it; it goes beside the prepared
+# clip under that clip's name, so the board's page says the footage is an edited cut.
+SEGMENTS=()
+for clip in "${CLIPS[@]}"; do
+    if [ -f "$clip.segments.csv" ]; then SEGMENTS+=("$clip.segments.csv"); fi
+done
+echo "$VERB copy beside the clips: ${SEGMENTS[*]-nothing}"
+
 echo "== building build/board/"
 rm -rf build/board
 mkdir -p build/board/videos
 for clip in "${CLIPS[@]}"; do
-    uv run python tools/prepare_video.py "$clip" "build/board/videos/$(basename "${clip%.*}").mp4"
+    prepared="build/board/videos/$(basename "${clip%.*}").mp4"
+    uv run python tools/prepare_video.py "$clip" "$prepared"
+    if [ -f "$clip.segments.csv" ]; then
+        cp "$clip.segments.csv" "$prepared.segments.csv"
+    fi
 done
 cp -r feeder_census species.toml build/board/
 find build/board -name __pycache__ -prune -exec rm -rf {} +

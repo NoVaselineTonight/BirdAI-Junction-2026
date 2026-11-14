@@ -60,7 +60,7 @@ main { padding: var(--gap); display: grid; gap: calc(var(--gap) * 1.6); }
 /* First viewport: the hide window and the sheet */
 .now {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(24rem, 33rem);
+  grid-template-columns: minmax(0, 1fr) minmax(24rem, 34rem);
   gap: var(--gap);
   align-items: start;
 }
@@ -89,6 +89,7 @@ main { padding: var(--gap); display: grid; gap: calc(var(--gap) * 1.6); }
   font-size: 1.12rem;
   font-weight: 550;
 }
+.footage-note { display: inline-block; } /* wraps as a whole, never mid-sentence */
 
 .sheet {
   background: var(--sheet);
@@ -103,20 +104,20 @@ main { padding: var(--gap); display: grid; gap: calc(var(--gap) * 1.6); }
 /* Tally: "Most at once" is the census number; visits sit apart, small and muted */
 .tally { width: 100%; border-collapse: collapse; }
 .tally thead th {
-  text-align: left; font-weight: 500; font-size: 0.9rem; color: var(--ink-2); line-height: 1.15;
+  text-align: left; font-weight: 500; font-size: 1rem; color: var(--ink-2); line-height: 1.15;
   padding: 0 0 0.3rem; border-bottom: 1px solid var(--rule); vertical-align: bottom;
 }
-.tally thead th.num { text-align: right; padding-left: 0.6rem; white-space: nowrap; }
+.tally thead th.num { text-align: right; padding-left: 0.45rem; white-space: nowrap; }
 .tally tbody th { text-align: left; font-weight: 400; padding: 0.15rem 0; }
 .tally th, .tally td { border-bottom: 1px solid var(--rule-soft); vertical-align: baseline; }
 .tally .num, .grid .num { text-align: right; }
-.tally td.num { padding-left: 0.6rem; white-space: nowrap; }
+.tally td.num { padding-left: 0.45rem; white-space: nowrap; }
 .tally td.in-frame { font-size: 1.45rem; font-weight: 500; color: var(--ink-2); }
-.tally .max { padding-right: 0.7rem; }
+.tally .max { padding-right: 0.55rem; }
 .tally td.max { font-size: 2.1rem; font-weight: 700; color: var(--ink); line-height: 1.05; }
 .tally .visits { border-left: 1px dotted var(--rule); }
-.tally thead th.visits { padding-left: 0.7rem; }
-.tally td.visits { font-size: 1.1rem; font-weight: 400; color: var(--ink-2); padding-left: 0.7rem; }
+.tally thead th.visits { padding-left: 0.55rem; }
+.tally td.visits { font-size: 1.1rem; font-weight: 400; color: var(--ink-2); padding-left: 0.55rem; }
 .tally .fi { display: inline; margin-left: 0.15rem; font-size: 0.92rem; }
 .name { font-size: 1.15rem; font-weight: 600; }
 .fi { display: block; font-weight: 400; color: var(--ink-2); font-size: 0.98rem; }
@@ -129,7 +130,9 @@ main { padding: var(--gap); display: grid; gap: calc(var(--gap) * 1.6); }
 .facts div { display: flex; justify-content: space-between; gap: 1rem; border-bottom: 1px dotted var(--rule); padding-bottom: 0.2rem; }
 .facts dt { color: var(--ink-2); }
 .facts dd { font-weight: 600; text-align: right; }
-.can-name, .accuracy { font-weight: 550; }
+.accuracy { font-weight: 550; }
+/* up to twenty names: reference, not a headline, so it is set smaller and muted to leave the panel room */
+.can-name { font-size: 0.92rem; color: var(--ink-2); line-height: 1.3; }
 
 /* Ledger: the census tables */
 .ledger {
@@ -137,6 +140,9 @@ main { padding: var(--gap); display: grid; gap: calc(var(--gap) * 1.6); }
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: calc(var(--gap) * 1.4) calc(var(--gap) * 1.6);
 }
+/* more than four species columns: every block takes the full width, so no column is cut off */
+.ledger.wide { grid-template-columns: minmax(0, 1fr); }
+.ledger.wide .habitats { max-width: 52rem; }
 .block { display: grid; gap: 0.6rem; align-content: start; }
 .scroll { overflow-x: auto; }
 

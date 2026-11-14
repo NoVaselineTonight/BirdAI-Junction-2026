@@ -1,6 +1,7 @@
 """Run the feeder census: python -m feeder_census --videos clip.mp4 --detector auto"""
 import argparse
 import json
+import math
 import signal
 import sys
 import threading
@@ -8,7 +9,7 @@ from pathlib import Path
 
 import uvicorn
 
-from feeder_census.camera import SimulatedCamera
+from feeder_census.camera import SimulatedCamera, _expand
 from feeder_census.config import Settings
 from feeder_census.detectors import KINDS, build_detector
 from feeder_census.pipeline import LiveState, Pipeline
@@ -49,7 +50,29 @@ def _parser() -> argparse.ArgumentParser:
     p.add_argument("--script", type=Path, default=None, help="script file for --detector scripted")
     p.add_argument("--models-dir", type=Path, default=Path("models"))
     p.add_argument("--student-dir", type=Path, default=None)
+    p.add_argument("--footage-note", default=None,
+                   help="a line shown under the feed (default: says so when a clip has a .segments.csv beside it)")
     return p
+
+
+EDITED_NOTE = "Edited to the busy parts of a longer recording."
+
+
+def _footage_note(videos: list[Path]) -> str | None:
+    """The edited-cut note when any clip has the `<clip>.segments.csv` that tools/mine_frames.py --highlights writes."""
+    edited = any(Path(f"{clip}.segments.csv").is_file() for clip in _expand(videos))
+    return EDITED_NOTE if edited else None
+
+
+def _card_threshold(card: dict, path: Path) -> float | None:
+    """The card's count_threshold: absent is None; anything but a finite number from 0 to 1 stops the run (exit 2)."""
+    if "count_threshold" not in card:
+        return None
+    value = card["count_threshold"]
+    if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value) or not 0 <= value <= 1:
+        print(f"error: {path}: count_threshold must be a number from 0 to 1, got {value!r}", file=sys.stderr)
+        sys.exit(2)
+    return float(value)
 
 
 CARD_KINDS = ("student", "two_stage")
@@ -101,9 +124,9 @@ def _serve(app, port: int, stop: threading.Event) -> None:
 def main(argv: list[str] | None = None) -> int:
     args = _parser().parse_args(argv)
     kind, card = resolve_detector(args.detector, args.models_dir)
+    resolved_card = card
     if kind == "student" and args.student_dir:
         card = None  # the card describes models/student, not another folder
-    why = "asked for" if args.detector != "auto" else "model card" if card else "no model card"
     species = load_species()
     names = {s.key: s.english for s in species}
     try:
@@ -119,14 +142,19 @@ def main(argv: list[str] | None = None) -> int:
         print(f"warning: model card is for {card.get('name')!r} but {detector.name!r} loaded; not showing the card",
               file=sys.stderr)
         card = None
-    threshold = card.get("count_threshold") if card else None
-    if isinstance(threshold, bool) or not isinstance(threshold, (int, float)):
-        threshold = None
+    # the reason is decided after the guards above, which can drop the card
+    ignored = resolved_card is not None and card is None
+    if args.detector != "auto":
+        why = "asked for, model card ignored" if ignored else "asked for"
+    else:
+        why = "model card ignored" if ignored else "model card" if card else "no model card"
+    threshold = _card_threshold(card, args.models_dir / "model_card.json") if card else None
     args.db.parent.mkdir(parents=True, exist_ok=True)
     store = Store(args.db, detector.species)
     settings = Settings(
         detect_every_s=args.detect_every_s, roi=args.roi, port=args.port,
         evidence_dir=args.db.parent / "evidence", count_threshold=threshold,
+        footage_note=args.footage_note if args.footage_note is not None else _footage_note(args.videos),
     )
     in_force = threshold if threshold is not None else detector.count_threshold
     print(f"detector: {kind} ({why}); counting threshold {in_force:g}", flush=True)

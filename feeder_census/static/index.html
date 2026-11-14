@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Feeder Census</title>
-<link rel="stylesheet" href="/static/style.css?v=10">
+<link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
 <header class="masthead">
@@ -26,7 +26,7 @@
         <p class="waiting" id="waiting">Waiting for the first frame…</p>
       </div>
       <figcaption class="honesty">
-        <p>Recorded feeder footage, standing in for the camera.</p>
+        <p>Recorded feeder footage, standing in for the camera. <span class="footage-note" id="footage-note" hidden></span></p>
         <p id="demo-clock">Demo clock: <span id="scale-footage">1 second</span> of footage = <span id="scale-sim">1 minute</span>.</p>
       </figcaption>
     </figure>
@@ -43,7 +43,7 @@
         </tr></thead>
         <tbody id="tally"></tbody>
       </table>
-      <p class="unseen" id="unseen">Not watched yet today.</p>
+      <p class="unseen" id="unseen" hidden></p>
       <p class="unidentified" id="unidentified" hidden></p>
       <p class="visits-note">Visits are arrivals at the feeder, not individual birds. The camera cannot tell one bird from another.</p>
       <dl class="facts">
@@ -55,7 +55,7 @@
     </div>
   </section>
 
-  <section class="ledger" aria-label="Counts">
+  <section class="ledger" id="ledger" aria-label="Counts">
     <div class="block">
       <h2>Today by hour <span class="sub" id="today-label"></span></h2>
       <div class="scroll"><table class="grid" id="hours"></table></div>
@@ -95,6 +95,6 @@
     <table class="grid metrics" id="metrics" hidden></table>
   </section>
 </main>
-<script src="/static/app.js?v=10"></script>
+<script src="/static/app.js"></script>
 </body>
 </html>

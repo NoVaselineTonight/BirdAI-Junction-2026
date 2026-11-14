@@ -9,6 +9,7 @@ class Settings:
     detect_every_s: float = 2.0  # footage seconds between detections
     max_gap_s: float = 10.0  # most footage seconds one detection may credit
     confirm_frames: int = 2
+    visit_gap_frames: int = 3  # detections a species must be gone before its return is a new visit
     count_threshold: float | None = None  # None = use the detector's
     roi: tuple[float, float, float, float] | None = None  # x, y, w, h as fractions of the frame
     sim_start: date = date(2026, 11, 1)
@@ -16,3 +17,4 @@ class Settings:
     preview_fps: float = 5.0
     preview_width: int = 960
     port: int = 8088
+    footage_note: str | None = None  # said under the feed, e.g. that the clip is an edited cut

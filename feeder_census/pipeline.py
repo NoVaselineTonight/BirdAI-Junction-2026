@@ -1,6 +1,7 @@
 import sys
 import threading
 import time
+from collections import deque
 from collections.abc import Callable, Mapping
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
@@ -72,7 +73,9 @@ class Pipeline:
         self._last_preview: float | None = None
         self._last_start_t: float | None = None  # footage time the last detection started
         self._day: date | None = None  # worker side only
-        self._prev_confirmed = dict(self._zeros)  # worker side only; arrivals are rises over it
+        # worker side only: confirmed counts of the last `visit_gap_frames` detections; arrivals are rises over
+        # their maximum, so a bird the detector missed for a frame or two is not a new visit
+        self._recent: deque[dict[str, int]] = deque(maxlen=max(1, settings.visit_gap_frames))
         self._visits, self._day_max = self._today(self.clock.at(self._total_s).date())
         self._busy = threading.Event()
         self._executor: ThreadPoolExecutor | None = None
@@ -178,11 +181,11 @@ class Pipeline:
             ts = self.clock.at(self._total_s)
         if self._day is not None and ts.date() != self._day:
             self._filter.reset()
-            self._prev_confirmed = dict(self._zeros)
+            self._recent.clear()
         self._day = ts.date()
         confirmed = self._filter.update(counts)
-        arrivals = {sp: max(0, n - self._prev_confirmed.get(sp, 0)) for sp, n in confirmed.items()}
-        self._prev_confirmed = confirmed
+        arrivals = {sp: max(0, n - max((c[sp] for c in self._recent), default=0)) for sp, n in confirmed.items()}
+        self._recent.append(confirmed)
         risen = self.store.record(ts, confirmed, credit, arrivals=arrivals)
         if risen:
             self._save_evidence(frame, detections, confirmed, risen, ts)

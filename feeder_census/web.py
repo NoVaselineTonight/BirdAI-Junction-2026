@@ -26,13 +26,22 @@ _DAY = re.compile(r"\d{4}-\d{2}-\d{2}")
 _BOUNDARY = "frame"
 
 
+class _Revalidated(StaticFiles):
+    """Static files the browser must check before reuse, so an old script never runs against a new page."""
+
+    def file_response(self, *args, **kwargs) -> Response:
+        response = super().file_response(*args, **kwargs)
+        response.headers["Cache-Control"] = "no-cache"
+        return response
+
+
 def create_app(
     pipeline: Pipeline, store: Store, species: Sequence[Species], settings: Settings, model_card: dict | None,
 ) -> FastAPI:
     """The page and its API. Set `app.state.stopping` to end open MJPEG streams before the server shuts down."""
     app = FastAPI(title="Feeder Census", docs_url=None, redoc_url=None, openapi_url=None)
     app.state.stopping = threading.Event()
-    app.mount("/static", StaticFiles(directory=STATIC), name="static")
+    app.mount("/static", _Revalidated(directory=STATIC), name="static")
     nameable = [s for s in species if s.key in pipeline.detector.species]  # species.toml order
     english = {s.key: s.english for s in species}
 
@@ -48,7 +57,7 @@ def create_app(
             "sim_time": s.sim_time.isoformat(), "detector": s.detector, "detect_ms": round(s.detect_ms, 1),
             "now": s.now, "confirmed": s.confirmed, "unidentified": s.unidentified,
             "day_max": s.day_max, "visits_today": s.visits_today,  # visits are arrivals, not birds
-            "time_scale": settings.time_scale, "recorded": True,
+            "time_scale": settings.time_scale, "recorded": True, "footage_note": settings.footage_note,
             "error": None if error is None else (str(error) or type(error).__name__),
         }
 
@@ -88,8 +97,9 @@ def create_app(
             date.fromisoformat(day)
         except ValueError:
             raise HTTPException(404)
-        path = settings.evidence_dir / day / f"{species}.jpg"
-        if not path.is_file():
+        root = settings.evidence_dir.resolve()
+        path = (root / day / f"{species}.jpg").resolve()  # a symlinked day folder must not lead out of root
+        if not path.is_relative_to(root) or not path.is_file():
             raise HTTPException(404)
         return FileResponse(path, media_type="image/jpeg")
 

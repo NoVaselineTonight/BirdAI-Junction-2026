@@ -21,12 +21,13 @@ NAMES = {s.key: s.english for s in SPECIES}
 GT = {"species": "great_tit", "confidence": 0.9, "box": [10, 10, 60, 60]}
 
 
-def scripted_app(tmp_path, make_video, detector_species, frames, detections, model_card=None):
+def scripted_app(tmp_path, make_video, detector_species, frames, detections, model_card=None, **settings):
     """A web app over a scripted pipeline that has run `detections` detections inline."""
     detector = ScriptedDetector({"species": detector_species, "frames": frames})
+    tmp_path.mkdir(parents=True, exist_ok=True)
     store = Store(tmp_path / "census.db", detector.species)
     camera = SimulatedCamera([make_video(seconds=2.0, fps=10)], realtime=False)
-    settings = Settings(evidence_dir=tmp_path / "evidence")
+    settings = Settings(evidence_dir=tmp_path / "evidence", **settings)
     pipeline = Pipeline(camera, detector, store, settings, NAMES, inline=True)
     calls = 0
     original = detector.detect
@@ -171,3 +172,35 @@ def test_model_card_is_passed_through_with_unmeasured_rates(tmp_path, make_video
     app, _, _ = scripted_app(tmp_path, make_video, ["great_tit", "blue_tit"], [[GT]], 1, model_card=card)
     with TestClient(app) as c:
         assert c.get("/api/model").json() == card
+
+
+def test_live_state_carries_the_footage_note(tmp_path, make_video, client):
+    assert client.get("/api/live").json()["footage_note"] is None
+    app, _, _ = scripted_app(tmp_path / "edited", make_video, ["great_tit"], [[GT]], 1,
+                             footage_note="Edited to the busy parts of a longer recording.")
+    with TestClient(app) as c:
+        assert c.get("/api/live").json()["footage_note"] == "Edited to the busy parts of a longer recording."
+
+
+def test_page_has_a_place_for_the_footage_note_after_the_recorded_line(client):
+    html = client.get("/").text
+    assert html.index("Recorded feeder footage, standing in for the camera.") < html.index('id="footage-note"')
+
+
+def test_static_files_are_revalidated_and_not_versioned_by_hand(client):
+    assert client.get("/static/app.js").headers["cache-control"] == "no-cache"
+    assert client.get("/static/style.css").headers["cache-control"] == "no-cache"
+    assert "?v=" not in client.get("/").text
+
+
+def test_evidence_photo_rejects_a_bad_date_and_an_unknown_species(client):
+    assert client.get("/evidence/2026-13-45/great_tit.jpg").status_code == 404
+    assert client.get("/evidence/2026-11-01/dodo.jpg").status_code == 404
+
+
+def test_evidence_photo_does_not_follow_a_symlinked_day_out_of_the_evidence_dir(tmp_path, client):
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (outside / "great_tit.jpg").write_bytes(b"\xff\xd8 not evidence")
+    (tmp_path / "evidence" / "2026-11-02").symlink_to(outside, target_is_directory=True)
+    assert client.get("/evidence/2026-11-02/great_tit.jpg").status_code == 404

@@ -163,3 +163,23 @@ def test_a_new_day_starts_with_no_visits_and_counts_a_sitting_bird_again(tmp_pat
     assert store.visits(date(2026, 11, 1))["great_tit"] == 1
     assert store.visits(date(2026, 11, 2))["great_tit"] == 1
     assert p.live().visits_today["great_tit"] == 1 and p.live().day_max["great_tit"] == 1
+
+
+def test_a_single_missed_frame_is_not_a_new_visit(tmp_path, make_video):
+    # a real detector misses a sitting bird now and then: confirmed 0, 1, 0, 0, 1
+    p, store = build(tmp_path, make_video, [[GT], [GT], [], [GT], [GT]])
+    run_detections(p, 5)
+    assert store.visits(date(2026, 11, 1))["great_tit"] == 1
+
+
+def test_a_bird_gone_for_the_gap_and_back_is_a_new_visit(tmp_path, make_video):
+    # confirmed 0, 1, 0, 0, 0, 0, 0, 1: gone for three detections in a row, then back
+    p, store = build(tmp_path, make_video, [[GT], [GT], [], [], [], [], [GT], [GT]])
+    run_detections(p, 8)
+    assert store.visits(date(2026, 11, 1))["great_tit"] == 2
+
+
+def test_visit_gap_of_one_is_the_old_rule(tmp_path, make_video):
+    p, store = build(tmp_path, make_video, [[GT], [GT], [], [GT], [GT]], visit_gap_frames=1)
+    run_detections(p, 5)
+    assert store.visits(date(2026, 11, 1))["great_tit"] == 2

@@ -162,3 +162,61 @@ def test_a_custom_student_dir_never_shows_the_card(monkeypatch, tmp_path, make_v
     settings, card, _ = run_auto(
         monkeypatch, tmp_path, make_video, {"kind": "student", "name": "stub model"}, "--student-dir", str(tmp_path))
     assert card is None and settings.count_threshold is None
+
+
+# --- footage note ---
+
+EDITED = "Edited to the busy parts of a longer recording."
+
+
+def test_a_segments_file_beside_the_clip_sets_the_footage_note(monkeypatch, tmp_path, make_video):
+    make_video()  # a.mp4, the clip run_cli plays
+    (tmp_path / "a.mp4.segments.csv").write_text("start_s,end_s\n0,2\n")
+    assert run_cli(monkeypatch, tmp_path, make_video).footage_note == EDITED
+
+
+def test_a_segments_file_in_a_videos_folder_sets_the_footage_note(monkeypatch, tmp_path, make_video):
+    make_video("clips/a.mp4")
+    (tmp_path / "clips" / "a.mp4.segments.csv").write_text("start_s,end_s\n0,2\n")
+    assert run_cli(monkeypatch, tmp_path, make_video, "--videos", str(tmp_path / "clips")).footage_note == EDITED
+
+
+def test_footage_note_flag_wins_and_no_file_means_no_note(monkeypatch, tmp_path, make_video):
+    assert run_cli(monkeypatch, tmp_path, make_video).footage_note is None
+    (tmp_path / "a.mp4.segments.csv").write_text("start_s,end_s\n0,2\n")
+    settings = run_cli(monkeypatch, tmp_path, make_video, "--footage-note", "Filmed in Oulu, January 2026.")
+    assert settings.footage_note == "Filmed in Oulu, January 2026."
+
+
+# --- start-up line and the card's threshold ---
+
+def test_start_up_line_says_when_a_card_was_dropped(monkeypatch, tmp_path, make_video, capsys):
+    run_auto(monkeypatch, tmp_path, make_video, {"kind": "student", "name": "older student"})
+    out = capsys.readouterr().out
+    assert "detector: student (model card ignored)" in out
+
+
+def test_start_up_line_says_when_a_custom_student_dir_drops_the_card(monkeypatch, tmp_path, make_video, capsys):
+    run_auto(monkeypatch, tmp_path, make_video, {"kind": "student", "name": "stub model"},
+             "--student-dir", str(tmp_path))
+    assert "detector: student (model card ignored)" in capsys.readouterr().out
+
+
+@pytest.mark.parametrize("threshold", ["0.7", 1.5, -0.1, True, None, [0.5]])
+def test_a_card_threshold_that_is_not_a_fraction_exits_2_naming_the_file(
+        monkeypatch, tmp_path, make_video, capsys, threshold):
+    with pytest.raises(SystemExit) as stop:
+        run_auto(monkeypatch, tmp_path, make_video,
+                 {"kind": "two_stage", "name": "stub model", "count_threshold": threshold})
+    assert stop.value.code == 2
+    assert str(tmp_path / "models" / "model_card.json") in capsys.readouterr().err
+
+
+def test_a_card_threshold_of_nan_exits_2(monkeypatch, tmp_path, make_video):
+    models = tmp_path / "models"
+    write_card(models, kind="two_stage", name="stub model")
+    card = models / "model_card.json"
+    card.write_text(card.read_text().replace('"count_threshold": 0.7', '"count_threshold": NaN'))
+    with pytest.raises(SystemExit) as stop:
+        run_auto(monkeypatch, tmp_path, make_video, None, "--models-dir", str(models))
+    assert stop.value.code == 2
