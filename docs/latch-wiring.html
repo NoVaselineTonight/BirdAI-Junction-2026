@@ -126,9 +126,6 @@ td.n { font-variant-numeric: tabular-nums; color: var(--muted); width: 1.5em; }
 .rail { fill: var(--w-jmp); stroke: var(--w-edge); stroke-width: 1.2; }
 .term { fill: var(--w-pwr); stroke: var(--w-edge); stroke-width: 1.2; }
 .usb { fill: #9aa3a1; stroke: #5d6664; stroke-width: 1; }
-.cap { fill: #23306b; stroke: var(--w-edge); stroke-width: 1; }
-.capstripe { fill: #c9cfe6; }
-.capt { font-family: var(--font-mono); font-size: 9px; font-weight: 700; fill: #23306b; }
 .arrow { fill: var(--w-sig); stroke: var(--w-edge); stroke-width: 1; }
 .h3 { font-size: 1rem; margin: 18px 0 8px; text-wrap: balance; }
 ul.plain { margin: 12px 0 0; padding-left: 1.2em; display: flex; flex-direction: column; gap: 8px; }
@@ -156,7 +153,7 @@ ul.plain { margin: 12px 0 0; padding-left: 1.2em; display: flex; flex-direction:
 <section>
   <h2>Wiring: servo powered from the board</h2>
   <figure>
-    <svg viewBox="0 0 360 350" role="img" aria-label="Servo powered from the UNO Q. The orange signal wire goes to D9 on the top header. The red wire goes to the 5V pin on the bottom header. The brown wire goes to the GND pin next to 5V. An optional capacitor sits across 5 V and GND.">
+    <svg viewBox="0 0 360 350" role="img" aria-label="Servo powered from the UNO Q. The orange signal wire goes to D9 on the top header. The red wire goes to the 5V pin on the bottom header. The brown wire goes to the GND pin next to 5V. The servo plug has the red wire in the middle.">
       <!-- ===== Board: USB-C left, digital header top, power header bottom ===== -->
       <rect class="board" x="16" y="40" width="320" height="152" rx="10"/>
       <rect class="usb" x="8" y="96" width="20" height="34" rx="4"/>
@@ -235,31 +232,25 @@ ul.plain { margin: 12px 0 0; padding-left: 1.2em; display: flex; flex-direction:
       </g>
 
       <!-- ===== Wires ===== -->
-      <!-- brown -> GND pin next to 5V (higher lane) -->
-      <path class="edge" d="M265,272 V216 H196 V180"/><path class="w gnd" d="M265,272 V216 H196 V180"/>
-      <!-- red -> 5V (lower lane, so the two never cross) -->
-      <path class="edge" d="M250,272 V244 H182 V180"/><path class="w pwr" d="M250,272 V244 H182 V180"/>
-      <!-- optional capacitor across red / brown -->
-      <path class="edge" d="M225,216 V224 M225,240 V244"/>
-      <path class="w gnd" d="M225,216 V224"/><path class="w pwr" d="M225,240 V244"/>
-      <rect class="cap" x="217" y="224" width="16" height="16" rx="3" style="stroke-dasharray:3 2"/>
-      <rect class="capstripe" x="217" y="224" width="16" height="5"/>
-      <!-- orange -> D9 -->
+      <!-- brown (left of red on the plug) -> GND pin next to 5V -->
+      <path class="edge" d="M250,272 V236 H196 V180"/><path class="w gnd" d="M250,272 V236 H196 V180"/>
+      <!-- red (middle of the plug) -> 5V, hopping over the brown wire -->
+      <path class="edge" d="M265,272 V222 H202 A6,6 0 0 0 190,222 H182 V180"/>
+      <path class="w pwr" d="M265,272 V222 H202 A6,6 0 0 0 190,222 H182 V180"/>
+      <!-- orange (right of red on the plug) -> D9 -->
       <path class="edge" d="M280,272 V206 H344 V30 H182 V52"/><path class="w sig" d="M280,272 V206 H344 V30 H182 V52"/>
-      <circle class="dot-gnd" cx="225" cy="216" r="3"/><circle class="dot-pwr" cx="225" cy="244" r="3"/>
 
       <!-- labels -->
       <text class="lbl" x="262" y="26" text-anchor="middle">signal (orange) → D9</text>
-      <text class="lbl" x="202" y="208">brown → GND</text>
-      <text class="lbl" x="176" y="238" text-anchor="end">red → 5V</text>
-      <text class="lbl" x="244" y="260" text-anchor="end">optional capacitor</text>
+      <text class="lbl" x="244" y="254" text-anchor="end">brown → GND</text>
+      <text class="lbl" x="176" y="214" text-anchor="end">red → 5V</text>
 
       <!-- ===== Servo ===== -->
       <rect class="servo" x="230" y="272" width="100" height="46" rx="5"/>
       <text class="st" x="280" y="292" text-anchor="middle">Servo</text>
       <text class="ss" x="280" y="306" text-anchor="middle">signal to D9</text>
     </svg>
-    <figcaption>Board seen from above, turned so USB-C is on the left. Pin order follows the official UNO Q pinout. The red wire goes to <span class="pin">5V</span>, the brown wire to the <span class="pin">GND</span> pin right after it. The capacitor is drawn dashed because it is optional.</figcaption>
+    <figcaption>Board seen from above, turned so USB-C is on the left. Pin order follows the official UNO Q pinout. The red wire goes to <span class="pin">5V</span>, the brown wire to the <span class="pin">GND</span> pin right after it. The small bump in the red wire means it crosses the brown wire without touching it. The servo plug is drawn with the red wire in the middle.</figcaption>
   </figure>
 </section>
 
@@ -281,7 +272,6 @@ ul.plain { margin: 12px 0 0; padding-left: 1.2em; display: flex; flex-direction:
       <tr><td class="n">1</td><td><span class="sw sig"></span>Servo signal (orange)</td><td>UNO Q <span class="pin">D9</span> (top edge)</td></tr>
       <tr><td class="n">2</td><td><span class="sw pwr"></span>Servo power (red)</td><td>UNO Q <span class="pin">5V</span> (bottom edge, 5th pin from USB-C)</td></tr>
       <tr><td class="n">3</td><td><span class="sw gnd"></span>Servo ground (brown)</td><td>UNO Q <span class="pin">GND</span>, the pin right after <span class="pin">5V</span></td></tr>
-      <tr><td class="n">opt.</td><td>Capacitor, if you have one (470–1000 µF, 10 V or more)</td><td>Long leg to the red wire (5 V), striped short leg to the brown wire (GND). Never the other way round.</td></tr>
     </tbody>
   </table>
   </div>
@@ -295,7 +285,6 @@ ul.plain { margin: 12px 0 0; padding-left: 1.2em; display: flex; flex-direction:
   <ul>
     <li>Keep the flap light, so the servo barely works to move it.</li>
     <li>Make sure nothing can jam the flap. A stalled servo keeps pulling its biggest current.</li>
-    <li>Fit the capacitor if you have one. Its striped side must go to GND. Backwards, it can burst.</li>
     <li>Give the board as much USB-C power as you can. The datasheet asks for a 5 V / 3 A supply.</li>
   </ul>
   <p style="margin-top:8px">If the board resets when the servo moves, use Setup 2 below or the separate 5 V supply wiring.</p>
@@ -536,7 +525,7 @@ ul.plain { margin: 12px 0 0; padding-left: 1.2em; display: flex; flex-direction:
     <li>The orange wire sits on <span class="pin">D9</span>, and nothing touches <span class="pin">D3</span> or <span class="pin">A0</span>–<span class="pin">A5</span>.</li>
     <li>The red wire reaches <span class="pin">5V</span> on the bottom edge, and no red wire is on a <span class="pin">D</span> pin, <span class="pin">3V3</span> or <span class="pin">VIN</span>.</li>
     <li>The brown wire sits on the <span class="pin">GND</span> pin right after <span class="pin">5V</span>, and no bare metal of two wires touches.</li>
-    <li>If fitted, the capacitor's stripe goes to GND. The flap swings freely by hand.</li>
+    <li>The flap swings freely by hand.</li>
   </ol>
   <h2 style="margin-top:18px">First power-on</h2>
   <p>When the latch sketch starts, the servo swings to the <strong>open</strong> position and stays there. It may move fast, so keep fingers out of the flap.</p>
@@ -556,7 +545,7 @@ ul.plain { margin: 12px 0 0; padding-left: 1.2em; display: flex; flex-direction:
     <li><strong>Whether this camera works on the UNO Q.</strong> The datasheet lists a USB camera as a supported kind of device through a powered dongle; this camera has not been tried.</li>
     <li><strong>Which pins cannot take 5 V.</strong> The official pinout sheet's warning names only <span class="pin">A0</span> and <span class="pin">A1</span>. The datasheet text is stricter: also <span class="pin">D3</span>, and <span class="pin">A0</span>–<span class="pin">A5</span> when used as analog pins. This page keeps the stricter rule.</li>
     <li><strong>Printed labels on the board</strong> were not checked. Pin order comes from the official UNO Q datasheet pinout. If your board's printing disagrees, trust the board and ask.</li>
-    <li><strong>Capacitor size and voltage</strong> (470–1000 µF, 10 V or more) and the claim that reversed servo power kills a servo are common practice, not from a source checked here.</li>
+    <li><strong>The claim that reversed servo power kills a servo</strong> is common practice, not from a source checked here.</li>
   </ul>
   <p style="margin-top:12px">The Atech board stays unconnected. Its USB-C port is most likely for powering and programming it, so plugging the camera into it through the hub would do nothing. Tell us exactly what is printed on it before connecting it to anything.</p>
 </section>
