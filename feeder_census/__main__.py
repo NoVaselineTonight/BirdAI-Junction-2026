@@ -1,5 +1,6 @@
 """Run the feeder census: python -m feeder_census --videos clip.mp4 --detector two_stage"""
 import argparse
+import signal
 import sys
 import threading
 from pathlib import Path
@@ -73,6 +74,8 @@ def main(argv: list[str] | None = None) -> int:
         except Exception as exc:
             failure.append(exc)
 
+    # `kill` (SIGTERM) stops the run the same clean way as Ctrl-C
+    signal.signal(signal.SIGTERM, lambda signum, frame: stop.set())
     thread = threading.Thread(target=work, name="pipeline")
     thread.start()
     try:
