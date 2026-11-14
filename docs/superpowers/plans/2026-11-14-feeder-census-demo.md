@@ -10,7 +10,7 @@
 
 **Spec:** `feeder-census-sketch.md` (what the device does, demo plan, honesty rules), `arduino-uno-q-spec-sheet.md` (board limits) and `compute-plan-verda-modal.md` (where labelling and training run). Read all three. The repo is `NoVaselineTonight/BirdAI-Junction-2026` (formerly `challenge-3`); every path below is relative to its root.
 
-## Current state (14 November 2026, 13:15)
+## Current state (14 November 2026, 14:00)
 
 Read this first if you are picking the work up without the conversation that produced it. It replaces "Starting state" below, which is kept only as history. The full record, including every ruling, review result, deferred minor finding and worker id, is the ledger `.superpowers/sdd/2026-11-14-feeder-census-demo/progress.md` in this worktree (git-ignored); briefs, reports and review diffs for each task sit beside it. Execution method: `superpowers:subagent-driven-development` — one implementer and one reviewer per task, fix rounds until the review is clean.
 
@@ -25,14 +25,13 @@ Read this first if you are picking the work up without the conversation that pro
 | 5 | Demo page (**Milestone A**) | 3da2eb3, 1adac86 |
 | 6 | Board deploy and run scripts, README (**Milestone B**) | a2ef92d, adb4c56 |
 | 7 (code) | Teacher labelling tools | e51742d, 53cb888 |
+| 7b | `tools/mine_frames.py`: bird frames and a busy-parts clip from long streams | 36ef0ee, 3b09510, 5e46bae, eb4ae0d |
 | 8 (code) | Dataset builder, training script, student detector | df2aaa0, 4884102 |
 | 9a | Evaluation tool and model choice | 78821cd, 5dca159 |
+| 9b | `--detector auto`, model card, board scripts follow the card, README accuracy section | 6b547cd |
+| 10 | Visits counter and a live panel that fits eight species | 00f1ed0 |
 
-**In flight at 13:15:**
-
-- Task 7b, `tools/mine_frames.py` (36ef0ee, 3b09510, 5e46bae): second fix round is being re-reviewed.
-- Task 9b, `--detector auto`, model card, board scripts follow the card, README accuracy section (6b547cd): first review running.
-- Task 10, visits counter and a live panel that fits eight species: being implemented (brief: `task-10-brief.md` in the ledger folder).
+**In flight at 14:00:** Task 11, page and counter polish (brief: `task-11-brief.md` in the ledger folder): visits that a single missed detection cannot inflate, tables that keep all eight species columns, real spare room in the live panel, a line under the feed when the clip is an edited cut (also carried to the board), and small hardening from earlier reviews. It still needs its review.
 
 **Changes to this plan made during execution** (the task text below is not updated; these win):
 
@@ -42,26 +41,27 @@ Read this first if you are picking the work up without the conversation that pro
 - **Three dataset splits, not two:** `train`, `val` (last 15% of each training video) and `test` (the demo footage). Checkpoint choice and the counting threshold use `val`; every reported accuracy number uses `test` only.
 - Evaluation reports an unmeasured precision or recall as `null` (the page shows a dash) and records where the threshold came from (`threshold_source`); with too few validation boxes the student keeps 0.60.
 - `tools/remote.sh run` wraps the whole command in `uv run --group train bash -c`; `push` also copies `models/pretrained/`. BioCLIP 2 is selected explicitly and runs on the GPU.
-- **New Task 7b:** the team's footage is about 30 hours of long, mostly empty live streams, so `tools/mine_frames.py` replaces `extract_frames.py` for it: scan at one frame per second with a small detector, keep bird frames (time-deduplicated, several-birds-at-once first) plus about 15% empty frames, and optionally cut a "busy parts" clip for the live demo.
+- **New Task 7b:** the team's footage is about 30 hours of long, mostly empty live streams, so `tools/mine_frames.py` replaces `extract_frames.py` for it: scan at one frame per second with a small detector, keep bird frames (time-deduplicated, several-birds-at-once first) plus about 15% empty frames, verify that each saved frame is the one that was scanned, and optionally cut a "busy parts" clip for the live demo. Its worker processes start with `spawn`; with `fork` the whole test suite hung.
 - **New Task 10:** "how many of each bird has been seen" is built as a visits counter (arrivals), not a count of birds, shown beside "most at once" and kept out of the census CSV.
+- **New Task 11:** demo polish (see "In flight").
 - Task 9 was split into 9a (evaluation tool) and 9b (CLI, board scripts, README).
+- The program runs whatever `models/model_card.json` names (`--detector auto`), and never shows a card for a detector other than the one running.
 
-**Measured so far:** 191+ tests pass. Pretrained two-stage detector on the board: median 264 ms per frame, p90 287 ms (laptop 28 ms), about 1.2 GB memory free while running — on a stand-in clip made from three bird photos, not feeder footage. The classifier's label file lacks willow tit and crested tit (it names 20 of the 22 species, all eight core ones).
+**Measured so far:** 241 tests pass (whole suite, about 15 s). Pretrained two-stage detector on the board: median 264 ms per frame, p90 287 ms (laptop 28 ms), about 1.2 GB memory free while running — on a stand-in clip made from three bird photos, not feeder footage. The classifier's label file lacks willow tit and crested tit (it names 20 of the 22 species, all eight core ones).
 
 **Still owed, in order:**
 
-1. Finish the three tasks in flight (reviews, fix rounds).
-2. One real `board/deploy.sh` and `board/run.sh --fresh` on the board: after Task 6's last fixes the refactored stop, `--fresh` and deploy paths were only read, not run.
-3. A line under the feed when the demo clip is an edited "busy parts" cut.
-4. With real footage: the pretrained detector on real feeder video on laptop and board (speed and a look at the page). Until then all visual checks used stand-ins.
-5. The model track's real runs on the Verda machine: mine frames, label, check labels (Task 7 Steps 5–7), build the dataset and train (Task 8 Steps 5–6), measure, choose, ship to the board (Task 9 Steps 5–8).
-6. The final whole-branch review, pointed at the deferred-minor list in the ledger, then a pull request (never merge or push to `main` without the team).
-7. Update `docs/feeder-census-demo-plan.html` and its published copy to match the changes above.
+1. Review Task 11 and run its fix rounds.
+2. One real `board/deploy.sh` and `board/run.sh --fresh` on the board: since Task 6's last fixes and Task 9b, the stop, `--fresh`, deploy and card-following paths were only dry-run.
+3. With real footage: the pretrained detector on real feeder video on laptop and board (speed, bird size in pixels, a look at the page). Until then all visual checks used stand-ins.
+4. The model track's real runs on the Verda machine: mine frames (the tool has never run with real ffmpeg, the real scan model or a GPU), label, check labels (Task 7 Steps 5–7), build the dataset and train (Task 8 Steps 5–6), measure, choose, ship to the board (Task 9 Steps 5–8).
+5. The final whole-branch review, pointed at the deferred-minor list in the ledger, then a pull request (never merge or push to `main` without the team).
+6. Update `docs/feeder-census-demo-plan.html` and its published copy to match the changes above.
 
 **Waiting on the team:**
 
 - `VERDA_HOST` (`root@<ip>`). The laptop's key for it is `~/.ssh/birdai_verda`; its public half must be added to the instance.
-- The footage, ideally downloaded straight onto the Verda machine, and **how many different cameras it comes from**: the demo stream must be a camera the model never trained on, so at least three are needed (two to train, one to demo).
+- The footage, at the best quality each stream offers (1080p if it exists, 720p acceptable; 360p only for close-up cameras), ideally downloaded straight onto the Verda machine, and **how many different cameras it comes from**: the demo stream must be a camera the model never trained on, so at least three are needed (two to train, one to demo).
 - Optional: a Jev API key, only if the team wants it tried as a third opinion on crops the two teachers disagree about.
 
 **Facts about this machine:** no `ffmpeg`, no GPU; the Playwright MCP cannot find Chrome, so screenshots are taken with headless `/usr/bin/chromium`; the `impeccable` skill's launcher is refused inside worker agents; stand-in clips and screenshots are under `/home/eemil/.claude/jobs/6f180426/tmp/`; port 8088 is recorded in `~/.claude/Global information/local-dev-environment.md`.
