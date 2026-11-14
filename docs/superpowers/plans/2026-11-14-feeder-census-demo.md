@@ -10,7 +10,7 @@
 
 **Spec:** `feeder-census-sketch.md` (what the device does, demo plan, honesty rules), `arduino-uno-q-spec-sheet.md` (board limits) and `compute-plan-verda-modal.md` (where labelling and training run). Read all three. The repo is `NoVaselineTonight/BirdAI-Junction-2026` (formerly `challenge-3`); every path below is relative to its root.
 
-## Current state (14 November 2026, 14:00)
+## Current state (14 November 2026, 13:30)
 
 Read this first if you are picking the work up without the conversation that produced it. It replaces "Starting state" below, which is kept only as history. The full record, including every ruling, review result, deferred minor finding and worker id, is the ledger `.superpowers/sdd/2026-11-14-feeder-census-demo/progress.md` in this worktree (git-ignored); briefs, reports and review diffs for each task sit beside it. Execution method: `superpowers:subagent-driven-development` — one implementer and one reviewer per task, fix rounds until the review is clean.
 
@@ -31,7 +31,7 @@ Read this first if you are picking the work up without the conversation that pro
 | 9b | `--detector auto`, model card, board scripts follow the card, README accuracy section | 6b547cd |
 | 10 | Visits counter and a live panel that fits eight species | 00f1ed0 |
 
-**In flight at 14:00:** Task 11, page and counter polish (brief: `task-11-brief.md` in the ledger folder): visits that a single missed detection cannot inflate, tables that keep all eight species columns, real spare room in the live panel, a line under the feed when the clip is an edited cut (also carried to the board), and small hardening from earlier reviews. It still needs its review.
+**In flight at 13:30:** Task 11, page and counter polish (brief: `task-11-brief.md` in the ledger folder): visits that a single missed detection cannot inflate, tables that keep all eight species columns, real spare room in the live panel, a line under the feed when the clip is an edited cut (also carried to the board), and small hardening from earlier reviews. It still needs its review.
 
 **Changes to this plan made during execution** (the task text below is not updated; these win):
 
