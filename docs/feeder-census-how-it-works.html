@@ -1,0 +1,189 @@
+<title>How Feeder Census Works</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Space+Grotesk:wght@500;600;700&display=swap">
+<style>
+/* Layout: one reading column; parts as a wrapping grid; two real sequences as numbered steps; numbers in tables. */
+:root{
+  --bg:#eef2f2; --surface:#ffffff; --ink:#15211f; --muted:#556562; --line:#cdd8d6; --accent:#1c6b58; --accent-soft:#dcebe6;
+  --ok:#1c6b58; --warn:#b7791f; --bad:#b23a3a; --idle:#8a9896;
+  --display:"Space Grotesk","Segoe UI",system-ui,sans-serif; --body:"Inter","Segoe UI",system-ui,sans-serif;
+}
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){
+  --bg:#0f1615; --surface:#172220; --ink:#e6eeec; --muted:#9babA8; --line:#2b3a37; --accent:#63c4a8; --accent-soft:#1d332d;
+  --ok:#63c4a8; --warn:#e0b25a; --bad:#e58080; --idle:#6f7f7c; color-scheme:dark } }
+:root[data-theme="dark"]{
+  --bg:#0f1615; --surface:#172220; --ink:#e6eeec; --muted:#9babA8; --line:#2b3a37; --accent:#63c4a8; --accent-soft:#1d332d;
+  --ok:#63c4a8; --warn:#e0b25a; --bad:#e58080; --idle:#6f7f7c; color-scheme:dark }
+body{background:var(--bg);color:var(--ink);font:16px/1.6 var(--body);
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:40px 72px}
+main{max-width:920px;margin:0 auto;display:flex;flex-direction:column;gap:56px}
+section{display:flex;flex-direction:column;gap:16px;min-width:0}
+h1{font:700 clamp(30px,5vw,44px)/1.1 var(--display);margin:0;text-wrap:balance;letter-spacing:-.01em}
+h2{font:600 24px/1.2 var(--display);margin:0;text-wrap:balance}
+h3{font:600 16px/1.3 var(--display);margin:0}
+p{margin:0;max-width:66ch}
+.lede{font-size:18px;color:var(--ink)}
+.muted{color:var(--muted)} .small{font-size:14px}
+.eyebrow{font:600 12px/1 var(--body);letter-spacing:.09em;text-transform:uppercase;color:var(--accent)}
+.parts{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:12px}
+.part{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:16px;display:flex;flex-direction:column;gap:6px;min-width:0}
+.part p{font-size:14.5px;color:var(--muted)}
+.part .where{font:500 12px/1.2 var(--body);color:var(--accent)}
+ol.steps{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;counter-reset:s}
+ol.steps li{counter-increment:s;display:grid;grid-template-columns:36px 1fr;gap:12px;padding:12px 0;border-top:1px solid var(--line)}
+ol.steps li:last-child{border-bottom:1px solid var(--line)}
+ol.steps li::before{content:counter(s);font:600 15px/28px var(--display);width:28px;height:28px;text-align:center;border-radius:50%;background:var(--accent-soft);color:var(--accent)}
+ol.steps b{font-weight:600}
+ol.steps span{display:block;color:var(--muted);font-size:14.5px}
+.scroll{overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-variant-numeric:tabular-nums;font-size:15px;background:var(--surface);border:1px solid var(--line);border-radius:8px}
+th,td{padding:9px 12px;text-align:right;border-bottom:1px solid var(--line);white-space:nowrap}
+th:first-child,td:first-child{text-align:left;white-space:normal}
+th{font:600 12.5px/1.3 var(--body);color:var(--muted);letter-spacing:.02em}
+tr:last-child td{border-bottom:0}
+tr.ship td{font-weight:600} tr.ship td:first-child::after{content:" · on the board";font-weight:500;color:var(--accent);font-size:13px}
+.bar{display:flex;height:34px;border-radius:6px;overflow:hidden;border:1px solid var(--line)}
+.bar i{display:block;height:100%}
+.legend{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:8px 20px;font-size:14.5px}
+.legend div{display:flex;gap:8px;align-items:baseline}
+.sw{flex:none;width:11px;height:11px;border-radius:2px;display:inline-block}
+.note{border-left:3px solid var(--accent);padding:2px 0 2px 14px}
+ul{margin:0;padding-left:20px;max-width:66ch;display:flex;flex-direction:column;gap:6px}
+footer{color:var(--muted);font-size:13.5px;border-top:1px solid var(--line);padding-top:16px}
+</style>
+
+<main>
+<header style="display:flex;flex-direction:column;gap:14px">
+  <span class="eyebrow">Feeder Census · Junction 2026 · Arduino UNO Q</span>
+  <h1>How Feeder Census works</h1>
+  <p class="lede">A camera watches a winter bird feeder. A small model on an Arduino UNO Q names the birds in each photo and counts every species by the rule Finnish feeder monitoring already uses: the largest number seen at the same time. The counts stay on the device as open data, and a latch closes the feeder when a squirrel shows up.</p>
+  <p class="muted small">Numbers on this page were measured on 14 November 2026. The demo plays recorded footage of one feeder camera; no frame of it is shown here.</p>
+</header>
+
+<section>
+  <h2>What it consists of</h2>
+  <div class="parts">
+    <div class="part"><span class="where">Input</span><h3>Camera</h3><p>A USB camera aimed at the feeder. In the demo, recorded footage of a public feeder stream (1920 × 1080) stands in for it.</p></div>
+    <div class="part"><span class="where">UNO Q, Linux side</span><h3>Detector model</h3><p>One small neural network (YOLO26 nano, about 10 MB, ONNX). It finds each bird and names it in a single pass: 13 species plus "unidentified". Runs on the board's processor, no graphics card, no internet.</p></div>
+    <div class="part"><span class="where">UNO Q, Linux side</span><h3>Counting rule</h3><p>Only birds named with at least 50 % confidence, seen in two photos in a row, are counted. The count for a species is the largest number in one photo, per hour, day and half-month.</p></div>
+    <div class="part"><span class="where">UNO Q, Linux side</span><h3>Store and page</h3><p>A small database on the board, and a local web page: the latest photo with boxes, counts, visits, hours watched, one evidence photo per species per day, CSV export.</p></div>
+    <div class="part"><span class="where">UNO Q, microcontroller side</span><h3>Latch</h3><p>One servo on pin D9. The Linux side tells the microcontroller to close when a red squirrel is seen in two photos in a row. If the commands stop, the latch reopens by itself after 30 s.</p></div>
+    <div class="part"><span class="where">Off the device, once</span><h3>Training pipeline</h3><p>Large "teacher" models on rented GPUs labelled hours of feeder footage; the small "student" model learned from those labels. Only the student goes on the board.</p></div>
+  </div>
+</section>
+
+<section>
+  <h2>What happens every 5 seconds</h2>
+  <ol class="steps">
+    <li><div><b>Take one photo.</b><span>One frame from the camera (in the demo, from the recording).</span></div></li>
+    <li><div><b>Shrink it to 640 pixels wide and run the detector.</b><span>About 0.5 s on the board. Out come boxes, each with a species name and a confidence.</span></div></li>
+    <li><div><b>Keep the sure ones.</b><span>A name with confidence under 0.50 is shown as "unidentified" and is not counted.</span></div></li>
+    <li><div><b>Confirm and count.</b><span>A bird counts when it is there in two photos in a row. The largest number seen at once becomes the count for that hour, day and half-month.</span></div></li>
+    <li><div><b>Save and show.</b><span>Counts, visits and an evidence photo go to the database; the page shows the photo with its boxes until the next one replaces it.</span></div></li>
+    <li><div><b>Check for a squirrel.</b><span>Two photos in a row with a red squirrel close the latch; five clear photos open it again.</span></div></li>
+  </ol>
+</section>
+
+<section>
+  <h2>How the model was made</h2>
+  <ol class="steps">
+    <li><div><b>Collect footage.</b><span>25 days of one feeder camera's stream (October and November 2026, plus two days from earlier winters), two videos of forest feeders, and squirrel material: 400 Creative Commons photos, frames of one documentary, and cut-outs pasted into feeder frames.</span></div></li>
+    <li><div><b>Pick the frames with birds.</b><span>Long streams are mostly an empty feeder. A miner keeps the moments where something moves. With the squirrel material and the blurred copies, the training set has 62,185 frames.</span></div></li>
+    <li><div><b>Let big models label them.</b><span>A large detector and two detectors tuned to this camera draw the boxes. Two bird classifiers (BioCLIP 2 and an iNaturalist classifier) give the names.</span></div></li>
+    <li><div><b>Clean the labels automatically.</b><span>Small classifiers trained on this camera's clear cases remove fat balls and snow and fix names. A person looked at sample sheets, not at every frame. Result: 88,466 labelled boxes.</span></div></li>
+    <li><div><b>Train the small model on those labels.</b><span>The student learns to copy the teachers in one fast pass. One training frame in four also has a blurred, noisy copy so a worse camera does not throw it off.</span></div></li>
+    <li><div><b>Measure on a day it never saw, time it on the board, choose by a fixed rule.</b><span>The cut-off (0.50) is picked on held-back training footage, never on the test day. A model ships only if it runs in under 1.5 s on the board.</span></div></li>
+  </ol>
+  <p class="muted small">Species the model can name: great tit, blue tit, bullfinch, jay, magpie, tree sparrow, nuthatch, house sparrow, great spotted woodpecker, crested tit, coal tit, willow tit, and red squirrel.</p>
+</section>
+
+<section>
+  <span class="eyebrow">Accuracy</span>
+  <h2>Measured on a day the model never saw</h2>
+  <p>The test is 12 November 2026: 899 frames from the same feeder camera, a day no model and no teacher was trained on. The truth labels come from the teacher models, so the first row measures agreement with them. Looking through the disagreements showed that many labels are faulty: one bird with two boxes, or a box around a whole feeder column. The second row removes only those two defects, by a rule on the label boxes alone.</p>
+  <div class="scroll"><table>
+    <tr><th>Model on the board, scored against</th><th>Named birds right</th><th>Birds found</th><th>Frames counted exactly right</th></tr>
+    <tr><td>the labels as they are</td><td>0.905</td><td>0.739</td><td>0.628</td></tr>
+    <tr><td>the same labels, double boxes merged and oversized boxes ignored</td><td>0.901</td><td>0.841</td><td>0.746</td></tr>
+  </table></div>
+  <p class="muted small">"Named birds right" is held down by real birds the labels lack: of 83 "false alarms" checked by eye, about 4 were not a bird. The model card in the repository quotes 0.91 / 0.73 / 0.614; that was measured against the previous round of labels.</p>
+
+  <h3>What happens to 1,600 birds</h3>
+  <div class="bar" role="img" aria-label="Of 1,600 birds: 84 percent counted right, 7 percent right but unsure, 4 percent wrong name, 5 percent box off or not seen">
+    <i style="width:84.1%;background:var(--ok)"></i><i style="width:6.6%;background:var(--warn)"></i><i style="width:4.1%;background:var(--bad)"></i><i style="width:5.2%;background:var(--idle)"></i>
+  </div>
+  <div class="legend">
+    <div><span class="sw" style="background:var(--ok)"></span><span><b>84 %</b> counted under the right name</span></div>
+    <div><span class="sw" style="background:var(--warn)"></span><span><b>7 %</b> right name, but under 50 % sure, so not counted</span></div>
+    <div><span class="sw" style="background:var(--bad)"></span><span><b>4 %</b> wrong name, mostly a clear tit called "unidentified"</span></div>
+    <div><span class="sw" style="background:var(--idle)"></span><span><b>5 %</b> box in the wrong place, or bird not seen</span></div>
+  </div>
+  <p class="muted small">After merging double labels the test day has about 1,600 distinct birds; 1,345 are counted right. The split of the rest comes from sorting every label by hand-written rules and is approximate.</p>
+
+  <h3>By species</h3>
+  <div class="scroll"><table>
+    <tr><th>Species</th><th>Named right</th><th>Found</th><th>Birds on the test day</th></tr>
+    <tr><td>Great tit</td><td>0.91</td><td>0.87</td><td>1,252</td></tr>
+    <tr><td>Blue tit</td><td>0.90</td><td>0.75</td><td>264</td></tr>
+    <tr><td>Magpie</td><td>0.70</td><td>0.74</td><td>53</td></tr>
+    <tr><td>Bullfinch</td><td>0.92</td><td>0.61</td><td>18</td></tr>
+    <tr><td>Great spotted woodpecker</td><td>0.80</td><td>1.00</td><td>4</td></tr>
+  </table></div>
+  <p class="muted small">Scored against the labels with the two defects removed. Tree sparrow, jay, house sparrow, nuthatch and willow tit had one or two birds each on the test day and none was counted; that is too few to say anything. Bullfinch and woodpecker numbers rest on very few birds too.</p>
+
+  <h3>Speed on the Arduino UNO Q</h3>
+  <div class="scroll"><table>
+    <tr><th>Detector</th><th>Median per photo</th><th>Slow case (p90)</th><th>Birds found</th></tr>
+    <tr class="ship"><td>Our student, 640 px</td><td>507 ms</td><td>520 ms</td><td>0.841</td></tr>
+    <tr><td>Our student, 960 px</td><td>1,109 ms</td><td>1,128 ms</td><td>0.861</td></tr>
+    <tr><td>Off-the-shelf detector plus classifier</td><td>170 ms</td><td>172 ms</td><td>0.00</td></tr>
+  </table></div>
+  <p class="muted small">The budget is 1.5 s; the demo takes a photo every 5 s. The off-the-shelf pair is fast but finds no birds at all on this camera, which is why we trained our own.</p>
+
+  <h3>Squirrel and latch</h3>
+  <ul>
+    <li>The test day has no squirrel. On held-back training footage the model named squirrels right 0.92 of the time and found 0.84 of them; that figure is optimistic for this feeder.</li>
+    <li>In 899 test frames the model called one thing a squirrel that was not: a blurred bird in flight, in a single frame. The latch needs two photos in a row, so it stayed open.</li>
+    <li>In the demo reel the latch closed within 10 s of the squirrel appearing. That clip was kept out of training, but the model has seen the same squirrel on other visits (about 790 boxes).</li>
+    <li>The model has no rat class, so the latch reacts to squirrels only.</li>
+  </ul>
+</section>
+
+<section>
+  <h2>What we tried, and what stopped helping</h2>
+  <div class="scroll"><table>
+    <tr><th>Training round (640 px)</th><th>Named birds right</th><th>Birds found</th><th>Frames exactly right</th></tr>
+    <tr><td>First quick round</td><td>0.906</td><td>0.571</td><td>0.487</td></tr>
+    <tr><td>Second round</td><td>0.876</td><td>0.596</td><td>0.502</td></tr>
+    <tr><td>15 days of footage</td><td>0.891</td><td>0.694</td><td>0.575</td></tr>
+    <tr class="ship"><td>25 days of footage</td><td>0.905</td><td>0.739</td><td>0.628</td></tr>
+    <tr><td>44 days of footage</td><td>0.915</td><td>0.734</td><td>0.606</td></tr>
+    <tr><td>25 days, training labels cleaned, short re-training</td><td>0.913</td><td>0.701</td><td>0.575</td></tr>
+  </table></div>
+  <p class="muted small">All rows: same test day, same labels as they are, cut-off 0.50.</p>
+  <p class="note">More footage helped up to 25 days and then stopped. Cleaner training labels did not help either. The model is now limited by its own small size and by how few pixels each bird gets, which is why the 960 px version is the only one that scores higher.</p>
+</section>
+
+<section>
+  <h2>What these numbers do not say</h2>
+  <ul>
+    <li>The test day is the same feeder and camera as the training footage. Nothing here says how the model does at another feeder, with another camera, or in another season.</li>
+    <li>The truth labels are machine-made and only spot-checked by a person. A mistake the model learned from its teachers counts in its favour.</li>
+    <li>We do not claim it names species better than a skilled volunteer.</li>
+    <li>The demo footage is recorded, not live. It belongs to the stream's uploader and is not in our repository.</li>
+  </ul>
+</section>
+
+<section>
+  <h2>Next steps, not built</h2>
+  <ul>
+    <li>Give the bird more pixels: a camera closer to the feeder, or cut out the feeder region before the detector sees the photo.</li>
+    <li>Stop "unidentified" from being a name the model can choose, so clear birds are not filed under it.</li>
+    <li>Accept a less sure name when several photos in a row agree.</li>
+    <li>Add the birds the teachers missed to the labels, so accuracy can be measured without the by-eye correction.</li>
+    <li>A microphone as a second witness, and as the trigger that wakes the camera.</li>
+  </ul>
+</section>
+
+<footer>Feeder Census, team project for Junction 2026 (Arduino challenge). Detector trained with Ultralytics YOLO26 on Verda GPUs; runs with ONNX Runtime on the Arduino UNO Q.</footer>
+</main>
