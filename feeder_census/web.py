@@ -115,7 +115,7 @@ def create_app(
     def export() -> Response:
         out = io.StringIO(newline="")
         store.export_csv(out, english)
-        return Response(out.getvalue(), media_type="text/csv; charset=utf-8",
+        return Response("\ufeff" + out.getvalue(), media_type="text/csv; charset=utf-8",
                         headers={"Content-Disposition": 'attachment; filename="feeder-census.csv"'})
 
     @app.get("/api/model")

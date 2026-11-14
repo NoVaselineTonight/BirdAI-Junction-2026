@@ -293,12 +293,12 @@ function renderModel() {
   const per = m.per_species || {};
   const keys = Object.keys(per);
   if (!keys.length) return;
-  const byKey = Object.fromEntries((tables ? tables.species : []).map((s) => [s.key, s]));
+  const byKey = Object.fromEntries((tables ? tables.nameable : []).map((s) => [s.key, s]));
   const table = $("metrics");
   table.replaceChildren(
     el("thead", {}, el("tr", {}, ...["Species", "Precision", "Recall", "Boxes"].map((h) => el("th", { scope: "col" }, h)))),
     el("tbody", {}, ...keys.map((k) => el("tr", {},
-      el("th", { scope: "row" }, byKey[k] ? fullName(byKey[k]) : k),
+      el("th", { scope: "row" }, byKey[k] ? fullName(byKey[k]) : k.replace(/_/g, " ")),
       el("td", {}, pct(per[k].precision)),
       el("td", {}, pct(per[k].recall)),
       el("td", {}, per[k].val_boxes == null ? DASH : String(per[k].val_boxes))))));

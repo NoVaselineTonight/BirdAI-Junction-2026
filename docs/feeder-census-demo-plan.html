@@ -221,7 +221,7 @@ ul.plain { margin: 0; padding-left: 1.1rem; display: flex; flex-direction: colum
   <div class="note"><p><b>The footage is the whole schedule.</b> The model can only learn a species it has seen about 60 times or more. Late footage, or footage with two species in it, means a model that knows two species. If nothing arrives by about 17:00, the trained model will not make midnight and the demo ships with the ready-made models.</p></div>
   <ul class="plain">
     <li><b>Accuracy is unknown until the first model is measured, around 16:00.</b> Nobody has measured these models on Finnish feeder video. The plan measures it and shows the number. Tree sparrow against house sparrow will be the weak spot.</li>
-    <li><b>Labels come from models.</b> The accuracy number is measured against teacher labels checked by a person, not against an expert's ground truth. The page and README say that.</li>
+    <li><b>Labels come from models.</b> The accuracy number is measured against teacher labels cleaned automatically; a person spot-checked samples, not against an expert's ground truth. The page and README say that.</li>
     <li><b>Licence.</b> The student is trained with Ultralytics, which is AGPL-3.0 and claims the trained weights. Fine for a hackathon and an open repo, a problem for a closed product. The ready-made models are Apache-2.0.</li>
     <li><b>Small birds.</b> If birds are tiny in the frame, neither model will name them. Footage where the feeder fills the picture matters more than resolution.</li>
     <li><b>Still one feeder, recorded.</b> The sketch's weak points on impact and on having no camera are not fixed by this plan. The honest sentence stays: "This is footage from a feeder, standing in for our camera."</li>

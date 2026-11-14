@@ -283,6 +283,16 @@ def test_a_pest_box_is_drawn_by_its_own_threshold():
     assert tuple(annotate(frame, weak, {}, 0.6, pests={"red_squirrel": 0.5})[150, 100]) == (150, 150, 150)
 
 
+def test_a_label_near_the_right_edge_is_shifted_left_to_stay_inside_the_picture():
+    from feeder_census.draw import annotate
+    from feeder_census.types import Detection
+
+    frame = np.zeros((240, 320, 3), np.uint8)
+    near_edge = [Detection("great_tit", 0.9, (300, 100, 318, 140))]
+    out = annotate(frame, near_edge, {"great_tit": "Great tit"}, 0.6)
+    assert out[85:99, 285].any()  # the label starts left of the box, so its text is not cut off at the edge
+
+
 # --- photo mode: the feed shows only the analysed photos, each held until the next ---
 
 

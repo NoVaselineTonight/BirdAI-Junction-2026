@@ -121,7 +121,8 @@ def test_csv_download(client):
     r = client.get("/export/census.csv")
     assert r.headers["content-disposition"].endswith('filename="feeder-census.csv"')
     assert r.headers["content-type"] == "text/csv; charset=utf-8"
-    assert r.text.splitlines()[0].startswith("Period,Hours watched,Great tit")
+    assert r.content.startswith(b"\xef\xbb\xbf")  # a UTF-8 byte-order mark, so Excel reads the en dash right
+    assert r.content[3:].decode("utf-8").splitlines()[0].startswith("Period,Hours watched,Great tit")
 
 
 def test_evidence_photo_is_served_and_paths_cannot_escape(client):
@@ -306,3 +307,10 @@ def test_page_draws_the_latch_from_the_headline_key(client):
     for key in ("off", "open", "closed", "not_answering"):
         assert f"{key}:" in js or f'"{key}"' in js
     assert "Latch: not answering" in js
+
+
+def test_model_table_names_every_nameable_species_and_falls_back_to_a_readable_key(client):
+    js = client.get("/static/app.js").text
+    assert "tables.nameable" in js.split("function renderModel()")[1].split("/* ---------- feed")[0]
+    assert "tables.species" not in js.split("function renderModel()")[1].split("/* ---------- feed")[0]
+    assert 'k.replace(/_/g, " ")' in js

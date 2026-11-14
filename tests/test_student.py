@@ -49,6 +49,14 @@ def test_rows_under_min_score_are_dropped_and_padding_rows_do_not_matter():
     assert decode_student(out, 1 / 3, (0, 140), ["great_tit", "unidentified"]) == []
 
 
+def test_the_default_floor_is_a_quarter_so_very_weak_boxes_never_reach_the_picture():
+    out = np.zeros((1, 300, 6), np.float32)
+    out[0, 0] = [100, 240, 200, 340, 0.24, 0]
+    out[0, 1] = [400, 240, 500, 340, 0.25, 0]
+    dets = decode_student(out, 1 / 3, (0, 140), ["great_tit", "unidentified"])
+    assert [round(d.confidence, 2) for d in dets] == [0.25]
+
+
 def test_two_separate_birds_come_out_best_first():
     out = np.zeros((1, 300, 6), np.float32)
     out[0, 0] = [10, 150, 60, 200, 0.5, 0]

@@ -307,3 +307,34 @@ def test_no_web_line_says_what_the_latch_does(capsys):
     assert "latch" not in line(LatchState("off", False, None, None))
     assert "latch=closed (red_squirrel) error='no router socket'" in line(
         LatchState("router", True, "red_squirrel", "no router socket"))
+
+
+# --- an old database meets a model with other species ---
+
+
+def test_a_database_made_for_other_species_exits_1_with_one_line(monkeypatch, tmp_path, make_video, capsys):
+    class StubPipeline:
+        error = None
+
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def run(self, stop):
+            pass
+
+    monkeypatch.setattr(cli, "Pipeline", StubPipeline)
+    video, db = make_video(), tmp_path / "data" / "c.db"
+
+    def argv_for(species):
+        script = tmp_path / f"{species}.json"
+        script.write_text('{"species": ["%s"], "frames": [[]]}' % species)
+        return ["--videos", str(video), "--detector", "scripted", "--script", str(script), "--db", str(db),
+                "--no-web"]
+
+    assert cli.main(argv_for("great_tit")) == 0
+    capsys.readouterr()
+    assert cli.main(argv_for("blue_tit")) == 1
+    err = capsys.readouterr().err.strip()
+    assert len(err.splitlines()) == 1
+    assert "different species list" in err
+    assert "--db" in err and "board/run.sh --fresh" in err

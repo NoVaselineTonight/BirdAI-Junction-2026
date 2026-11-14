@@ -1,12 +1,14 @@
 #!/usr/bin/env bash
 # Start the demo on the Arduino UNO Q and forward its page to http://localhost:8088.
-# Usage: board/run.sh [--detector auto|two_stage|student] [--latch off|sim|router] [--photo-every-s N] [--fast]
-#                     [--fresh] [--dry-run]
+# Usage: board/run.sh [--detector auto|two_stage|student] [--latch off|sim|router] [--photo-every-s N] [--footage-note TEXT]
+#                     [--fast] [--fresh] [--dry-run]
 #        board/run.sh --stop
 # --detector auto (the default) lets the program on the board pick: the kind in the board's models/model_card.json,
 # or two_stage when it has none. deploy.sh keeps that card in step with the model it ships.
 # --photo-every-s N (seconds of footage, e.g. 5 or 2.5) shows one analysed photo every N s, held until the next,
 # as the board's camera would take them, instead of video.
+# --footage-note TEXT is the sentence the page shows under the video's name, e.g. to say the reel is an edited cut.
+#   Only letters, digits, space and . , : - are allowed (it is passed to a shell command on the board).
 # --latch (default off) closes the feeder latch when a squirrel or rat is seen: sim only shows it on the page,
 # router moves the servo through board/latch/latch.ino (upload that sketch to the board first).
 # --dry-run only reads from the board: it says which detector would run and what would be deleted.
@@ -20,6 +22,8 @@ LATCH=off
 EXTRA=""
 FAST=""
 PHOTO=""
+NOTE=""
+NOTE_SET=0
 STOP=0
 FRESH=0
 DRY_RUN=0
@@ -28,11 +32,12 @@ while [ $# -gt 0 ]; do
         --detector) DETECTOR=${2:?--detector needs a value}; shift 2 ;;
         --latch) LATCH=${2:?--latch needs a value}; shift 2 ;;
         --photo-every-s) PHOTO=${2:?--photo-every-s needs a value}; shift 2 ;;
+        --footage-note) NOTE=${2?--footage-note needs a value}; NOTE_SET=1; shift 2 ;;
         --fast) FAST="--fast"; shift ;;
         --fresh) FRESH=1; shift ;;
         --stop) STOP=1; shift ;;
         --dry-run) DRY_RUN=1; shift ;;
-        *) echo "usage: board/run.sh [--detector auto|two_stage|student] [--latch off|sim|router] [--photo-every-s N] [--fast] [--fresh] [--dry-run] | --stop" >&2; exit 2 ;;
+        *) echo "usage: board/run.sh [--detector auto|two_stage|student] [--latch off|sim|router] [--photo-every-s N] [--footage-note TEXT] [--fast] [--fresh] [--dry-run] | --stop" >&2; exit 2 ;;
     esac
 done
 case "$DETECTOR" in
@@ -49,6 +54,12 @@ if [ -n "$PHOTO" ]; then
         echo "error: --photo-every-s needs a number of seconds above 0, got '$PHOTO'" >&2; exit 2
     fi
     EXTRA="--photo-every-s $PHOTO"
+fi
+if [ "$NOTE_SET" -eq 1 ]; then
+    if ! [[ "$NOTE" =~ ^[A-Za-z0-9\ .,:-]+$ ]]; then
+        echo "error: --footage-note must be non-empty and use only letters, digits, space and . , : - characters" >&2; exit 2
+    fi
+    EXTRA="$EXTRA --footage-note '$NOTE'"
 fi
 EXTRA="$EXTRA $FAST"
 

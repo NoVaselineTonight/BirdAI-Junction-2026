@@ -1,6 +1,6 @@
 # Feeder Census
 
-Feeder Census counts the birds at a winter feeder from video and shows the counts on a local web page: birds in frame now, the highest count per hour, per day and per half-month, and one evidence photo per day. It runs on a laptop or on an Arduino UNO Q, where the board does the detection, the counting and the page, and the laptop is only the screen.
+Feeder Census counts the birds at a winter feeder from video and shows the counts on a local web page: birds in frame now, the highest count per hour, per day and per half-month, and one evidence photo per species per day. It runs on a laptop or on an Arduino UNO Q, where the board does the detection, the counting and the page, and the laptop is only the screen.
 
 ## Run on the laptop
 
@@ -10,9 +10,11 @@ uv run python tools/fetch_models.py
 uv run python -m feeder_census --videos data/videos/demo
 ```
 
-Then open http://localhost:8088. `--fast` plays the footage unpaced, `--no-web` prints a line per detection instead.
+A fresh clone has no footage: fill `data/videos/demo` with your own video files first (the footage is not in this repository). Then open http://localhost:8088. `--fast` plays the footage unpaced, `--no-web` prints a line per detection instead.
 
 `--photo-every-s SECONDS` makes the demo behave like the board's camera: it analyses one photo every SECONDS of footage and the page shows only those photos, each drawn with its own boxes and held until the next one, instead of video. For example `uv run python -m feeder_census --videos data/videos/demo --photo-every-s 5`. It replaces `--detect-every-s`, and giving both is an error. A bird is counted when it is seen in two photos in a row, so with 10 s between photos a bird must stay at the feeder for about 10 s to be counted. `board/run.sh --photo-every-s 5` passes it on to the board.
+
+`--footage-note TEXT` sets the sentence the page shows about the footage (the default says "Recorded feeder footage"), for example to say the reel is an edited cut: `board/run.sh --footage-note "Edited reel: 12 November 2026, with a squirrel visit from 22 October 2026 in the middle."`. On the board only letters, digits, spaces and `. , : -` are allowed, and it combines with `--latch`, `--fast`, `--photo-every-s` and `--fresh`.
 
 `--detector` is `auto` by default: the program runs the detector named in `models/model_card.json` (see below), or the pretrained `two_stage` detector when there is no card. `--detector two_stage|student` forces one; the page shows the model card only when the card was measured for the detector that runs. The first output line says which detector runs, why (`model card`, `no model card`, `asked for`) and the counting threshold in force; a `count_threshold` in the card replaces the detector's own.
 
@@ -71,7 +73,7 @@ The link between the program and the sketch follows Arduino's documentation for 
 
 ## Measured speed
 
-Milliseconds per frame on the Arduino UNO Q (4-core Kryo-V2), measured on 14 November 2026 with `python -m feeder_census.bench --frames 30`. The clip is **real feeder footage**: 120 s of the held-out day (12 November 2026), 1280x720, prepared with `tools/prepare_video.py`. The budget is 1500 ms per frame.
+Milliseconds per frame on the Arduino UNO Q (4-core Kryo-V2), measured on 14 November 2026 with `python -m feeder_census.bench --detector student --video CLIP.mp4 --frames 30` (`--detector two_stage` for the first row). The clip is **real feeder footage**: 120 s of the held-out day (12 November 2026), 1280x720, prepared with `tools/prepare_video.py`. The budget is 1500 ms per frame.
 
 | Detector | median | p90 | inside the 1500 ms budget |
 |---|---|---|---|
@@ -79,9 +81,9 @@ Milliseconds per frame on the Arduino UNO Q (4-core Kryo-V2), measured on 14 Nov
 | student 640 px | 506.6 ms | 520.4 ms | yes |
 | student 960 px (shipped) | 1108.5 ms | 1127.9 ms | yes |
 
-Both student sizes stay inside the 1.5 s budget. The demo analyses one photo every 5 s (photo mode, above), which leaves time to spare even for the 960 px student.
+Both student sizes stay inside the 1.5 s budget. Started with `--photo-every-s 5`, as we run it, the demo analyses one photo every 5 s (photo mode, above); without it the demo plays the video and analyses a frame every 2 s. One photo every 5 s leaves time to spare even for the 960 px student.
 
-Earlier stand-in measurement, for the pretrained two-stage detector only (`python -m feeder_census.bench --detector two_stage --frames 30`). Both rows use the same 60 s, 1280x720, 15 fps test clip. **That clip is a stand-in, not feeder footage: it is made of three still photos of a great tit, a blue tit and a bullfinch, panned and zoomed.**
+Earlier stand-in measurement, for the pretrained two-stage detector only (`python -m feeder_census.bench --detector two_stage --video CLIP.mp4 --frames 30`). Both rows use the same 60 s, 1280x720, 15 fps test clip. **That clip is a stand-in, not feeder footage: it is made of three still photos of a great tit, a blue tit and a bullfinch, panned and zoomed.**
 
 | Where | median | p90 | birds per frame |
 |---|---|---|---|
@@ -101,7 +103,7 @@ uv run python tools/evaluate.py --dataset data/dataset --candidates two_stage st
 
 - **The cut-off.** A detector gives each box a confidence. A box counts only above a cut-off. For a student, the cut-off is picked on validation footage (the last 15 % of each training video): the lowest value from 0.50 to 0.90 (in steps of 0.05) where at least 9 in 10 of the birds it named were named right. All species are judged together, and a species with fewer than 20 validation boxes is left out, so one rare species cannot hold the cut-off up. If no value reaches 9 in 10, the cut-off is 0.90, and the card says it is a fallback. The two-stage detector keeps its fixed cut-off and never sees validation footage.
 - **Too little to pick by.** If no species has at least 20 validation boxes, nothing was measured to pick by, so the student keeps the cut-off written in its own card (it is not set to 0.90), and the card says so (`default: too few validation boxes to pick`).
-- **The board-time bar.** A student is eligible only when its median time on the board is at most 1500 ms (`--board-ms` takes the medians from `python -m feeder_census.bench` on the board). A candidate with no board timing is treated as eligible, except that `--promote` refuses to run until every candidate has a timing.
+- **The board-time bar.** A student is eligible only when its median time on the board is at most 1500 ms (`--board-ms` takes the medians from `python -m feeder_census.bench --detector KIND --video CLIP.mp4` on the board). A candidate with no board timing is treated as eligible, except that `--promote` refuses to run until every candidate has a timing.
 - **Qualifying.** A student qualifies when at least three species reach precision of at least 0.90 and recall of at least 0.50 on the held-out footage. Precision means: of the birds it named, the share named right. Recall means: of the birds in the truth labels, the share it found. A rate that could not be computed does not count.
 - **Who ships.** The qualifying student that counts exactly right in the most frames ships, but only if that share is at least the pretrained detector's. When no eligible student qualifies, the eligible student that counts best still ships if it beats the pretrained detector, and the card says `qualified: false`; the page then says "Below our accuracy bar; it ships because it counts better than the alternative." That mark applies to a shipped student only: when the pretrained detector ships, the page does not say it. Otherwise the pretrained detector ships, and the card says why.
 - The numbers land in `models/eval.json` (every run) and in `models/model_card.json` (only with `--promote`), which the program and `board/deploy.sh` follow.
@@ -134,12 +136,12 @@ The shipped student, species with at least 20 held-out boxes (every other specie
 | magpie | 0.79 | 0.63 | 103 |
 | bullfinch | 0.83 | 0.45 | 22 |
 
-The held-out day has no squirrel, so squirrel accuracy is only known from validation footage (training days), where the 960 px student reached precision 0.95 and recall 0.85. On the 899 held-out frames the same student named a squirrel once (confidence 0.64; it is a blurred brown bird in flight). The latch closes only after two analysed photos in a row show a squirrel or rat, so that single frame would not have closed it.
+The held-out day has no squirrel, so squirrel accuracy is only known from validation footage, where the 960 px student reached precision 0.95 and recall 0.85. Validation is the held-back last 15 % of each training video, the same footage that set the cut-off, and its squirrel boxes are mostly photos, documentary frames and pasted cut-outs; so the figure is optimistic for this feeder. On the 899 held-out frames the same student named a squirrel once (confidence 0.64; it is a blurred brown bird in flight). The latch closes only after two analysed photos in a row show a squirrel or rat, so that single frame would not have closed it.
 
 ## What the student was trained on
 
 - **Feeder footage.** One public feeder camera stream, "Talvilintulive" (Haukipudas, Finland), recorded. It belongs to its uploader and is not in this repository. The shipped model was trained on 15 days of that stream, all from October and November 2026 (5 and 22 October; 29 and 31 October; 1, 2, 3, 4, 6, 7, 8, 9, 10, 11 and 13 November), plus two videos of other (forest) feeders. No earlier-winter days are in this model.
-- **Squirrels.** 400 Creative Commons photos by 273 iNaturalist observers (the attribution list is kept with the photos, outside this repository), frames of one squirrel documentary video, and squirrel cut-outs pasted into feeder frames. A real red squirrel visits this feeder. The minutes of its first visit on 22 October 2026 were kept out of training and are in the demo reel.
+- **Squirrels.** 400 Creative Commons photos by 273 iNaturalist observers (the attribution list is kept with the photos, outside this repository), frames of one squirrel documentary video, and squirrel cut-outs pasted into feeder frames. A real red squirrel visits this feeder. The training footage also contains this real red squirrel: about 650 labelled boxes from its visits on 29 and 31 October and 6 and 11 November 2026 and from its second visit on 22 October. Only the minutes of its first visit on 22 October 2026 were kept out of training; that clip is in the demo reel. So the demo shows the model recognising the same animal at the same feeder in a visit it had not seen, not a squirrel it had never met.
 - **Training only, never shown.** The documentary and the two forest-feeder videos are used for training only and are never shown in the demo.
 - **A worse camera.** One in four training frames also has a degraded copy (smaller, blurred, noisy, re-compressed), so the model copes with a worse camera.
 - **Held out.** The test day, 12 November 2026, was not used for training (see above).

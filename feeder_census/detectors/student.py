@@ -16,7 +16,7 @@ def decode_student(
     ratio: float,
     pad: tuple[int, int],
     classes: Sequence[str],
-    min_score: float = 0.05,
+    min_score: float = 0.25,
     nms_iou: float = 0.5,
 ) -> list[Detection]:
     """Turn the student's `[1, N, 6]` output (x1, y1, x2, y2, score, class_index in letterboxed

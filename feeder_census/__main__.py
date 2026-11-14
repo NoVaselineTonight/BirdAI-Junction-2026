@@ -15,7 +15,7 @@ from feeder_census.detectors import KINDS, build_detector
 from feeder_census.latch import MODES as LATCH_MODES, ROUTER_SOCKET, RouterLatch
 from feeder_census.pipeline import LiveState, Pipeline
 from feeder_census.species import load_pests, load_species
-from feeder_census.store import Store
+from feeder_census.store import SpeciesMismatch, Store
 from feeder_census.web import create_app
 
 
@@ -175,7 +175,13 @@ def main(argv: list[str] | None = None) -> int:
     threshold = _card_threshold(card, args.models_dir / "model_card.json") if card else None
     args.db.parent.mkdir(parents=True, exist_ok=True)
     pest_keys = {p.key for p in pests}
-    store = Store(args.db, [sp for sp in detector.species if sp not in pest_keys])  # pests are never census columns
+    try:
+        store = Store(args.db, [sp for sp in detector.species if sp not in pest_keys])  # pests are never census columns
+    except SpeciesMismatch:
+        print(f"error: the database {args.db} was made with a different species list than this model's. "
+              "Use another file with --db, or on the board run board/run.sh --fresh (it deletes the board's database).",
+              file=sys.stderr)
+        return 1
     settings = Settings(
         detect_every_s=detect_every_s, photo_mode=photo,
         max_gap_s=max(Settings.max_gap_s, 2 * detect_every_s) if photo else Settings.max_gap_s, roi=args.roi, port=args.port,

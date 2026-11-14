@@ -14,6 +14,7 @@ _FONT = cv2.FONT_HERSHEY_SIMPLEX
 def _label(img: np.ndarray, text: str, x: int, y: int, color: tuple[int, int, int], scale: float) -> None:
     (w, h), base = cv2.getTextSize(text, _FONT, scale, 1)
     top = max(y - h - base, 0)
+    x = max(min(x, img.shape[1] - w - 2), 0)  # a label near the right edge moves left instead of being cut off
     cv2.rectangle(img, (x, top), (x + w + 2, top + h + base), color, -1)
     cv2.putText(img, text, (x + 1, top + h), _FONT, scale, (255, 255, 255), 1, cv2.LINE_AA)
 
