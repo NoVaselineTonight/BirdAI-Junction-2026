@@ -10,9 +10,65 @@
 
 **Spec:** `feeder-census-sketch.md` (what the device does, demo plan, honesty rules), `arduino-uno-q-spec-sheet.md` (board limits) and `compute-plan-verda-modal.md` (where labelling and training run). Read all three. The repo is `NoVaselineTonight/BirdAI-Junction-2026` (formerly `challenge-3`); every path below is relative to its root.
 
+## Current state (14 November 2026, 13:15)
+
+Read this first if you are picking the work up without the conversation that produced it. It replaces "Starting state" below, which is kept only as history. The full record, including every ruling, review result, deferred minor finding and worker id, is the ledger `.superpowers/sdd/2026-11-14-feeder-census-demo/progress.md` in this worktree (git-ignored); briefs, reports and review diffs for each task sit beside it. Execution method: `superpowers:subagent-driven-development` — one implementer and one reviewer per task, fix rounds until the review is clean.
+
+**Built, reviewed and pushed** (branch `birdai-plan/feeder-census-demo`):
+
+| Task | What | Commits |
+|---|---|---|
+| 1 | Scaffold, species list, periods, counting rule | b04e7d7 |
+| 2 | SQLite store, roll-ups, CSV | f5801bf |
+| 3 | Detector protocol, pretrained two-stage detector, bench | c868973, 9e405a5 |
+| 4 | Simulated camera, clock, pipeline, command line | 01a62a5, 98f4810 |
+| 5 | Demo page (**Milestone A**) | 3da2eb3, 1adac86 |
+| 6 | Board deploy and run scripts, README (**Milestone B**) | a2ef92d, adb4c56 |
+| 7 (code) | Teacher labelling tools | e51742d, 53cb888 |
+| 8 (code) | Dataset builder, training script, student detector | df2aaa0, 4884102 |
+| 9a | Evaluation tool and model choice | 78821cd, 5dca159 |
+
+**In flight at 13:15:**
+
+- Task 7b, `tools/mine_frames.py` (36ef0ee, 3b09510, 5e46bae): second fix round is being re-reviewed.
+- Task 9b, `--detector auto`, model card, board scripts follow the card, README accuracy section (6b547cd): first review running.
+- Task 10, visits counter and a live panel that fits eight species: being implemented (brief: `task-10-brief.md` in the ledger folder).
+
+**Changes to this plan made during execution** (the task text below is not updated; these win):
+
+- Nested boxes: `nms(..., contain=0.8)` drops a box mostly inside another, in both detectors.
+- `.gitignore` anchors `/data/`, `/models/`, `/build/` to the repo root.
+- `build_detector`, `bench` and the CLI took `student_dir` / `--student-dir` from Task 3 on; the CLI also has `--models-dir` and `--detect-every-s`, and stops cleanly on SIGTERM.
+- **Three dataset splits, not two:** `train`, `val` (last 15% of each training video) and `test` (the demo footage). Checkpoint choice and the counting threshold use `val`; every reported accuracy number uses `test` only.
+- Evaluation reports an unmeasured precision or recall as `null` (the page shows a dash) and records where the threshold came from (`threshold_source`); with too few validation boxes the student keeps 0.60.
+- `tools/remote.sh run` wraps the whole command in `uv run --group train bash -c`; `push` also copies `models/pretrained/`. BioCLIP 2 is selected explicitly and runs on the GPU.
+- **New Task 7b:** the team's footage is about 30 hours of long, mostly empty live streams, so `tools/mine_frames.py` replaces `extract_frames.py` for it: scan at one frame per second with a small detector, keep bird frames (time-deduplicated, several-birds-at-once first) plus about 15% empty frames, and optionally cut a "busy parts" clip for the live demo.
+- **New Task 10:** "how many of each bird has been seen" is built as a visits counter (arrivals), not a count of birds, shown beside "most at once" and kept out of the census CSV.
+- Task 9 was split into 9a (evaluation tool) and 9b (CLI, board scripts, README).
+
+**Measured so far:** 191+ tests pass. Pretrained two-stage detector on the board: median 264 ms per frame, p90 287 ms (laptop 28 ms), about 1.2 GB memory free while running — on a stand-in clip made from three bird photos, not feeder footage. The classifier's label file lacks willow tit and crested tit (it names 20 of the 22 species, all eight core ones).
+
+**Still owed, in order:**
+
+1. Finish the three tasks in flight (reviews, fix rounds).
+2. One real `board/deploy.sh` and `board/run.sh --fresh` on the board: after Task 6's last fixes the refactored stop, `--fresh` and deploy paths were only read, not run.
+3. A line under the feed when the demo clip is an edited "busy parts" cut.
+4. With real footage: the pretrained detector on real feeder video on laptop and board (speed and a look at the page). Until then all visual checks used stand-ins.
+5. The model track's real runs on the Verda machine: mine frames, label, check labels (Task 7 Steps 5–7), build the dataset and train (Task 8 Steps 5–6), measure, choose, ship to the board (Task 9 Steps 5–8).
+6. The final whole-branch review, pointed at the deferred-minor list in the ledger, then a pull request (never merge or push to `main` without the team).
+7. Update `docs/feeder-census-demo-plan.html` and its published copy to match the changes above.
+
+**Waiting on the team:**
+
+- `VERDA_HOST` (`root@<ip>`). The laptop's key for it is `~/.ssh/birdai_verda`; its public half must be added to the instance.
+- The footage, ideally downloaded straight onto the Verda machine, and **how many different cameras it comes from**: the demo stream must be a camera the model never trained on, so at least three are needed (two to train, one to demo).
+- Optional: a Jev API key, only if the team wants it tried as a third opinion on crops the two teachers disagree about.
+
+**Facts about this machine:** no `ffmpeg`, no GPU; the Playwright MCP cannot find Chrome, so screenshots are taken with headless `/usr/bin/chromium`; the `impeccable` skill's launcher is refused inside worker agents; stand-in clips and screenshots are under `/home/eemil/.claude/jobs/6f180426/tmp/`; port 8088 is recorded in `~/.claude/Global information/local-dev-environment.md`.
+
 ## Starting state (14 November 2026, 12:05)
 
-Read this first if you are picking the plan up without the conversation that produced it.
+Superseded by "Current state" above; kept as history.
 
 - **Nothing is built yet.** The branch holds only documents: the spec files, this plan and `docs/feeder-census-demo-plan.html` (the team's summary; republish it to `https://claude.ai/artifact/7weUsArcg8yocJJPQbbAQC` if you change it).
 - **Working copy:** `/home/eemil/AIKANSIO/birdAI/.claude/worktrees/feeder-census-demo`, branch `birdai-plan/feeder-census-demo`, pushed and in sync with `origin`. If that folder is gone, recreate it from `/home/eemil/AIKANSIO/birdAI` with `git fetch origin && git worktree add .claude/worktrees/feeder-census-demo birdai-plan/feeder-census-demo`, then run `python3 .agents/agentchat.py setup --name birdai-plan` inside it. The parent folder `birdAI/` is a detached checkout of `main` with the team's original documents untracked; leave it alone.
