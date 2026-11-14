@@ -1,5 +1,6 @@
 import csv
 import os
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -87,6 +88,23 @@ def _birds_and_empties(n_birds=100, n_plain=400, near_conf=()):
     samples += [(5000 + i * 10_000, 0, 0.0) for i in range(n_plain)]
     samples += [(5000 + (n_plain + i) * 10_000, 0, c) for i, c in enumerate(near_conf)]
     return samples
+
+
+def test_a_video_of_only_near_misses_still_keeps_the_empty_minimum():
+    samples = [(i * 1000, 0, 0.06 + 0.001 * i) for i in range(30)]
+    kept = select_frames(samples, 4.0, 0.15, 3000)
+    assert len(_kept(kept)) == 20
+    assert {d.reason for d in kept if d.kept} == {"near-miss"}
+    assert set(_kept(kept)) == {i * 1000 for i in range(10, 30)}  # the most bird-like ones
+
+
+def test_near_misses_top_up_the_target_when_plain_empties_run_out_highest_confidence_first():
+    conf = [0.05 + 0.001 * i for i in range(50)]
+    decisions = select_frames(_birds_and_empties(100, 5, conf), 4.0, 0.2, 3000)  # target 25
+    near_start = 5000 + 5 * 10_000
+    near = _kept(decisions, "near-miss")
+    assert len(near) == 20 and len(_kept(decisions, "empty")) == 5
+    assert set(near) == {near_start + i * 10_000 for i in range(30, 50)}
 
 
 def test_the_empty_target_follows_the_empty_share():
@@ -193,6 +211,40 @@ def test_the_peak_of_a_segment_counts_the_birds_inside_it():
     assert mine_frames.peak_boxes(samples, 20.0, 22.0) == 0
 
 
+# pure helpers of the two passes -----------------------------------------------------------------
+
+def test_frame_index_and_millisecond_convert_back_and_forth_for_common_frame_rates():
+    for fps in (10, 25, 30, 30000 / 1001, 59.94):
+        for index in (0, 1, 7, 1000, 86_399, 2_700_000):
+            assert mine_frames.ms_to_frame(mine_frames.frame_to_ms(index, fps), fps) == index
+
+
+def test_check_times_picks_first_last_and_three_in_between():
+    assert mine_frames.check_times(list(range(100, 200))) == [100, 124, 149, 174, 199]
+    assert mine_frames.check_times([5, 7]) == [5, 7]
+    assert mine_frames.check_times([]) == []
+
+
+def _picture():
+    img = np.zeros((480, 640, 3), np.uint8)
+    img[:, :, 0] = np.linspace(0, 255, 640, dtype=np.uint8)[None, :]
+    img[100:300, 200:400, 1] = 220
+    img[350:450, 50:150, 2] = 180
+    return img
+
+
+def _jpeg(img, quality=92):
+    ok, buf = cv2.imencode(".jpg", img, [cv2.IMWRITE_JPEG_QUALITY, quality])
+    return cv2.imdecode(buf, cv2.IMREAD_COLOR)
+
+
+def test_frames_match_is_small_for_the_same_picture_at_two_sizes_and_large_for_another_one():
+    big = _jpeg(_picture())
+    small = _jpeg(cv2.resize(_picture(), (160, 120), interpolation=cv2.INTER_AREA), 90)
+    assert mine_frames.frames_match(big, small) < mine_frames.CHECK_THRESHOLD / 3
+    assert mine_frames.frames_match(big, _jpeg(255 - _picture())) > mine_frames.CHECK_THRESHOLD * 3
+
+
 # end to end (OpenCV fallback, stub detector) ---------------------------------------------------
 
 @pytest.fixture(autouse=True)
@@ -239,7 +291,7 @@ def test_mining_writes_the_extract_frames_layout_and_one_csv_row_per_sample(two_
 
     with (out / "mining.csv").open(newline="") as f:
         rows = list(csv.DictReader(f))
-    assert list(rows[0]) == ["split", "video", "ms", "n_boxes", "max_conf", "kept", "reason"]
+    assert list(rows[0]) == ["split", "video", "ms", "n_boxes", "max_conf", "kept", "reason", "check_diff"]
     assert [(r["split"], r["video"], int(r["ms"])) for r in rows] == [
         ("train", "a", 0), ("train", "a", 1000), ("train", "a", 2000), ("train", "a", 3000),
         ("demo", "b", 0), ("demo", "b", 1000), ("demo", "b", 2000)]
@@ -248,6 +300,8 @@ def test_mining_writes_the_extract_frames_layout_and_one_csv_row_per_sample(two_
     assert [int(r["n_boxes"]) for r in rows] == [1, 0, 2, 0, 0, 1, 0]
     assert float(rows[2]["max_conf"]) == pytest.approx(0.8)
     assert {r["kept"] for r in rows} == {"True"}
+    checked = [float(r["check_diff"]) for r in rows if r["check_diff"]]
+    assert checked and all(d < mine_frames.CHECK_THRESHOLD / 2 for d in checked)  # saved frame is the scanned one
     assert sorted(p.name for p in out.iterdir()) == ["demo", "mining.csv", "train"]  # no temp dirs left
 
 
@@ -286,7 +340,7 @@ def test_frames_are_read_at_the_requested_millisecond(tmp_path):
             writer.write(np.full((120, 160, 3), 40 + 60 * second, dtype=np.uint8))
     writer.release()
     out = tmp_path / "out"
-    assert mine_frames.write_frames(path, out, [2500, 500]) == 2
+    assert mine_frames.write_frames(path, out, [2500, 500]) == [500, 2500]
     assert abs(float(cv2.imread(str(out / "steps_00002500.jpg")).mean()) - 160) < 12
     assert abs(float(cv2.imread(str(out / "steps_00000500.jpg")).mean()) - 40) < 12
 
@@ -365,6 +419,164 @@ def test_the_ffmpeg_path_runs_the_expected_command_and_names_samples_by_time(tmp
     monkeypatch.setattr(mine_frames, "have_ffmpeg", lambda: True)
     dest = tmp_path / "scan"
     dest.mkdir()
-    assert mine_frames.decode_samples(tmp_path / "x.mp4", 2.0, 960, dest) == [0, 2000, 4000]
+    assert mine_frames.decode_samples(tmp_path / "x.mp4", 2.0, 960, dest, True) == [0, 2000, 4000]
     args = (dest / "args.txt").read_text()
     assert "fps=1/2" in args and "min(iw,960)" in args and str(dest / "%08d.jpg") in args
+
+
+# fault handling --------------------------------------------------------------------------------
+
+def _fake_ffmpeg(tmp_path, monkeypatch, mode):
+    """mode: good | broken (always fails) | decode-fails (the 2 s self-test passes, sampling fails)."""
+    fake = tmp_path / "bin" / "ffmpeg"
+    fake.parent.mkdir(exist_ok=True)
+    fake.write_text(f"#!{sys.executable}\n"
+                    "import sys, cv2, numpy as np\n"
+                    "args = sys.argv[1:]\n"
+                    f"mode = {mode!r}\n"
+                    "if mode == 'broken' or (mode == 'decode-fails' and '-t' not in args):\n"
+                    "    sys.stderr.write('Unrecognized option boom\\n')\n"
+                    "    sys.exit(1)\n"
+                    "if '-ss' in args:\n"
+                    "    cv2.imwrite(args[-1], np.zeros((240, 320, 3), np.uint8))\n"
+                    "else:\n"
+                    "    for i in range(3):\n"
+                    "        cv2.imwrite(args[-1] % i, np.zeros((54, 96, 3), np.uint8))\n")
+    fake.chmod(0o755)
+    monkeypatch.setenv("PATH", f"{fake.parent}{os.pathsep}{os.environ['PATH']}")
+    monkeypatch.setattr(mine_frames, "have_ffmpeg", lambda: True)
+
+
+def _rows(out):
+    with (out / "mining.csv").open(newline="") as f:
+        return list(csv.DictReader(f))
+
+
+def _exit_code(argv, scan_fn):
+    with pytest.raises(SystemExit) as exit_info:
+        mine_frames.main(argv, scan_fn=scan_fn)
+    return exit_info.value.code
+
+
+def test_with_ffmpeg_both_passes_use_it_and_the_check_passes(make_video, tmp_path, monkeypatch):
+    _fake_ffmpeg(tmp_path, monkeypatch, "good")
+    make_video("videos/train/a.mp4", seconds=4.0)
+    out = tmp_path / "frames"
+    mine_frames.main(["--videos", str(tmp_path / "videos"), "--out", str(out), "--workers", "1"],
+                     scan_fn=Stub([(1, 0.9), (0, 0.0), (0, 0.0)]))
+    assert sorted(p.name for p in (out / "train" / "a").iterdir()) == [
+        "a_00000000.jpg", "a_00001000.jpg", "a_00002000.jpg"]
+    assert {r["check_diff"] for r in _rows(out)} == {"0.00"}
+
+
+def test_when_ffmpeg_fails_the_video_is_failed_without_an_opencv_fallback(make_video, tmp_path, monkeypatch, capsys):
+    _fake_ffmpeg(tmp_path, monkeypatch, "decode-fails")
+    make_video("videos/train/a.mp4", seconds=4.0)
+    out = tmp_path / "frames"
+    assert _exit_code(["--videos", str(tmp_path / "videos"), "--out", str(out), "--workers", "1"], Stub([])) == 1
+    err = capsys.readouterr().err
+    assert "train/a.mp4" in err and "boom" in err
+    assert not list(out.rglob("*.jpg"))
+    assert _rows(out) == []
+
+
+def test_a_failing_ffmpeg_self_test_stops_the_run_with_exit_2_before_any_scan(make_video, tmp_path, monkeypatch, capsys):
+    _fake_ffmpeg(tmp_path, monkeypatch, "broken")
+    make_video("videos/train/a.mp4")
+    out = tmp_path / "frames"
+    err = _refuses(["--videos", str(tmp_path / "videos"), "--out", str(out)], capsys)
+    assert "ffmpeg" in err and "boom" in err
+    assert not out.exists()
+
+
+@pytest.mark.parametrize("flag", ["--every", "--scan-imgsz", "--max-per-video"])
+def test_non_positive_numbers_exit_2(flag, two_videos, capsys):
+    videos, out = two_videos
+    err = _refuses(["--videos", str(videos), "--out", str(out), flag, "0"], capsys)
+    assert flag in err
+    assert not out.exists()
+
+
+def _patched_decode(monkeypatch, after):
+    real = mine_frames.decode_samples
+
+    def decode(video, every, imgsz, dest, use_ffmpeg):
+        times = real(video, every, imgsz, dest, use_ffmpeg)
+        return after(video, dest, times)
+
+    monkeypatch.setattr(mine_frames, "decode_samples", decode)
+
+
+def test_a_frame_that_cannot_be_written_is_recorded_and_fails_the_run(make_video, tmp_path, monkeypatch, capsys):
+    make_video("videos/train/a.mp4", seconds=3.0)
+
+    def add_far_sample(video, dest, times):  # a sample 99 s into a 3 s clip: the seek finds nothing
+        shutil.copy(dest / "00000000.jpg", dest / f"{len(times):08d}.jpg")
+        return times + [99_000]
+
+    _patched_decode(monkeypatch, add_far_sample)
+    out = tmp_path / "frames"
+    code = _exit_code(["--videos", str(tmp_path / "videos"), "--out", str(out), "--workers", "1",
+                       "--min-gap-s", "0", "--empty-share", "0"], Stub([(1, 0.9)] * 4))
+    assert code == 1
+    rows = {int(r["ms"]): r for r in _rows(out)}
+    assert (rows[99_000]["kept"], rows[99_000]["reason"]) == ("False", "write-failed")
+    assert rows[1000]["kept"] == "True"
+    assert sorted(p.name for p in (out / "train" / "a").iterdir()) == [
+        "a_00000000.jpg", "a_00001000.jpg", "a_00002000.jpg"]
+    assert "write-failed" in capsys.readouterr().out
+
+
+def test_scanned_images_that_do_not_match_the_saved_frames_fail_the_video(make_video, tmp_path, monkeypatch, capsys):
+    make_video("videos/train/a.mp4", seconds=4.0)
+
+    def whiten(video, dest, times):  # the scan saw other pictures than pass 2 will read
+        for path in dest.glob("*.jpg"):
+            cv2.imwrite(str(path), np.full((120, 160, 3), 255, np.uint8))
+        return times
+
+    _patched_decode(monkeypatch, whiten)
+    out = tmp_path / "frames"
+    code = _exit_code(["--videos", str(tmp_path / "videos"), "--out", str(out), "--workers", "1"],
+                      Stub(SCRIPT[:4]))
+    assert code == 1
+    err = capsys.readouterr().err
+    assert "train/a.mp4" in err and "do not match" in err
+    assert all(float(r["check_diff"]) > mine_frames.CHECK_THRESHOLD for r in _rows(out) if r["check_diff"])
+
+
+def test_an_unreadable_sample_is_recorded_and_not_scanned(make_video, tmp_path, monkeypatch):
+    make_video("videos/train/a.mp4", seconds=4.0)
+
+    def truncate(video, dest, times):
+        (dest / "00000001.jpg").write_bytes(b"\xff\xd8 not a jpeg")
+        return times
+
+    _patched_decode(monkeypatch, truncate)
+    out = tmp_path / "frames"
+    stub = Stub([(1, 0.9), (0, 0.0), (0, 0.0)])  # three scans for four samples
+    mine_frames.main(["--videos", str(tmp_path / "videos"), "--out", str(out), "--workers", "1"], scan_fn=stub)
+    rows = {int(r["ms"]): r for r in _rows(out)}
+    assert (rows[1000]["kept"], rows[1000]["reason"]) == ("False", "unreadable")
+    assert len(rows) == 4 and stub.seen == 3
+    assert not (out / "train" / "a" / "a_00001000.jpg").exists()
+
+
+def test_one_video_failing_does_not_stop_the_others_but_the_run_exits_1(make_video, tmp_path, monkeypatch, capsys):
+    make_video("videos/train/a.mp4", seconds=3.0)
+    make_video("videos/demo/b.mp4", seconds=3.0)
+    real = mine_frames.decode_samples
+
+    def decode(video, every, imgsz, dest, use_ffmpeg):
+        if video.stem == "a":
+            raise RuntimeError("decoder blew up")
+        return real(video, every, imgsz, dest, use_ffmpeg)
+
+    monkeypatch.setattr(mine_frames, "decode_samples", decode)
+    out = tmp_path / "frames"
+    assert _exit_code(["--videos", str(tmp_path / "videos"), "--out", str(out), "--workers", "1"],
+                      Stub([(1, 0.9), (0, 0.0), (0, 0.0)])) == 1
+    err = capsys.readouterr().err
+    assert "train/a.mp4" in err and "decoder blew up" in err
+    assert len(list((out / "demo" / "b").iterdir())) == 3
+    assert [r["video"] for r in _rows(out)] == ["b", "b", "b"]

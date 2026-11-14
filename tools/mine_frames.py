@@ -12,7 +12,12 @@ writes the kept frames at full resolution in the extract_frames layout,
 `<out>/<split>/<stem>/<stem>_<milliseconds:08d>.jpg`, and `<out>/mining.csv` says what happened to
 every sample. `--highlights` additionally cuts the busy parts of one video into a clip.
 
-Decoding is the bottleneck: with ffmpeg on PATH it does the sampling, otherwise OpenCV is used.
+Decoding is the bottleneck: with ffmpeg on PATH it does the sampling (and reads the kept frames by
+timestamp in pass 2), otherwise OpenCV is used for both passes (by frame index). ffmpeg is never
+silently replaced by OpenCV: a failing ffmpeg stops the run (exit 2 for a failed self-test on the
+first video) or fails that video (exit 1 at the end). Pass 2 is checked: up to five kept samples per
+video are compared with their saved frame (`check_diff` in mining.csv); a frame that cannot be
+written is recorded as `write-failed`, an unreadable scan image as `unreadable`.
 Runs on the GPU machine under `uv run --group train`.
 """
 
@@ -26,7 +31,7 @@ import sys
 import tempfile
 from collections import deque
 from collections.abc import Callable, Iterator
-from concurrent.futures import ProcessPoolExecutor
+from concurrent.futures import Future, ProcessPoolExecutor
 from fractions import Fraction
 from pathlib import Path
 from typing import NamedTuple, NoReturn
@@ -41,7 +46,9 @@ SCAN_FLOOR = 0.05  # detections below this are not even reported; at or above it
 MIN_EMPTY = 20
 BATCH = 32
 JPEG_QUALITY = 92
-CSV_COLUMNS = ["split", "video", "ms", "n_boxes", "max_conf", "kept", "reason"]
+CHECK_SAMPLES = 5  # kept samples per video compared with their saved frame
+CHECK_THRESHOLD = 12.0  # mean absolute pixel difference (0 to 255) above which a saved frame is not the scanned one
+CSV_COLUMNS = ["split", "video", "ms", "n_boxes", "max_conf", "kept", "reason", "check_diff"]
 
 Sample = tuple[int, int, float]  # (ms, n_boxes, max_conf)
 
@@ -106,6 +113,8 @@ def select_frames(samples: list[Sample], min_gap_s: float, empty_share: float, m
     plain = [s for s in empties if s[2] < SCAN_FLOOR]
     near_kept = near[:min(target // 2, len(near))]
     plain_kept = thin_evenly(plain, min(target - len(near_kept), len(plain)))
+    short = target - len(near_kept) - len(plain_kept)  # not enough plain empties: more near-misses make up for it
+    near_kept += near[len(near_kept):len(near_kept) + short]
     reason.update({ms: "skipped-empty" for ms, *_ in empties})
     reason.update({ms: "near-miss" for ms, *_ in near_kept})
     reason.update({ms: "empty" for ms, *_ in plain_kept})
@@ -150,10 +159,43 @@ def highlight_segments(samples: list[Sample], every_s: float, pad_s: float, max_
     return sorted(chosen)
 
 
+# Frame index and millisecond: the one place the two conventions meet -------------------------------
+
+def frame_to_ms(index: int, fps: float) -> int:
+    """Time of a frame, as the millisecond used in sample and file names (OpenCV mode)."""
+    return round(index / fps * 1000)
+
+
+def ms_to_frame(ms: int, fps: float) -> int:
+    """The frame a sample named `ms` stands for. Exact inverse of `frame_to_ms` below ~1000 fps."""
+    return round(ms * fps / 1000)
+
+
+def check_times(kept_ms: list[int], n: int = CHECK_SAMPLES) -> list[int]:
+    """Up to `n` of the kept times: the first, the last and the rest spread between them."""
+    if len(kept_ms) <= n:
+        return list(kept_ms)
+    return [kept_ms[i * (len(kept_ms) - 1) // (n - 1)] for i in range(n)]
+
+
+def frames_match(saved, scanned) -> float:
+    """Mean absolute pixel difference (0 to 255) after shrinking `saved` to the size of `scanned`."""
+    small = cv2.resize(saved, (scanned.shape[1], scanned.shape[0]), interpolation=cv2.INTER_AREA)
+    return float(cv2.absdiff(small, scanned).mean())
+
+
+def frame_path(out_dir: Path, stem: str, ms: int) -> Path:
+    return out_dir / f"{stem}_{ms:08d}.jpg"
+
+
 # Pass 1: decode and scan -----------------------------------------------------------------------
 
 def have_ffmpeg() -> bool:
     return shutil.which("ffmpeg") is not None
+
+
+def _tail(text: str) -> str:
+    return " | ".join(text.strip().splitlines()[-4:])[-400:]
 
 
 def _downscale(frame, long_side: int):
@@ -173,14 +215,12 @@ def decode_opencv(video: Path, every: float, imgsz: int, dest: Path) -> list[int
     times: list[int] = []
     index = 0
     while True:
-        t = index / fps
-        if t + 1e-6 >= len(times) * every:
+        if index / fps + 1e-6 >= len(times) * every:
             ok, frame = cap.read()
             if not ok:
                 break
-            cv2.imwrite(str(dest / f"{len(times):08d}.jpg"), _downscale(frame, imgsz),
-                        [cv2.IMWRITE_JPEG_QUALITY, 90])
-            times.append(round(t * 1000))
+            cv2.imwrite(str(dest / f"{len(times):08d}.jpg"), _downscale(frame, imgsz), [cv2.IMWRITE_JPEG_QUALITY, 90])
+            times.append(frame_to_ms(index, fps))
         elif not cap.grab():  # skipped frames are decoded but never converted
             break
         index += 1
@@ -188,40 +228,77 @@ def decode_opencv(video: Path, every: float, imgsz: int, dest: Path) -> list[int
     return times
 
 
-def decode_ffmpeg(video: Path, every: float, imgsz: int, dest: Path) -> list[int]:
-    """Same result as decode_opencv, with ffmpeg doing the sampling and scaling (much faster)."""
+def ffmpeg_command(video: Path, every: float, imgsz: int, dest: Path, limit_s: float | None = None) -> list[str]:
+    """One sample every `every` seconds, long side at most `imgsz` (the other side -2: even, same aspect)."""
     rate = Fraction(1) / Fraction(every).limit_denominator(1000)
-    scale = f"scale=w='min(iw,{imgsz})':h='min(ih,{imgsz})':force_original_aspect_ratio=decrease:force_divisible_by=2"
-    cmd = ["ffmpeg", "-v", "error", "-nostdin", "-i", str(video), "-an", "-sn",
-           "-vf", f"fps={rate.numerator}/{rate.denominator},{scale}",
-           "-q:v", "3", "-start_number", "0", str(dest / "%08d.jpg")]
-    done = subprocess.run(cmd, capture_output=True, text=True)
+    scale = f"scale=w='if(gt(iw,ih),min(iw,{imgsz}),-2)':h='if(gt(iw,ih),-2,min(ih,{imgsz}))'"
+    cmd = ["ffmpeg", "-v", "error", "-nostdin", "-threads", "2", "-i", str(video), "-an", "-sn"]
+    if limit_s:
+        cmd += ["-t", str(limit_s)]
+    return cmd + ["-vf", f"fps={rate.numerator}/{rate.denominator},{scale}", "-q:v", "3", "-start_number", "0",
+                  str(dest / "%08d.jpg")]
+
+
+def ffmpeg_selftest(video: Path, every: float, imgsz: int) -> str | None:
+    """Runs the exact filter chain on the first two seconds of `video`; returns ffmpeg's complaint or None."""
+    with tempfile.TemporaryDirectory() as tmp:
+        try:
+            done = subprocess.run(ffmpeg_command(video, every, imgsz, Path(tmp), limit_s=2), capture_output=True,
+                                  text=True, timeout=120)
+        except (OSError, subprocess.TimeoutExpired) as err:
+            return str(err)
+        if done.returncode != 0 or not list(Path(tmp).glob("*.jpg")):
+            return _tail(done.stderr) or f"exit {done.returncode}, no sample written"
+    return None
+
+
+def decode_ffmpeg(video: Path, every: float, imgsz: int, dest: Path) -> list[int]:
+    """Same result as decode_opencv with ffmpeg sampling by timestamp (much faster). Raises when it fails."""
+    timeout = max(600.0, 10 * video_length_s(video, [], 0.0))
+    try:
+        done = subprocess.run(ffmpeg_command(video, every, imgsz, dest), capture_output=True, text=True,
+                              timeout=timeout)
+    except subprocess.TimeoutExpired:
+        raise RuntimeError(f"ffmpeg did not finish within {timeout:.0f} s") from None
     count = len(list(dest.glob("*.jpg")))
-    if done.returncode != 0:  # a live recording often has a damaged tail: keep what was decoded
-        print(f"warning: ffmpeg reported errors on {video.name} after {count} samples: "
-              f"{done.stderr.strip()[-300:]}", file=sys.stderr)
+    if done.returncode != 0 or count == 0:
+        raise RuntimeError(f"ffmpeg failed (exit {done.returncode}, {count} samples): {_tail(done.stderr)}")
     return [round(i * every * 1000) for i in range(count)]
 
 
-def decode_samples(video: Path, every: float, imgsz: int, dest: Path) -> list[int]:
-    """Runs in a worker process. Falls back to OpenCV when ffmpeg is missing or produced nothing."""
-    if have_ffmpeg():
-        times = decode_ffmpeg(video, every, imgsz, dest)
-        if times:
-            return times
-        for stale in dest.glob("*.jpg"):
-            stale.unlink()
-    return decode_opencv(video, every, imgsz, dest)
+def decode_samples(video: Path, every: float, imgsz: int, dest: Path, use_ffmpeg: bool) -> list[int]:
+    """Runs in a worker process. ffmpeg failures are errors; OpenCV is used only when ffmpeg is absent."""
+    return decode_ffmpeg(video, every, imgsz, dest) if use_ffmpeg else decode_opencv(video, every, imgsz, dest)
 
 
-def decode_all(videos: list[tuple[str, Path]], workers: int, every: float, imgsz: int,
-               scratch: Path) -> Iterator[tuple[str, Path, Path, list[int]]]:
-    """Yields (split, video, temp dir, sample ms) in order; the caller removes each temp dir after use.
+class Runner:
+    """Runs functions in a process pool, or inline for one worker. Always hands back a Future."""
+
+    def __init__(self, workers: int):
+        self.pool = ProcessPoolExecutor(workers) if workers > 1 else None
+
+    def submit(self, fn, *args) -> Future:
+        if self.pool:
+            return self.pool.submit(fn, *args)
+        future: Future = Future()
+        try:
+            future.set_result(fn(*args))
+        except Exception as err:
+            future.set_exception(err)
+        return future
+
+    def close(self) -> None:
+        if self.pool:
+            self.pool.shutdown(wait=True, cancel_futures=True)
+
+
+def decode_all(videos: list[tuple[str, Path]], runner: Runner, workers: int, every: float, imgsz: int,
+               scratch: Path, use_ffmpeg: bool) -> Iterator[tuple[str, Path, Path, Future]]:
+    """Yields (split, video, temp dir, future of the sample ms) in order; the caller removes each temp dir.
 
     Up to `workers` videos are decoded ahead of the one being scanned, so that many temp dirs exist at once.
     """
     made: list[Path] = []
-    pool = ProcessPoolExecutor(workers) if workers > 1 else None
     queue: deque = deque()
     todo = iter(videos)
     try:
@@ -229,27 +306,34 @@ def decode_all(videos: list[tuple[str, Path]], workers: int, every: float, imgsz
             while len(queue) < workers and (item := next(todo, None)):
                 tmp = Path(tempfile.mkdtemp(prefix=".scan_", dir=scratch))
                 made.append(tmp)
-                future = pool.submit(decode_samples, item[1], every, imgsz, tmp) if pool else None
-                queue.append((*item, tmp, future))
+                queue.append((*item, tmp, runner.submit(decode_samples, item[1], every, imgsz, tmp, use_ffmpeg)))
             if not queue:
                 return
-            split, video, tmp, future = queue.popleft()
-            times = future.result() if future else decode_samples(video, every, imgsz, tmp)
-            yield split, video, tmp, times
+            yield queue.popleft()
     finally:
-        if pool:
-            pool.shutdown(wait=True, cancel_futures=True)
         for tmp in made:
             shutil.rmtree(tmp, ignore_errors=True)
 
 
-def scan_samples(times: list[int], tmp: Path, scan_fn: Callable[[list], list[tuple[int, float]]]) -> list[Sample]:
+def scan_samples(times: list[int], tmp: Path, scan_fn: Callable[[list], list[tuple[int, float]]]
+                 ) -> tuple[list[Sample], list[int]]:
+    """Scans the sample images; returns the samples and the ms of images that could not be read."""
     samples: list[Sample] = []
+    unreadable: list[int] = []
     for lo in range(0, len(times), BATCH):
-        chunk = times[lo:lo + BATCH]
-        frames = [cv2.imread(str(tmp / f"{lo + i:08d}.jpg")) for i in range(len(chunk))]
-        samples += [(ms, int(n), float(conf)) for ms, (n, conf) in zip(chunk, scan_fn(frames))]
-    return samples
+        chunk = [(ms, cv2.imread(str(tmp / f"{lo + i:08d}.jpg"))) for i, ms in enumerate(times[lo:lo + BATCH])]
+        unreadable += [ms for ms, img in chunk if img is None]
+        good = [(ms, img) for ms, img in chunk if img is not None]
+        if good:
+            samples += [(ms, int(n), float(conf)) for (ms, _), (n, conf) in zip(good, scan_fn([img for _, img in good]))]
+    return samples, unreadable
+
+
+def scan_images(tmp: Path, times: list[int], decisions: list[Decision]) -> dict[int, object]:
+    """The scan-size images of the kept samples that pass 2 will be checked against."""
+    index = {ms: i for i, ms in enumerate(times)}
+    images = {ms: cv2.imread(str(tmp / f"{index[ms]:08d}.jpg")) for ms in check_times([d.ms for d in decisions if d.kept])}
+    return {ms: img for ms, img in images.items() if img is not None}
 
 
 def load_scan_fn(model_name: str, imgsz: int, conf: float) -> Callable[[list], list[tuple[int, float]]]:
@@ -280,24 +364,46 @@ def load_scan_fn(model_name: str, imgsz: int, conf: float) -> Callable[[list], l
 
 # Pass 2 and the clip ---------------------------------------------------------------------------
 
-def write_frames(video: Path, out_dir: Path, times_ms: list[int]) -> int:
-    """Saves the frame at each millisecond, full resolution, one capture for the whole video."""
+def _frames_opencv(video: Path, out_dir: Path, times_ms: list[int]) -> list[int]:
     cap = cv2.VideoCapture(str(video))
     if not cap.isOpened():
         print(f"warning: cannot open {video}", file=sys.stderr)
-        return 0
-    out_dir.mkdir(parents=True, exist_ok=True)
-    written = 0
+        return []
+    fps = cap.get(cv2.CAP_PROP_FPS) or 25.0
+    written = []
     for ms in sorted(times_ms):
-        cap.set(cv2.CAP_PROP_POS_MSEC, ms)
+        cap.set(cv2.CAP_PROP_POS_FRAMES, ms_to_frame(ms, fps))  # pass 1 chose these by frame index
         ok, frame = cap.read()
-        if not ok:
+        if ok and cv2.imwrite(str(frame_path(out_dir, video.stem, ms)), frame, [cv2.IMWRITE_JPEG_QUALITY, JPEG_QUALITY]):
+            written.append(ms)
+        else:
             print(f"warning: no frame at {ms} ms in {video.name}", file=sys.stderr)
-            continue
-        cv2.imwrite(str(out_dir / f"{video.stem}_{ms:08d}.jpg"), frame, [cv2.IMWRITE_JPEG_QUALITY, JPEG_QUALITY])
-        written += 1
     cap.release()
     return written
+
+
+def _frames_ffmpeg(video: Path, out_dir: Path, times_ms: list[int]) -> list[int]:
+    written = []
+    for ms in sorted(times_ms):  # pass 1 chose these by timestamp, so ffmpeg seeks by timestamp too
+        target = frame_path(out_dir, video.stem, ms)
+        cmd = ["ffmpeg", "-v", "error", "-nostdin", "-y", "-threads", "2", "-ss", f"{ms / 1000:.3f}", "-i", str(video),
+               "-frames:v", "1", "-q:v", "2", str(target)]
+        try:
+            done = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
+        except subprocess.TimeoutExpired:
+            print(f"warning: ffmpeg timed out at {ms} ms in {video.name}", file=sys.stderr)
+            continue
+        if done.returncode == 0 and target.exists():
+            written.append(ms)
+        else:
+            print(f"warning: no frame at {ms} ms in {video.name}: {_tail(done.stderr)}", file=sys.stderr)
+    return written
+
+
+def write_frames(video: Path, out_dir: Path, times_ms: list[int], use_ffmpeg: bool = False) -> list[int]:
+    """Saves the frame at each time at full resolution with the decoder pass 1 used; returns the ms written."""
+    out_dir.mkdir(parents=True, exist_ok=True)
+    return (_frames_ffmpeg if use_ffmpeg else _frames_opencv)(video, out_dir, times_ms)
 
 
 def video_length_s(video: Path, samples: list[Sample], every: float) -> float:
@@ -306,7 +412,7 @@ def video_length_s(video: Path, samples: list[Sample], every: float) -> float:
     cap.release()
     if frames > 0 and fps > 0:
         return frames / fps
-    return max((ms for ms, *_ in samples), default=0) / 1000 + every
+    return max((ms for ms, *_ in samples), default=0) / 1000 + every if samples else 0.0
 
 
 def write_highlights(video: Path, segments: list[tuple[float, float]], dest: Path) -> None:
@@ -332,10 +438,14 @@ def _fail(message: str) -> NoReturn:
     raise SystemExit(2)
 
 
-def _summary(label: str, scanned: int, with_birds: int, kept_birds: int, kept_empty: int) -> str:
+def _summary(label: str, counts: list[int]) -> str:
+    scanned, with_birds, kept_birds, kept_empty, write_failed, unreadable = counts
     share = with_birds / scanned if scanned else 0.0
-    return (f"{label}: {scanned} scanned, {with_birds} with birds ({share:.0%}), "
+    text = (f"{label}: {scanned} scanned, {with_birds} with birds ({share:.0%}), "
             f"kept {kept_birds} with birds + {kept_empty} empty")
+    if write_failed or unreadable:
+        text += f", {write_failed} write-failed, {unreadable} unreadable"
+    return text
 
 
 def _parse(argv: list[str] | None) -> argparse.Namespace:
@@ -357,12 +467,7 @@ def _parse(argv: list[str] | None) -> argparse.Namespace:
     return ap.parse_args(argv)
 
 
-def main(argv: list[str] | None = None, scan_fn: Callable[[list], list[tuple[int, float]]] | None = None) -> None:
-    args = _parse(argv)
-    found = {split: sorted(p for p in (args.videos / split).rglob("*") if p.suffix.lower() in VIDEO_SUFFIXES)
-             for split in SPLITS}
-    check_unique_stems(found, args.videos)
-    videos = [(split, video) for split, files in found.items() for video in files]
+def _validate(args: argparse.Namespace, videos: list[tuple[str, Path]]) -> None:
     if not videos:
         _fail(f"no videos found under {args.videos}/train or {args.videos}/demo")
     if bool(args.highlights) != bool(args.highlights_from):
@@ -371,38 +476,129 @@ def main(argv: list[str] | None = None, scan_fn: Callable[[list], list[tuple[int
         _fail(f"--highlights-from {args.highlights_from!r} is not the stem of any video under {args.videos}")
     if not 0 <= args.empty_share < 1:
         _fail("--empty-share must be at least 0 and below 1")
+    for flag, value in (("--every", args.every), ("--scan-imgsz", args.scan_imgsz),
+                        ("--max-per-video", args.max_per_video)):
+        if value <= 0:
+            _fail(f"{flag} must be positive, got {value}")
 
+
+class Pending(NamedTuple):
+    """A video whose frames are being written (pass 2) and whose rows are not yet in mining.csv."""
+    split: str
+    video: Path
+    samples: list[Sample]
+    unreadable: list[int]
+    decisions: list[Decision]
+    writes: list[Future]
+    checks: dict[int, object]
+
+
+def finish_video(p: Pending, out: Path, table, failures: list[tuple[str, str]]) -> list[int]:
+    """Waits for the pass-2 writes, verifies them, writes the CSV rows; returns the summary counts."""
+    label = f"{p.split}/{p.video.name}"
+
+    def fail(message: str) -> None:
+        failures.append((label, message))
+        print(f"error: {label}: {message}", file=sys.stderr)
+
+    written: set[int] = set()
+    for future in p.writes:
+        try:
+            written.update(future.result())
+        except Exception as err:
+            fail(f"writing frames failed: {err}")
+    diffs: dict[int, float] = {}
+    for ms, scanned in p.checks.items():
+        saved = cv2.imread(str(frame_path(out / p.split / p.video.stem, p.video.stem, ms))) if ms in written else None
+        if saved is None:
+            written.discard(ms)
+        else:
+            diffs[ms] = frames_match(saved, scanned)
+    decisions = [d if not d.kept or d.ms in written else Decision(d.ms, False, "write-failed") for d in p.decisions]
+    bad = sorted(ms for ms, diff in diffs.items() if diff > CHECK_THRESHOLD)
+    if len(bad) > 1:
+        fail(f"the saved frames do not match the scanned samples (mean difference above {CHECK_THRESHOLD} at "
+             f"{', '.join(map(str, bad))} ms): pass 2 is not reading the frames that were scanned")
+    lost = [d.ms for d in decisions if d.reason == "write-failed"]
+    if lost:
+        fail(f"{len(lost)} frames could not be written (see the write-failed rows in mining.csv)")
+
+    rows = [(s[0], [p.split, p.video.stem, s[0], s[1], f"{s[2]:.4f}", d.kept, d.reason,
+                    f"{diffs[s[0]]:.2f}" if s[0] in diffs else ""]) for s, d in zip(sorted(p.samples), decisions)]
+    rows += [(ms, [p.split, p.video.stem, ms, 0, "0.0000", False, "unreadable", ""]) for ms in p.unreadable]
+    table.writerows(row for _, row in sorted(rows, key=lambda r: r[0]))
+    counts = [len(p.samples), sum(s[1] >= 1 for s in p.samples),
+              sum(d.kept and d.reason.startswith("bird") for d in decisions),
+              sum(d.kept and d.reason in ("empty", "near-miss") for d in decisions), len(lost), len(p.unreadable)]
+    print(_summary(label, counts))
+    return counts
+
+
+def main(argv: list[str] | None = None, scan_fn: Callable[[list], list[tuple[int, float]]] | None = None) -> None:
+    args = _parse(argv)
+    found = {split: sorted(p for p in (args.videos / split).rglob("*") if p.suffix.lower() in VIDEO_SUFFIXES)
+             for split in SPLITS}
+    check_unique_stems(found, args.videos)
+    videos = [(split, video) for split, files in found.items() for video in files]
+    _validate(args, videos)
+
+    use_ffmpeg = have_ffmpeg()
+    if use_ffmpeg:
+        problem = ffmpeg_selftest(videos[0][1], args.every, args.scan_imgsz)
+        if problem:
+            _fail(f"ffmpeg cannot sample {videos[0][1]}: {problem}\n(is this ffmpeg too old or broken? the sampling "
+                  "filter chain is fps + scale with if/min expressions; try a current ffmpeg)")
     if scan_fn is None:
         scan_fn = load_scan_fn(args.scan_model, args.scan_imgsz, args.scan_conf)
-    print(f"decoding with {'ffmpeg' if have_ffmpeg() else 'OpenCV (no ffmpeg on PATH, this is slow)'}")
+    print(f"decoding with {'ffmpeg' if use_ffmpeg else 'OpenCV (no ffmpeg on PATH, this is slow)'}")
     args.out.mkdir(parents=True, exist_ok=True)
 
-    totals = [0, 0, 0, 0]
+    workers = max(1, args.workers)
+    totals = [0] * 6
+    failures: list[tuple[str, str]] = []
     highlight_source: tuple[Path, list[Sample]] | None = None
+    pending: deque[Pending] = deque()
+    runner = Runner(workers)
+    decoded = decode_all(videos, runner, workers, args.every, args.scan_imgsz, args.out, use_ffmpeg)
     with (args.out / "mining.csv").open("w", newline="") as f:
         table = csv.writer(f)
         table.writerow(CSV_COLUMNS)
-        for split, video, tmp, times in decode_all(videos, max(1, args.workers), args.every, args.scan_imgsz, args.out):
-            try:
-                samples = scan_samples(times, tmp, scan_fn)
-            finally:
-                shutil.rmtree(tmp, ignore_errors=True)
-            if not samples:
-                print(f"warning: no samples from {video}", file=sys.stderr)
-                continue
-            decisions = select_frames(samples, args.min_gap_s, args.empty_share, args.max_per_video)
-            write_frames(video, args.out / split / video.stem, [d.ms for d in decisions if d.kept])
-            table.writerows([split, video.stem, s[0], s[1], f"{s[2]:.4f}", d.kept, d.reason]
-                            for s, d in zip(sorted(samples), decisions))
+
+        def finish(p: Pending) -> None:
+            nonlocal totals, highlight_source
+            totals = [a + b for a, b in zip(totals, finish_video(p, args.out, table, failures))]
             f.flush()
-            counts = [len(samples), sum(s[1] >= 1 for s in samples),
-                      sum(d.kept and d.reason.startswith("bird") for d in decisions),
-                      sum(d.kept and d.reason in ("empty", "near-miss") for d in decisions)]
-            print(_summary(f"{split}/{video.name}", *counts))
-            totals = [a + b for a, b in zip(totals, counts)]
-            if video.stem == args.highlights_from:
-                highlight_source = (video, samples)
-    print(_summary("total", *totals))
+            if p.video.stem == args.highlights_from:
+                highlight_source = (p.video, p.samples)
+
+        try:
+            for split, video, tmp, future in decoded:
+                try:
+                    times = future.result()
+                    samples, unreadable = scan_samples(times, tmp, scan_fn)
+                    if not samples:
+                        raise RuntimeError("no sample could be decoded and read")
+                    decisions = select_frames(samples, args.min_gap_s, args.empty_share, args.max_per_video)
+                    checks = scan_images(tmp, times, decisions)
+                except Exception as err:
+                    failures.append((f"{split}/{video.name}", str(err)))
+                    print(f"error: {split}/{video.name}: {err}", file=sys.stderr)
+                    continue
+                finally:
+                    shutil.rmtree(tmp, ignore_errors=True)
+                kept = [d.ms for d in decisions if d.kept]
+                size = 50 if use_ffmpeg else max(1, len(kept))  # one ffmpeg process per frame, chunks fill the pool
+                writes = [runner.submit(write_frames, video, args.out / split / video.stem, kept[i:i + size], use_ffmpeg)
+                          for i in range(0, len(kept), size)]
+                pending.append(Pending(split, video, samples, unreadable, decisions, writes, checks))
+                while len(pending) > workers:
+                    finish(pending.popleft())
+            while pending:
+                finish(pending.popleft())
+        finally:
+            runner.close()
+            decoded.close()
+    print(_summary("total", totals))
     print(f"{totals[2] + totals[3]} frames in {args.out}")
 
     if args.highlights and highlight_source:
@@ -418,6 +614,11 @@ def main(argv: list[str] | None = None, scan_fn: Callable[[list], list[tuple[int
                 table.writerow([start, end, peak])
                 print(f"highlight {start:.1f}-{end:.1f} s (peak {peak} birds)")
         print(f"highlights: {len(segments)} segments, {sum(e - s for s, e in segments):.1f} s in {args.highlights}")
+    if failures:
+        print(f"{len(failures)} problem(s), exit 1:", file=sys.stderr)
+        for label, message in failures:
+            print(f"  {label}: {message}", file=sys.stderr)
+        raise SystemExit(1)
 
 
 if __name__ == "__main__":
