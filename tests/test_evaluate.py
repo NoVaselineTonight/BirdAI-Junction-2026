@@ -485,7 +485,7 @@ def test_main_promotes_the_winning_student(tmp_path, monkeypatch, capsys):
     card = json.loads((models / "model_card.json").read_text())
     assert card["kind"] == "student" and card["board_ms"] == 700.0 and card["note"]
     assert card["threshold_source"] == "picked on validation footage"
-    assert card["metrics"]["labels"] == "teacher models, cleaned automatically; a person spot-checked samples"
+    assert card["metrics"]["labels"] == "teacher models, then checked by a second AI model; samples reviewed by an AI assistant, not by a person"
     assert card["metrics"]["footage"] == ["demo"] and card["count_threshold"] == 0.65
     assert (models / "student" / "feeder.onnx").read_bytes() == b"onnx"
     student = json.loads((models / "student" / "feeder.json").read_text())

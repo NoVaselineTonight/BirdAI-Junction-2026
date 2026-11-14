@@ -83,6 +83,8 @@ Milliseconds per frame on the Arduino UNO Q (4-core Kryo-V2), measured on 14 Nov
 
 Both student sizes stay inside the 1.5 s budget. Started with `--photo-every-s 5`, as we run it, the demo analyses one photo every 5 s (photo mode, above); without it the demo plays the video and analyses a frame every 2 s. One photo every 5 s leaves time to spare for either student; the shipped 640 px student needs about half a second.
 
+These timings were not measured again for the student shipped on 15 November 2026. 506.6 ms (640 px) and 1108.5 ms (960 px) are the timings of the earlier students with the same architecture and input size.
+
 Earlier stand-in measurement, for the pretrained two-stage detector only (`python -m feeder_census.bench --detector two_stage --video CLIP.mp4 --frames 30`). Both rows use the same 60 s, 1280x720, 15 fps test clip. **That clip is a stand-in, not feeder footage: it is made of three still photos of a great tit, a blue tit and a bullfinch, panned and zoomed.**
 
 | Where | median | p90 | birds per frame |
@@ -106,6 +108,7 @@ uv run python tools/evaluate.py --dataset data/dataset --candidates two_stage st
 - **The board-time bar.** A student is eligible only when its median time on the board is at most 1500 ms (`--board-ms` takes the medians from `python -m feeder_census.bench --detector KIND --video CLIP.mp4` on the board). A candidate with no board timing is treated as eligible, except that `--promote` refuses to run until every candidate has a timing.
 - **Qualifying.** A student qualifies when at least three species reach precision of at least 0.90 and recall of at least 0.50 on the held-out footage. Precision means: of the birds it named, the share named right. Recall means: of the birds in the truth labels, the share it found. A rate that could not be computed does not count.
 - **Who ships.** The qualifying student that counts exactly right in the most frames ships, but only if that share is at least the pretrained detector's. When no eligible student qualifies, the eligible student that counts best still ships if it beats the pretrained detector, and the card says `qualified: false`; the page then says "Below our accuracy bar; it ships because it counts better than the alternative." That mark applies to a shipped student only: when the pretrained detector ships, the page does not say it. Otherwise the pretrained detector ships, and the card says why.
+- **The tie of 15 November 2026.** The 640 px and 960 px students counted exactly the same share of held-out frames right (0.831, 747 of 899 each). The rule above has no tie-break. The 640 px student was put first because it takes half the time on the board and made no false squirrel detection on the held-out day (the 960 px one made one).
 - The numbers land in `models/eval.json` (every run) and in `models/model_card.json` (only with `--promote`), which the program and `board/deploy.sh` follow.
 
 ## What the accuracy numbers mean
@@ -113,33 +116,39 @@ uv run python tools/evaluate.py --dataset data/dataset --candidates two_stage st
 - They are measured on one day of footage, 12 November 2026, from the same feeder camera as most of the training footage. No frame of that day was used for training, for choosing the cut-off, or for training the teacher models (see "What the student was trained on"). The numbers say how the model does on this camera on a new day. They say nothing about another feeder, another camera or another season.
 - The cut-off is chosen on validation footage, the last 15 % of each training video, never on the held-out day.
 - The 899 held-out frames are picked for having birds, plus some empty frames. They are harder than a random minute at a feeder, so the share of frames counted exactly right would be higher on raw footage.
-- **The truth labels are machine-made.** Boxes come from a large teacher detector and two teachers trained on this camera. Names come from two bird classifiers (BioCLIP 2 and an iNaturalist classifier). Small classifiers trained on this camera's clear cases then removed non-birds (fat balls, snow) and fixed names. A person looked at sample sheets of each group (tens of crops each), not at every frame. So the numbers measure agreement with these labels. A bird the labels missed counts against the model when the model finds it. A mistake the model learned from the labels counts in its favour. In one by-eye check of 64 "false alarms" (an earlier round), about 60 were real, correctly named birds the labels had missed.
+- **The truth labels are machine-made and machine-checked.** They were made by the automatic check described in "What the student was trained on": candidate boxes from the old teacher labels, three earlier students and a camera-tuned teacher, judged by a second AI model, and kept as a bird only when two votes agree on the species. On the held-out day the check turned 2,256 candidates into 1,856 birds, 392 ignore zones and 8 dropped. Of the 1,856 birds, 1,489 are the same as the old label, 193 were `unidentified` before, 164 had no old label and 10 changed species. 45 old named labels became ignore zones.
+- **No person checked these labels.** The AI assistant that ran the work looked at sample sheets of the judge's decisions (for example, of 40 birds the check added, 39 were real and rightly named). No person did.
+- **The test rewards agreeing with the check.** The test labels and the training labels come from the same automatic check. The fair comparison is the earlier student scored on the same checked labels (the first student row below).
+- **The hardest cases are not scored.** 392 of the 2,256 candidates on the held-out day (17 %) are ignore zones: cut-off birds, blurred flight, sources that disagree. A detection in an ignore zone is neither a hit nor an error. The test is easier than counting every bird.
 - The qualifying rule has no minimum number of boxes per species, so a species with very few held-out boxes can pass on luck. Read the box counts next to every precision and recall.
 - Nothing here claims the model names species better than a skilled volunteer.
 
-Held-out day, 12 November 2026, 899 frames. "Named birds right" is the share of the birds the model named that were named right (precision). "Birds found" is the share of the labelled birds the model found (recall). Both are pooled over all species at the cut-off; those two columns come from a separate run of the same model on the same frames. The other columns are from `models/eval.json`.
+Held-out day, 12 November 2026, 899 frames, scored against the checked labels at cut-off 0.50. "Named birds right" is the share of the birds the model named that were named right (precision). "Birds found" is the share of the labelled birds the model found (recall). Both are pooled over all species and come from an ad-hoc scorer run on the same labels, not from `tools/evaluate.py`. "Frames counted exactly right" is from `models/eval.json`, except for the earlier student, where it is from the ad-hoc scorer. The board medians of the students are those of the earlier students (see "Measured speed").
 
 | Detector | board median | cut-off | named birds right | birds found | frames counted exactly right | held-out frames |
 |---|---|---|---|---|---|---|
-| two_stage (pretrained) | 169.8 ms | 0.60 (fixed) | 0.00 | 0.00 | 0.214 | 899 |
-| student 640 px (shipped) | 506.6 ms | 0.50 | 0.91 | 0.73 | 0.614 | 899 |
-| student 960 px | 1108.5 ms | 0.50 | 0.93 | 0.75 | 0.602 | 899 |
+| two_stage (pretrained) | 169.8 ms | 0.60 (fixed) | - | 0.00 | 0.171 | 899 |
+| earlier shipped student 640 px (old labels) | 506.6 ms | 0.50 | 0.940 | 0.811 | 0.751 | 899 |
+| student 640 px (shipped) | 506.6 ms | 0.50 | 0.942 | 0.891 | 0.831 | 899 |
+| student 960 px | 1108.5 ms | 0.50 | 0.949 | 0.899 | 0.831 | 899 |
 
-The 640 px student ships. It was picked over the 960 px student because it counts slightly more held-out frames exactly right (0.614 against 0.602) and is twice as fast on the board.
+The earlier shipped student was trained on the old labels. Scored on the same checked labels, the new 640 px student finds more birds (0.891 against 0.811) and counts more frames exactly right (0.831 against 0.751); named birds right is about the same (0.942 against 0.940). As a cross-check against the old labels (double boxes merged, oversized boxes ignored), the new 640 px student finds more birds (0.868 against 0.841), but named birds right falls from 0.901 to 0.848 and frames exactly right from 0.746 to 0.709, because it now detects birds the old labels do not contain.
 
-The pretrained two-stage detector finds no birds at all on this camera (recall 0.00). Its 0.214 can only come from frames with no bird in them. Both students qualify under the rule above (at least three species at precision 0.90 or more and recall 0.50 or more). For the 640 px student, four species pass: great tit, blue tit, bullfinch and great spotted woodpecker. Bullfinch (19 held-out boxes) and great spotted woodpecker (17) have fewer than 20, so they can pass on luck, and blue tit passes narrowly (precision 0.905). Without those two small species, only two species would pass. For the 960 px student, five species pass (great tit, blue tit, tree sparrow with one held-out box, house sparrow with two, and great spotted woodpecker), so three of its five passes also rest on very few boxes.
+The 640 px student ships. It and the 960 px student count exactly the same share of frames right (747 of 899 each); see "How the shipped model is chosen" for how the tie was broken.
 
-The shipped 640 px student, the four species that pass and magpie (every other species has fewer than 5 held-out boxes, or none):
+The pretrained two-stage detector finds almost no birds on this camera: in `models/eval.json` it named one bird all day (a magpie, rightly) and found 1 of the 1,856 labelled birds. Its 0.171 can only come from frames with no bird in them, apart from at most one frame. Both new students qualify under the rule above (at least three species at precision 0.90 or more and recall 0.50 or more). For the 640 px student, five species pass: great tit, blue tit, magpie, bullfinch (30 held-out boxes) and tree sparrow (one box, so it passes on luck). Great tit, blue tit and magpie have 90 or more held-out boxes each. Great spotted woodpecker misses on precision (0.89, 16 boxes). For the 960 px student, five species pass (great tit, blue tit, magpie, tree sparrow with one held-out box, and great spotted woodpecker with 16).
+
+The shipped 640 px student, by species (every other species has one held-out box or none), from `models/eval.json`:
 
 | Species | named birds right (precision) | birds found (recall) | held-out boxes |
 |---|---|---|---|
-| great tit | 0.92 | 0.75 | 1462 |
-| blue tit | 0.90 | 0.66 | 301 |
-| magpie | 0.81 | 0.70 | 102 |
-| bullfinch | 0.92 | 0.63 | 19 |
-| great spotted woodpecker | 0.94 | 0.94 | 17 |
+| great tit | 0.95 | 0.90 | 1460 |
+| blue tit | 0.92 | 0.87 | 258 |
+| magpie | 0.97 | 0.92 | 90 |
+| bullfinch | 0.91 | 0.67 | 30 |
+| great spotted woodpecker | 0.89 | 1.00 | 16 |
 
-The held-out day has no squirrel, so squirrel accuracy is only known from validation footage, where the 640 px student reached precision 0.92 and recall 0.84. Validation is the held-back last 15 % of each training video, the same footage that set the cut-off, and its squirrel boxes are mostly photos, documentary frames and pasted cut-outs; so the figure is optimistic for this feeder. On the 899 held-out frames the same student named a squirrel once at or above the latch cut-off (confidence 0.81; it is a blurred brown bird in flight). The latch closes only after two analysed photos in a row show a squirrel or rat, so that single frame would not have closed it.
+The held-out day has no squirrel, so squirrel accuracy is only known from validation footage, where the shipped 640 px student reached precision 0.953 and recall 0.865 (517 boxes). Validation is the held-back last 15 % of each training video, the same footage that set the cut-off, and its squirrel boxes are mostly photos, documentary frames and pasted cut-outs; so the figure is optimistic for this feeder. On the 899 held-out frames the shipped student made no false squirrel detection (the 960 px student made one). In the demo reel the simulated latch closed on the squirrel clip.
 
 ## What the student was trained on
 
@@ -148,6 +157,9 @@ The held-out day has no squirrel, so squirrel accuracy is only known from valida
 - **Training only, never shown.** The documentary and the two forest-feeder videos are used for training only and are never shown in the demo.
 - **A worse camera.** One in four training frames also has a degraded copy (smaller, blurred, noisy, re-compressed), so the model copes with a worse camera.
 - **Held out.** The test day, 12 November 2026, was not used for training (see above).
+- **Labels checked by a second AI model (15 November 2026).** For every feeder-camera frame, boxes were pooled from five sources: the old teacher label (minus boxes too big to be one small bird), three earlier students and the camera-tuned teacher. Boxes of one bird were merged into one candidate. An open vision-language model (Qwen3-VL-8B-Instruct, Apache-2.0, served with vLLM on rented GPUs) looked at a crop of every candidate and answered a closed question: one bird, part of a bird, two or more birds, squirrel or no animal; which species from our list; is it sure. On 1,240 candidates where all five sources already agreed on one species, it named the same species in 1,196 (96.5 %). That is too weak to be the only judge. So a candidate became a labelled bird only when two votes agreed on the species among the old label, the camera-tuned teacher (confidence 0.4 or more) and the judge (only when it said it was sure); the earlier students' majority (confidence 0.25 or more) counted as one supporting vote. "Part of a bird", "two or more birds" and candidates without two agreeing votes became ignore zones; "no animal" was dropped. In a training frame an ignore zone is blurred out of the picture, and a frame is left out when the zone overlaps a kept bird. In the 25 training days the check turned 75,989 candidates into 55,881 birds (45,415 same as the old label, 5,035 `unidentified` before, 5,168 with no old label, 263 changed species), 18,765 ignore zones and 1,343 dropped; 15,208 frames have a blurred zone and 490 frames were left out. Photos, documentary frames, forest-feeder videos and pasted squirrels kept their labels. The model has no training examples of `unidentified` any more (the class slot still exists). Nobody hand-checked these labels. The scripts are in `tools/label_check/`.
+- **Training.** The shipped student is the earlier 25-day 640 px student, trained 8 more epochs on the checked labels. Its card lists 63,466 training boxes. A 960 px student was trained the same way (6 epochs). Two students trained from scratch on the checked labels (20 and 14 epochs) scored lower and are not shipped.
+- **What did not help.** 19 more days of the same camera (44 days instead of 25) changed nothing measurable. Removing double boxes and oversized boxes from the old training labels by rule and re-training did not help either.
 
 ## What the demo shows
 
@@ -161,6 +173,7 @@ Not built yet:
 - Accepting a less sure name when several photos in a row agree.
 - Comparing each photo with the median of the last 5-10 minutes, to catch what changed.
 - A microphone as a second witness for species by their calls.
+- A small hand-checked test set. Every accuracy number above is measured against machine-checked labels; this is still the missing piece.
 
 ## Licences
 
