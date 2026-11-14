@@ -181,3 +181,16 @@ english = "Feral pigeon"
 finnish = "Kesykyyhky"
 habitat = "town"
 core = false
+
+# Not census species: an animal from this list at the feeder closes the latch (feeder_census/latch.py).
+[[pest]]
+key = "red_squirrel"
+scientific = "Sciurus vulgaris"
+english = "Red squirrel"
+finnish = "Orava"
+
+[[pest]]
+key = "brown_rat"
+scientific = "Rattus norvegicus"
+english = "Brown rat"
+finnish = "Rotta"

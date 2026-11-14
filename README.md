@@ -37,6 +37,36 @@ Where things are on the board:
 
 The board remembers its counts. `data/census.db` holds the census and the demo clock, so a new `board/run.sh` continues the same days, hours and counts from where the last run stopped. For a clean start of the demo, use `board/run.sh --fresh`: it stops any run, deletes `data/census.db*` and `data/evidence` on the board (nothing else) and starts over at 08:00 on 1 November. On a board that has no `data/` yet (first run after the first deploy), `--fresh` does nothing and says so.
 
+## Latch
+
+Two hobby servos close a latch over the feeder while a squirrel or a rat is at it. The program closes the latch after the animal is seen in 2 detections in a row and opens it again after 5 detections in a row without one. The animals (`[[pest]]` in `species.toml`) are never census birds: they are not counted, not in the tables, the CSV, the visits or the evidence photos. They are drawn on the feed by name. Seeing them needs a model trained on them; that is a separate step.
+
+The servos are DFRobot SER0006 (9 g, 180° position servos, 4.8–6 V). The UNO Q's microcontroller drives them with `board/latch/latch.ino`. Wiring, in words:
+
+- Servo 1's signal wire to D9, servo 2's signal wire to D10.
+- Servo power from a separate 5 V supply, not from the board's 5 V pin.
+- Join that supply's ground to a GND pin on the board.
+- Never put 5 V on D3 or A0–A5.
+
+The open and closed angles are constants at the top of the sketch (10 and 100; the second servo is mounted mirrored). The sketch opens the latch by itself 30 seconds after the last close command, so the feeder does not stay shut when the program on the Linux side stops. The program repeats the close command at every detection while the latch should stay closed.
+
+`--latch` (on `python -m feeder_census` and `board/run.sh`) picks the mode:
+
+- `off` (default): no latch; the page shows nothing about it.
+- `sim`: no hardware. The page shows what the latch would do and says `Latch not connected: showing what it would do.`
+- `router`: the program calls `set_latch` on the microcontroller through the board's `arduino-router` service (`/var/run/arduino-router.sock`). When the call fails the page says `Latch not answering:` and why; the counting carries on.
+
+Bring-up: upload the sketch from the laptop (it needs the `Servo` library, 1.3.0 or later: `arduino-cli lib install Servo`), then move the latch by hand from the board:
+
+```
+arduino-cli compile -b arduino:zephyr:unoq board/latch
+arduino-cli upload -b arduino:zephyr:unoq -p /dev/ttyACM0 board/latch
+adb shell "cd /home/arduino/feeder-census && .venv/bin/python -m feeder_census.latch cycle"   # close, wait 2 s, open; also: close | open
+board/run.sh --latch router
+```
+
+The link between the program and the sketch follows Arduino's documentation for the router bridge; it has not yet been tried on our board.
+
 ## Measured speed
 
 Milliseconds per frame for the pretrained two-stage detector (`python -m feeder_census.bench --detector two_stage --frames 30`), measured on 14 November 2026. Both rows use the same 60 s, 1280x720, 15 fps test clip. **That clip is a stand-in, not feeder footage: it is made of three still photos of a great tit, a blue tit and a bullfinch, panned and zoomed.** Real footage with several birds and more background will give different numbers.

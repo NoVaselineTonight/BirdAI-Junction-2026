@@ -101,6 +101,26 @@ main { padding: var(--gap); display: grid; gap: calc(var(--gap) * 1.6); }
 }
 .rule-line { font-size: 1.08rem; font-weight: 550; }
 
+/* Latch: a quiet line while open; a full red band when closed, to be read from the back of the room */
+.latch { display: grid; gap: 0.1rem; }
+.latch-state { font-size: 1.2rem; font-weight: 700; line-height: 1.2; color: var(--spruce); }
+.latch.closed .latch-state {
+  margin: -0.15rem -0.5rem 0.1rem; padding: 0.2rem 0.5rem;
+  background: var(--bullfinch); color: #fff; font-size: 1.3rem;
+}
+.latch-rule { font-size: 0.9rem; color: var(--ink-2); line-height: 1.2; }
+.latch-sim { display: inline-block; font-weight: 600; color: var(--ink); } /* wraps as a whole */
+.latch-error { font-weight: 650; color: var(--bullfinch); overflow-wrap: break-word; } /* runs on after the rule */
+/* The latch block costs about 100 px: with it showing, the sheet's spacing tightens so the worst case
+   (eight rows, an unidentified line, twenty nameable species) still fits 1920x1080. Type sizes stay. */
+.sheet.with-latch { padding: 0.9rem 1.2rem 1rem; gap: 0.4rem; }
+.with-latch .tally tbody th { padding: 0.15rem 0 0; line-height: 1.15; }
+.with-latch .tally td.in-frame, .with-latch .tally td.visits { line-height: 1; }
+.with-latch .tally td.max { line-height: 1; }
+.with-latch .visits-note, .with-latch .can-name { line-height: 1.2; }
+.with-latch .facts { gap: 0.15rem; }
+.with-latch h2 { line-height: 1.15; }
+
 /* Tally: "Most at once" is the census number; visits sit apart, small and muted */
 .tally { width: 100%; border-collapse: collapse; }
 .tally thead th {

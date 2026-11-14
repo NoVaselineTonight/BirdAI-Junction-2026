@@ -220,3 +220,57 @@ def test_a_card_threshold_of_nan_exits_2(monkeypatch, tmp_path, make_video):
     with pytest.raises(SystemExit) as stop:
         run_auto(monkeypatch, tmp_path, make_video, None, "--models-dir", str(models))
     assert stop.value.code == 2
+
+
+# --- the latch ---
+
+
+def test_latch_flag(monkeypatch, tmp_path, make_video, capsys):
+    assert run_cli(monkeypatch, tmp_path, make_video).latch == "off"
+    assert run_cli(monkeypatch, tmp_path, make_video, "--latch", "sim").latch == "sim"
+    with pytest.raises(SystemExit) as exit_info:
+        cli._parser().parse_args(["--videos", "x.mp4", "--latch", "on"])
+    assert exit_info.value.code == 2
+
+
+def test_router_latch_without_a_socket_still_starts(monkeypatch, tmp_path, make_video):
+    from feeder_census.latch import RouterLatch
+
+    given = {}
+
+    class StubPipeline:
+        error = None
+
+        def __init__(self, camera, detector, store, settings, names, *args, latch=None, **kwargs):
+            given.update(settings=settings, latch=latch, names=names, store=store)
+
+        def run(self, stop):
+            pass
+
+    monkeypatch.setattr(cli, "Pipeline", StubPipeline)
+    script = tmp_path / "script.json"
+    script.write_text('{"species": ["great_tit", "red_squirrel"], "frames": [[]]}')
+    argv = ["--videos", str(make_video()), "--detector", "scripted", "--script", str(script),
+            "--db", str(tmp_path / "data" / "c.db"), "--no-web", "--latch", "router",
+            "--latch-socket", str(tmp_path / "missing.sock")]
+    assert cli.main(argv) == 0
+    assert given["settings"].latch == "router"
+    assert isinstance(given["latch"], RouterLatch) and given["latch"].socket_path == tmp_path / "missing.sock"
+    assert given["names"]["red_squirrel"] == "Red squirrel"  # pests are drawn on the preview by name
+    assert given["store"].species == ("great_tit",)  # never a census column
+
+
+def test_no_web_line_says_what_the_latch_does(capsys):
+    from datetime import datetime
+
+    from feeder_census.latch import LatchState
+    from feeder_census.pipeline import LiveState
+
+    def line(latch):
+        cli._print_line(LiveState(b"", datetime(2026, 11, 1, 8, 0), {"great_tit": 1}, {"great_tit": 1}, 0, 1.0,
+                                  "scripted", {}, {}, latch, {"red_squirrel": 1}))
+        return capsys.readouterr().out
+
+    assert "latch" not in line(LatchState("off", False, None, None))
+    assert "latch=closed (red_squirrel) error='no router socket'" in line(
+        LatchState("router", True, "red_squirrel", "no router socket"))

@@ -19,18 +19,25 @@ def _label(img: np.ndarray, text: str, x: int, y: int, color: tuple[int, int, in
 
 
 def annotate(
-    frame: np.ndarray, detections: Sequence[Detection], names: Mapping[str, str], threshold: float
+    frame: np.ndarray, detections: Sequence[Detection], names: Mapping[str, str], threshold: float,
+    pests: Mapping[str, float] | None = None,
 ) -> np.ndarray:
-    """A copy of `frame` with counted birds boxed in colour and the rest in grey."""
+    """A copy of `frame` with counted birds boxed in colour and the rest in grey.
+
+    `pests` maps each pest key to its own threshold: a pest box at or over it is boxed in colour with
+    its name; a weaker one in grey, still with its name, as it is no unidentified bird.
+    """
     img = frame.copy()
     scale = max(0.4, min(img.shape[:2]) / 700)
+    pests = pests or {}
     for d in detections:
         x1, y1, x2, y2 = (int(round(v)) for v in d.box)
-        if d.species != UNIDENTIFIED and d.confidence >= threshold:
+        counted = d.confidence >= pests[d.species] if d.species in pests else d.confidence >= threshold
+        if d.species != UNIDENTIFIED and counted:
             color = _PALETTE[zlib.crc32(d.species.encode()) % len(_PALETTE)]
             cv2.rectangle(img, (x1, y1), (x2, y2), color, 2)
             _label(img, f"{names.get(d.species, d.species)} {d.confidence:.2f}", x1, y1, color, scale)
         else:
             cv2.rectangle(img, (x1, y1), (x2, y2), _GREY, 1)
-            _label(img, UNIDENTIFIED, x1, y1, _GREY, scale)
+            _label(img, names.get(d.species, d.species) if d.species in pests else UNIDENTIFIED, x1, y1, _GREY, scale)
     return img

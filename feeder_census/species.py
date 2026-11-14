@@ -14,8 +14,8 @@ class Species:
     scientific: str
     english: str
     finnish: str
-    habitat: str
-    core: bool
+    habitat: str = ""  # pests have none
+    core: bool = False
     aliases: tuple[str, ...] = ()
 
 
@@ -32,6 +32,16 @@ def load_species(path: Path | None = None) -> list[Species]:
             core=row["core"],
             aliases=tuple(row.get("aliases", ())),
         )
+        for row in rows
+    ]
+
+
+def load_pests(path: Path | None = None) -> list[Species]:
+    """The unwanted animals that close the latch. Never census species: `load_species` leaves them out."""
+    with open(path or _DEFAULT_PATH, "rb") as f:
+        rows = tomllib.load(f).get("pest", [])
+    return [
+        Species(key=row["key"], scientific=row["scientific"], english=row["english"], finnish=row["finnish"])
         for row in rows
     ]
 

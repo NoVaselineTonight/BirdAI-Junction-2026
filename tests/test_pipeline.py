@@ -183,3 +183,99 @@ def test_visit_gap_of_one_is_the_old_rule(tmp_path, make_video):
     p, store = build(tmp_path, make_video, [[GT], [GT], [], [GT], [GT]], visit_gap_frames=1)
     run_detections(p, 5)
     assert store.visits(date(2026, 11, 1))["great_tit"] == 2
+
+
+# --- pests and the latch ---
+
+SQ = {"species": "red_squirrel", "confidence": 0.9, "box": [100, 100, 200, 200]}
+
+
+def test_a_squirrel_closes_the_latch_and_is_never_a_census_bird(tmp_path, make_video):
+    import io
+
+    p, store = build(tmp_path, make_video, [[GT, SQ]], latch="sim")
+    run_detections(p, 3)
+    live = p.live()
+    assert live.latch.closed and live.latch.reason == "red_squirrel" and live.latch.mode == "sim"
+    assert live.pests == {"red_squirrel": 1, "brown_rat": 0}
+    assert live.unidentified == 0
+    assert live.now == {"great_tit": 1, "blue_tit": 0}
+    (hour,) = store.hours(date(2026, 11, 1))
+    assert hour.counts == {"great_tit": 1, "blue_tit": 0}
+    assert set(store.visits(date(2026, 11, 1))) <= {"great_tit", "blue_tit"}
+    assert {e.species for e in store.evidence()} == {"great_tit"}
+    out = io.StringIO()
+    store.export_csv(out, {"great_tit": "Great tit", "blue_tit": "Blue tit"})
+    assert out.getvalue().splitlines()[0] == "Period,Hours watched,Great tit,Blue tit"
+    assert any(d.species == "red_squirrel" for d in p.last_detections)  # still drawn on the preview
+
+
+def test_a_weak_squirrel_box_does_not_count(tmp_path, make_video):
+    weak = dict(SQ, confidence=0.3)
+    p, _ = build(tmp_path, make_video, [[GT, weak]], latch="sim")
+    run_detections(p, 3)
+    live = p.live()
+    assert not live.latch.closed and live.pests == {"red_squirrel": 0, "brown_rat": 0}
+    assert live.unidentified == 0  # a weak pest box is not a bird either
+
+
+def test_a_detector_that_can_name_a_pest_still_keeps_it_out_of_the_census(tmp_path, make_video):
+    detector = CountingDetector({"species": [*SPECIES, "red_squirrel"], "frames": [[GT, SQ, SQ]]})
+    store = Store(tmp_path / "census.db", SPECIES)
+    camera = SimulatedCamera([make_video(seconds=2.0, fps=10)], realtime=False)
+    p = Pipeline(camera, detector, store, Settings(evidence_dir=tmp_path / "evidence", latch="sim"), NAMES, inline=True)
+    run_detections(p, 3)
+    live = p.live()
+    assert live.now == live.confirmed == {"great_tit": 1, "blue_tit": 0}
+    assert live.visits_today == {"great_tit": 1, "blue_tit": 0}
+    assert live.pests == {"red_squirrel": 2, "brown_rat": 0} and live.latch.closed
+
+
+def test_latch_off_by_default_still_keeps_pests_apart(tmp_path, make_video):
+    p, _ = build(tmp_path, make_video, [[GT, SQ]])
+    run_detections(p, 3)
+    live = p.live()
+    assert (live.latch.mode, live.latch.closed) == ("off", False)
+    assert live.pests == {"red_squirrel": 1, "brown_rat": 0} and live.unidentified == 0
+
+
+def test_a_latch_that_fails_never_stops_the_counting(tmp_path, make_video):
+    from feeder_census.latch import LatchError
+
+    class Unplugged:
+        calls = 0
+
+        def set(self, closed):
+            self.calls += 1
+            raise LatchError("no router socket")
+
+    detector = CountingDetector({"species": SPECIES, "frames": [[GT, SQ]]})
+    store = Store(tmp_path / "census.db", SPECIES)
+    camera = SimulatedCamera([make_video(seconds=2.0, fps=10)], realtime=False)
+    hardware = Unplugged()
+    p = Pipeline(camera, detector, store, Settings(evidence_dir=tmp_path / "evidence", latch="router"), NAMES,
+                 inline=True, latch=hardware)
+    run_detections(p, 4)
+    live = p.live()
+    assert live.latch.closed and live.latch.error == "no router socket" and hardware.calls == 3
+    assert store.hours(date(2026, 11, 1))[0].counts["great_tit"] == 1
+
+
+def test_live_state_before_the_first_frame_has_an_open_latch(tmp_path, make_video):
+    p, _ = build(tmp_path, make_video, [[GT]], latch="sim")
+    live = p.live()
+    assert (live.latch.mode, live.latch.closed, live.latch.reason) == ("sim", False, None)
+    assert live.pests == {"red_squirrel": 0, "brown_rat": 0}
+
+
+def test_a_pest_box_is_drawn_by_its_own_threshold():
+    from feeder_census.draw import annotate
+    from feeder_census.types import Detection
+
+    frame = np.zeros((240, 320, 3), np.uint8)
+    squirrel = [Detection("red_squirrel", 0.55, (100, 100, 200, 200))]  # under the bird threshold, over the pest one
+    grey = annotate(frame, squirrel, {"red_squirrel": "Red squirrel"}, 0.6)[150, 100]
+    drawn = annotate(frame, squirrel, {"red_squirrel": "Red squirrel"}, 0.6, pests={"red_squirrel": 0.5})[150, 100]
+    assert tuple(grey) == (150, 150, 150) and tuple(drawn) != (150, 150, 150) and drawn.any()
+    weak = [Detection("red_squirrel", 0.3, (100, 100, 200, 200))]
+    assert tuple(annotate(frame, weak, {}, 0.6, pests={"red_squirrel": 0.5})[150, 100]) == (150, 150, 150)

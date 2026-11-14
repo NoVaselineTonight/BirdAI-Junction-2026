@@ -82,6 +82,8 @@ function renderLive() {
   $("footage-note").textContent = live.footage_note || "";
   $("footage-note").hidden = !live.footage_note;
 
+  renderLatch(live.latch);
+
   const stopped = $("stopped");
   if (live.error) {
     $("stopped-msg").textContent = `${live.error}.`;
@@ -92,6 +94,26 @@ function renderLive() {
 
   if (!tables) return;
   renderTally(t);
+}
+
+// Hidden when the program runs without a latch. In sim mode no hardware moves, and the page says so.
+// While the board does not answer, the page cannot say the latch closed: the band names the animal only,
+// and the error line under it says the latch is not answering. Open needs no such care: the sketch opens
+// the latch by itself when it hears nothing.
+function renderLatch(latch) {
+  const block = $("latch");
+  block.hidden = latch.mode === "off";
+  block.parentElement.classList.toggle("with-latch", !block.hidden);
+  if (block.hidden) return;
+  const who = latch.reason_name ? `${latch.reason_name.english} · ${latch.reason_name.finnish} at the feeder` : "";
+  let state = "Latch: open";
+  if (latch.closed && latch.error) state = who || "Latch: not answering";
+  else if (latch.closed) state = who ? `Latch: closed · ${who}` : "Latch: closed";
+  $("latch-state").textContent = state;
+  block.classList.toggle("closed", latch.closed);
+  $("latch-sim").hidden = latch.mode !== "sim";
+  $("latch-error-msg").textContent = latch.error || "";
+  $("latch-error").hidden = !latch.error;
 }
 
 // One row per species seen today or in frame now; the rest share one line, so eight species still fit.
@@ -130,6 +152,7 @@ async function pollLive() {
     j.day_max = j.day_max || {};
     j.visits_today = j.visits_today || {};
     j.footage_note = j.footage_note || null;
+    j.latch = j.latch || { mode: "off", closed: false, reason: null, error: null, reason_name: null };
     live = j;
     delete $("stopped").dataset.lost;
     renderLive();

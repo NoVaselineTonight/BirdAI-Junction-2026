@@ -32,6 +32,11 @@
     </figure>
 
     <div class="sheet">
+      <div class="latch" id="latch" hidden>
+        <p class="latch-state" id="latch-state" aria-live="polite">Latch: open</p>
+        <p class="latch-rule">The latch closes when a squirrel or rat is at the feeder. <span class="latch-sim" id="latch-sim" hidden>Latch not connected: showing what it would do.</span>
+          <span class="latch-error" id="latch-error" hidden>Latch not answering: <span id="latch-error-msg"></span></span></p>
+      </div>
       <h2>Today <span class="sub" id="sheet-day"></span></h2>
       <p class="rule-line">Largest number seen at once. Only surely identified birds are counted.</p>
       <table class="tally" id="tally-table" hidden>

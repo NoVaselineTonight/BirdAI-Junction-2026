@@ -12,8 +12,9 @@ import uvicorn
 from feeder_census.camera import SimulatedCamera, _expand
 from feeder_census.config import Settings
 from feeder_census.detectors import KINDS, build_detector
+from feeder_census.latch import MODES as LATCH_MODES, ROUTER_SOCKET, RouterLatch
 from feeder_census.pipeline import LiveState, Pipeline
-from feeder_census.species import load_species
+from feeder_census.species import load_pests, load_species
 from feeder_census.store import Store
 from feeder_census.web import create_app
 
@@ -52,6 +53,11 @@ def _parser() -> argparse.ArgumentParser:
     p.add_argument("--student-dir", type=Path, default=None)
     p.add_argument("--footage-note", default=None,
                    help="a line shown under the feed (default: says so when a clip has a .segments.csv beside it)")
+    p.add_argument("--latch", choices=LATCH_MODES, default=Settings.latch,
+                   help="close the feeder latch when a squirrel or rat is seen: off, sim (no hardware, the page shows "
+                        "what it would do) or router (the servos on the UNO Q) (default: %(default)s)")
+    p.add_argument("--latch-socket", type=Path, default=ROUTER_SOCKET,
+                   help="arduino-router socket for --latch router (default: %(default)s)")
     return p
 
 
@@ -104,7 +110,15 @@ def resolve_detector(requested: str, models_dir: Path) -> tuple[str, dict | None
 def _print_line(state: LiveState) -> None:
     seen = {k: v for k, v in state.now.items() if v}
     confirmed = {k: v for k, v in state.confirmed.items() if v}
-    print(f"{state.sim_time:%Y-%m-%d %H:%M:%S}  now={seen}  confirmed={confirmed}  detect_ms={state.detect_ms:.1f}", flush=True)
+    latch = ""
+    if state.latch.mode != "off":
+        latch = f"  latch={'closed' if state.latch.closed else 'open'}"
+        if state.latch.reason:
+            latch += f" ({state.latch.reason})"
+        if state.latch.error:
+            latch += f" error={state.latch.error!r}"
+    print(f"{state.sim_time:%Y-%m-%d %H:%M:%S}  now={seen}  confirmed={confirmed}  detect_ms={state.detect_ms:.1f}{latch}",
+          flush=True)
 
 
 def _serve(app, port: int, stop: threading.Event) -> None:
@@ -127,8 +141,8 @@ def main(argv: list[str] | None = None) -> int:
     resolved_card = card
     if kind == "student" and args.student_dir:
         card = None  # the card describes models/student, not another folder
-    species = load_species()
-    names = {s.key: s.english for s in species}
+    species, pests = load_species(), load_pests()
+    names = {s.key: s.english for s in (*species, *pests)}  # pests are drawn on the preview by name too
     try:
         detector = build_detector(
             kind, args.models_dir, species, script=args.script, student_dir=args.student_dir
@@ -150,16 +164,26 @@ def main(argv: list[str] | None = None) -> int:
         why = "model card ignored" if ignored else "model card" if card else "no model card"
     threshold = _card_threshold(card, args.models_dir / "model_card.json") if card else None
     args.db.parent.mkdir(parents=True, exist_ok=True)
-    store = Store(args.db, detector.species)
+    pest_keys = {p.key for p in pests}
+    store = Store(args.db, [sp for sp in detector.species if sp not in pest_keys])  # pests are never census columns
     settings = Settings(
         detect_every_s=args.detect_every_s, roi=args.roi, port=args.port,
         evidence_dir=args.db.parent / "evidence", count_threshold=threshold,
         footage_note=args.footage_note if args.footage_note is not None else _footage_note(args.videos),
+        latch=args.latch,
     )
     in_force = threshold if threshold is not None else detector.count_threshold
     print(f"detector: {kind} ({why}); counting threshold {in_force:g}", flush=True)
+    latch = None
+    if args.latch == "router":
+        latch = RouterLatch(args.latch_socket)
+        if not args.latch_socket.exists():  # not fatal: the page says the latch is not answering
+            print(f"warning: no arduino-router socket at {args.latch_socket}; the latch will not move", file=sys.stderr)
+    if args.latch != "off":
+        print(f"latch: {args.latch}", flush=True)
     pipeline = Pipeline(
-        camera, detector, store, settings, names, inline=args.fast, on_result=_print_line if args.no_web else None
+        camera, detector, store, settings, names, inline=args.fast, on_result=_print_line if args.no_web else None,
+        latch=latch, pests=[p.key for p in pests],
     )
 
     stop = threading.Event()

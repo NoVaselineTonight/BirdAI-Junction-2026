@@ -204,3 +204,30 @@ def test_evidence_photo_does_not_follow_a_symlinked_day_out_of_the_evidence_dir(
     (outside / "great_tit.jpg").write_bytes(b"\xff\xd8 not evidence")
     (tmp_path / "evidence" / "2026-11-02").symlink_to(outside, target_is_directory=True)
     assert client.get("/evidence/2026-11-02/great_tit.jpg").status_code == 404
+
+
+SQ = {"species": "red_squirrel", "confidence": 0.9, "box": [100, 100, 200, 200]}
+
+
+def test_live_state_carries_the_latch(tmp_path, make_video, client):
+    j = client.get("/api/live").json()
+    assert j["latch"] == {"mode": "off", "closed": False, "reason": None, "error": None, "reason_name": None}
+    assert j["pests"] == {"red_squirrel": 0, "brown_rat": 0}
+    app, _, _ = scripted_app(tmp_path / "squirrel", make_video, ["great_tit"], [[GT, SQ]], 3, latch="sim")
+    with TestClient(app) as c:
+        j = c.get("/api/live").json()
+        assert j["latch"] == {"mode": "sim", "closed": True, "reason": "red_squirrel", "error": None,
+                              "reason_name": {"english": "Red squirrel", "finnish": "Orava"}}
+        assert j["pests"] == {"red_squirrel": 1, "brown_rat": 0}
+        assert j["unidentified"] == 0 and "red_squirrel" not in j["now"]
+        tables = c.get("/api/tables").json()
+        assert "red_squirrel" not in {s["key"] for s in tables["species"] + tables["nameable"]}
+        assert "squirrel" not in c.get("/export/census.csv").text.lower()
+
+
+def test_page_says_what_the_latch_does(client):
+    html = client.get("/").text
+    assert "The latch closes when a squirrel or rat is at the feeder." in html
+    assert "Latch not connected: showing what it would do." in html
+    assert "Latch not answering:" in html
+    assert 'id="latch" hidden' in html

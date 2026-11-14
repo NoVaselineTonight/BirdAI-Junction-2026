@@ -15,7 +15,7 @@ from fastapi.staticfiles import StaticFiles
 from feeder_census.config import Settings
 from feeder_census.periods import period_of
 from feeder_census.pipeline import Pipeline
-from feeder_census.species import HABITATS, Species, habitat_mix
+from feeder_census.species import HABITATS, Species, habitat_mix, load_pests
 from feeder_census.store import Store
 
 STATIC = Path(__file__).resolve().parent / "static"
@@ -37,6 +37,7 @@ class _Revalidated(StaticFiles):
 
 def create_app(
     pipeline: Pipeline, store: Store, species: Sequence[Species], settings: Settings, model_card: dict | None,
+    pests: Sequence[Species] | None = None,
 ) -> FastAPI:
     """The page and its API. Set `app.state.stopping` to end open MJPEG streams before the server shuts down."""
     app = FastAPI(title="Feeder Census", docs_url=None, redoc_url=None, openapi_url=None)
@@ -44,6 +45,8 @@ def create_app(
     app.mount("/static", _Revalidated(directory=STATIC), name="static")
     nameable = [s for s in species if s.key in pipeline.detector.species]  # species.toml order
     english = {s.key: s.english for s in species}
+    pests = load_pests() if pests is None else pests
+    pest_names = {p.key: {"english": p.english, "finnish": p.finnish} for p in pests}
 
     @app.get("/", include_in_schema=False)
     def page() -> FileResponse:
@@ -59,6 +62,9 @@ def create_app(
             "day_max": s.day_max, "visits_today": s.visits_today,  # visits are arrivals, not birds
             "time_scale": settings.time_scale, "recorded": True, "footage_note": settings.footage_note,
             "error": None if error is None else (str(error) or type(error).__name__),
+            "latch": {"mode": s.latch.mode, "closed": s.latch.closed, "reason": s.latch.reason,
+                      "error": s.latch.error, "reason_name": pest_names.get(s.latch.reason)},
+            "pests": s.pests,  # unwanted animals in frame now; never birds, never in the census
         }
 
     @app.get("/api/tables")

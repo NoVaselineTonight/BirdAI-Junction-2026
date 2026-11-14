@@ -2,7 +2,7 @@ import sys
 import threading
 import time
 from collections import deque
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Mapping, Sequence
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from datetime import date, datetime
@@ -15,6 +15,8 @@ from feeder_census.census import ConfirmFilter, frame_counts
 from feeder_census.config import Settings
 from feeder_census.detectors.base import Detector
 from feeder_census.draw import annotate
+from feeder_census.latch import Latch, LatchController, LatchState
+from feeder_census.species import load_pests
 from feeder_census.store import Store
 from feeder_census.types import Detection
 
@@ -32,6 +34,8 @@ class LiveState:
     detector: str
     visits_today: dict[str, int]  # arrivals at the feeder, not birds
     day_max: dict[str, int]  # largest number seen at once today
+    latch: LatchState
+    pests: dict[str, int]  # pest boxes in frame now, every pest key; pests are never census birds
 
 
 class Pipeline:
@@ -51,6 +55,8 @@ class Pipeline:
         names: Mapping[str, str],
         inline: bool = False,
         on_result: Callable[[LiveState], None] | None = None,
+        latch: Latch | None = None,
+        pests: Sequence[str] | None = None,
     ):
         self.camera, self.detector, self.store = camera, detector, store
         self.settings, self.names, self.inline = settings, names, inline
@@ -61,8 +67,17 @@ class Pipeline:
         self._threshold = (
             settings.count_threshold if settings.count_threshold is not None else detector.count_threshold
         )
-        self._filter = ConfirmFilter(detector.species, settings.confirm_frames)
-        self._zeros = {s: 0 for s in detector.species}
+        self.pests = tuple(pests) if pests is not None else tuple(p.key for p in load_pests())
+        # the census species: what the detector can name, less any pest a future model learns to see
+        self.species = tuple(s for s in detector.species if s not in self.pests)
+        self._latch = LatchController(
+            latch, settings.latch, settings.latch_close_frames, settings.latch_open_frames, order=self.pests
+        )
+        self._pests_now = {p: 0 for p in self.pests}
+        self._pest_thresholds = {p: settings.pest_threshold for p in self.pests}
+        self._latch_state = self._latch.state
+        self._filter = ConfirmFilter(self.species, settings.confirm_frames)
+        self._zeros = {s: 0 for s in self.species}
         self._lock = threading.Lock()
         self._total_s = store.total_watched_s()  # simulated seconds watched, ever
         self._now = dict(self._zeros)
@@ -85,15 +100,15 @@ class Pipeline:
             return LiveState(
                 self._jpeg, self.clock.at(self._total_s), dict(self._now), dict(self._confirmed),
                 self._unidentified, self._detect_ms, self.detector.name,
-                dict(self._visits), dict(self._day_max),
+                dict(self._visits), dict(self._day_max), self._latch_state, dict(self._pests_now),
             )
 
     def _today(self, day: date) -> tuple[dict[str, int], dict[str, int]]:
         """Visits and the largest number seen at once on `day`, as the store holds them."""
         hours = self.store.hours(day)
-        day_max = {sp: max((r.counts.get(sp, 0) for r in hours), default=0) for sp in self.detector.species}
+        day_max = {sp: max((r.counts.get(sp, 0) for r in hours), default=0) for sp in self.species}
         visits = self.store.visits(day)
-        return {sp: visits.get(sp, 0) for sp in self.detector.species}, day_max
+        return {sp: visits.get(sp, 0) for sp in self.species}, day_max
 
     def step(self) -> None:
         if self.error is not None:
@@ -133,7 +148,7 @@ class Pipeline:
         self._last_preview = now
         with self._lock:
             detections = list(self.last_detections)
-        img = annotate(frame, detections, self.names, self._threshold)
+        img = annotate(frame, detections, self.names, self._threshold, self._pest_thresholds)
         width = self.settings.preview_width
         if img.shape[1] > width:
             img = cv2.resize(img, (width, round(img.shape[0] * width / img.shape[1])), interpolation=cv2.INTER_AREA)
@@ -173,7 +188,13 @@ class Pipeline:
 
     def _record(self, frame: np.ndarray, detections: list[Detection], gap: float | None, detect_ms: float) -> None:
         s = self.settings
-        counts = frame_counts(detections, self._threshold)
+        pests = {p: 0 for p in self.pests}
+        for d in detections:
+            if d.species in pests and d.confidence >= s.pest_threshold:
+                pests[d.species] += 1
+        latch = self._latch.update(pests)  # never raises: a latch fault must not stop the counting
+        birds = [d for d in detections if d.species not in pests]
+        counts = frame_counts(birds, self._threshold)
         footage_s = s.detect_every_s if gap is None else min(gap, s.max_gap_s)
         credit = footage_s * s.time_scale
         with self._lock:
@@ -192,9 +213,10 @@ class Pipeline:
         visits, day_max = self._today(ts.date())
         with self._lock:
             self.last_detections = detections
-            self._now = {sp: counts.get(sp, 0) for sp in self.detector.species}
+            self._now = {sp: counts.get(sp, 0) for sp in self.species}
             self._confirmed = confirmed
-            self._unidentified = len(detections) - sum(counts.values())
+            self._unidentified = len(birds) - sum(counts.values())
+            self._pests_now, self._latch_state = pests, latch
             self._detect_ms = detect_ms
             self._visits, self._day_max = visits, day_max
         if self._on_result is not None:
@@ -204,7 +226,7 @@ class Pipeline:
         self, frame: np.ndarray, detections: list[Detection], confirmed: Mapping[str, int],
         risen: set[str], ts: datetime,
     ) -> None:
-        img = annotate(frame, detections, self.names, self._threshold)
+        img = annotate(frame, detections, self.names, self._threshold, self._pest_thresholds)
         for species in sorted(risen):
             seen = [d.confidence for d in detections if d.species == species and d.confidence >= self._threshold]
             if not seen:
