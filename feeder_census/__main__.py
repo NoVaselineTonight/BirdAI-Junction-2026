@@ -26,6 +26,13 @@ def _roi(text: str) -> tuple[float, float, float, float]:
     return x, y, w, h
 
 
+def _positive(text: str) -> float:
+    value = float(text)
+    if value <= 0:
+        raise argparse.ArgumentTypeError("must be above 0")
+    return value
+
+
 def _parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="python -m feeder_census", description=__doc__)
     p.add_argument("--videos", nargs="+", required=True, type=Path, help="video files or folders")
@@ -34,6 +41,8 @@ def _parser() -> argparse.ArgumentParser:
     p.add_argument("--port", type=int, default=Settings.port)
     p.add_argument("--fast", action="store_true", help="play unpaced, to fill the table before a demo")
     p.add_argument("--no-web", action="store_true", help="print a line per detection instead of serving the page")
+    p.add_argument("--detect-every-s", type=_positive, default=Settings.detect_every_s,
+                   help="footage seconds between detections (default: %(default)s)")
     p.add_argument("--roi", type=_roi, default=None, help="x,y,w,h as fractions of the frame")
     p.add_argument("--script", type=Path, default=None, help="script file for --detector scripted")
     p.add_argument("--models-dir", type=Path, default=Path("models"))
@@ -75,7 +84,7 @@ def main(argv: list[str] | None = None) -> int:
         return 1
     args.db.parent.mkdir(parents=True, exist_ok=True)
     store = Store(args.db, detector.species)
-    settings = Settings(roi=args.roi, port=args.port, evidence_dir=args.db.parent / "evidence")
+    settings = Settings(detect_every_s=args.detect_every_s, roi=args.roi, port=args.port, evidence_dir=args.db.parent / "evidence")
     pipeline = Pipeline(
         camera, detector, store, settings, names, inline=args.fast, on_result=_print_line if args.no_web else None
     )
