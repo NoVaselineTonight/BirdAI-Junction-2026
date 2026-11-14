@@ -96,23 +96,34 @@ main { padding: var(--gap); display: grid; gap: calc(var(--gap) * 1.6); }
   border-top: 4px solid var(--ink);
   padding: 1rem 1.2rem 1.1rem;
   display: grid;
-  gap: 0.75rem;
+  gap: 0.5rem;
 }
-.hour-span { font-weight: 400; color: var(--ink-2); }
 .rule-line { font-size: 1.08rem; font-weight: 550; }
 
+/* Tally: "Most at once" is the census number; visits sit apart, small and muted */
 .tally { width: 100%; border-collapse: collapse; }
-.tally th {
-  text-align: left; font-weight: 500; font-size: 0.92rem; color: var(--ink-2);
-  padding: 0 0 0.3rem; border-bottom: 1px solid var(--rule);
+.tally thead th {
+  text-align: left; font-weight: 500; font-size: 0.9rem; color: var(--ink-2); line-height: 1.15;
+  padding: 0 0 0.3rem; border-bottom: 1px solid var(--rule); vertical-align: bottom;
 }
-.tally td { padding: 0.45rem 0; border-bottom: 1px solid var(--rule-soft); vertical-align: baseline; }
+.tally thead th.num { text-align: right; padding-left: 0.6rem; white-space: nowrap; }
+.tally tbody th { text-align: left; font-weight: 400; padding: 0.15rem 0; }
+.tally th, .tally td { border-bottom: 1px solid var(--rule-soft); vertical-align: baseline; }
 .tally .num, .grid .num { text-align: right; }
-.tally td.num { font-size: 1.7rem; font-weight: 500; color: var(--ink-2); padding-left: 0.8rem; }
-.tally td.max { font-size: 2.6rem; font-weight: 700; color: var(--ink); line-height: 1; }
+.tally td.num { padding-left: 0.6rem; white-space: nowrap; }
+.tally td.in-frame { font-size: 1.45rem; font-weight: 500; color: var(--ink-2); }
+.tally .max { padding-right: 0.7rem; }
+.tally td.max { font-size: 2.1rem; font-weight: 700; color: var(--ink); line-height: 1.05; }
+.tally .visits { border-left: 1px dotted var(--rule); }
+.tally thead th.visits { padding-left: 0.7rem; }
+.tally td.visits { font-size: 1.1rem; font-weight: 400; color: var(--ink-2); padding-left: 0.7rem; }
+.tally .fi { display: inline; margin-left: 0.15rem; font-size: 0.92rem; }
 .name { font-size: 1.15rem; font-weight: 600; }
 .fi { display: block; font-weight: 400; color: var(--ink-2); font-size: 0.98rem; }
 
+.unseen { color: var(--ink-2); }
+.unseen .lead { font-weight: 600; }
+.visits-note { color: var(--ink-2); font-size: 0.95rem; }
 .unidentified { color: var(--ink-2); }
 .facts { display: grid; gap: 0.25rem; }
 .facts div { display: flex; justify-content: space-between; gap: 1rem; border-bottom: 1px dotted var(--rule); padding-bottom: 0.2rem; }

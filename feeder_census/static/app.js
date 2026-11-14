@@ -71,15 +71,14 @@ function renderLive() {
   const t = parseSim(live.sim_time);
   $("clock-day").textContent = `${t.weekday} ${t.da} ${MONTHS[t.mo - 1]} ${t.y}`;
   $("clock-time").textContent = `${pad(t.h)}:${pad(t.mi)}`;
-  $("hour-span").textContent = `${pad(t.h)}–${pad(t.h + 1)}`;
+  $("sheet-day").textContent = `${t.da} ${MONTHS[t.mo - 1]}`;
   $("scale-sim").textContent = spanText(live.time_scale);
   $("model-name").textContent = live.detector;
   if (!modelCard || !modelCard.name) $("card-name").textContent = live.detector;
   $("model-ms").textContent = msText(live.detect_ms);
   $("card-ms").textContent = `${msText(live.detect_ms)} per frame`;
-  $("unidentified").textContent = live.unidentified
-    ? `${live.unidentified} more in frame the model could not name surely; not counted.`
-    : "";
+  $("unidentified").textContent = `Unidentified in frame: ${live.unidentified}`;
+  $("unidentified").hidden = !live.unidentified;
 
   const stopped = $("stopped");
   if (live.error) {
@@ -90,18 +89,35 @@ function renderLive() {
   }
 
   if (!tables) return;
-  const hourRow = tables.hours.find((r) => r.key === pad(t.h));
-  const body = $("tally");
-  body.replaceChildren(...tables.species.map((sp) => {
-    const now = live.now[sp.key] ?? 0;
-    // the tables poll every 5 s; the confirmed count is already part of this hour's maximum
-    const confirmed = live.confirmed[sp.key] ?? 0;
-    const max = hourRow ? Math.max(hourRow.counts[sp.key] ?? 0, confirmed) : confirmed || null;
-    return el("tr", {},
-      el("td", {}, ...names(sp)),
-      el("td", { class: "num" }, String(now)),
-      el("td", { class: "num max" }, max === null ? "" : String(max)));
-  }));
+  renderTally(t);
+}
+
+// One row per species seen today or in frame now; the rest share one line, so eight species still fit.
+function renderTally(t) {
+  const today = `${t.y}-${pad(t.mo)}-${pad(t.da)}`;
+  const maxOf = (sp) => live.day_max[sp.key] ?? 0;
+  const nowOf = (sp) => live.now[sp.key] ?? 0;
+  const shown = tables.nameable.filter((sp) => maxOf(sp) > 0 || nowOf(sp) > 0);
+  // "watched for" = the species the tables give a column (core, or seen this season), as there a zero is stated too
+  const unseen = tables.species.filter((sp) => !shown.some((x) => x.key === sp.key));
+  // live.sim_time only moves with recorded detections, so a newer day than the tables' was watched
+  const watched = shown.length > 0 || tables.day !== today || tables.hours.length > 0;
+
+  $("tally").replaceChildren(...shown.map((sp) => el("tr", {},
+    el("th", { scope: "row" }, el("span", { class: "name" }, sp.english), " ", el("span", { class: "fi" }, sp.finnish)),
+    el("td", { class: "num in-frame" }, String(nowOf(sp))),
+    el("td", { class: "num max" }, String(maxOf(sp))),
+    el("td", { class: "num visits" }, String(live.visits_today[sp.key] ?? 0)))));
+  $("tally-table").hidden = shown.length === 0;
+
+  const line = $("unseen");
+  if (!watched) {
+    line.textContent = "Not watched yet today.";
+  } else {
+    line.replaceChildren(el("span", { class: "lead" }, "Watched for, none today:"), " ",
+      unseen.map(fullName).join(", "));
+  }
+  line.hidden = watched && unseen.length === 0;
 }
 
 async function pollLive() {

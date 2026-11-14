@@ -25,6 +25,9 @@ CREATE TABLE IF NOT EXISTS evidence (
     day TEXT NOT NULL, species TEXT NOT NULL, count INTEGER NOT NULL,
     confidence REAL NOT NULL, ts TEXT NOT NULL, image TEXT NOT NULL,
     PRIMARY KEY (day, species));
+CREATE TABLE IF NOT EXISTS visits (
+    day TEXT NOT NULL, hour INTEGER NOT NULL, species TEXT NOT NULL,
+    n INTEGER NOT NULL, PRIMARY KEY (day, hour, species));
 """
 
 
@@ -55,6 +58,7 @@ class Store:
 
     One connection is shared between threads and every access holds a lock.
     An hour counts as watched exactly when it has an effort row.
+    Visits (arrivals at the feeder) are kept apart and never enter the census.
     """
 
     def __init__(self, path: Path | str, species: Sequence[str]):
@@ -79,7 +83,8 @@ class Store:
                 f"This database holds counts for {json.loads(row[0])}, not {list(self.species)}. "
                 "Pass another --db path for a different species list.")
 
-    def record(self, ts: datetime, counts: Mapping[str, int], watched_s: float) -> set[str]:
+    def record(self, ts: datetime, counts: Mapping[str, int], watched_s: float,
+               arrivals: Mapping[str, int] | None = None) -> set[str]:
         day, hour = ts.date().isoformat(), ts.hour
         risen: set[str] = set()
         with self._lock, self._db:
@@ -99,6 +104,12 @@ class Store:
                     (day, hour, sp, n))
                 if n > 0 and n > before:
                     risen.add(sp)
+                came = int((arrivals or {}).get(sp, 0))
+                if came > 0:
+                    self._db.execute(
+                        "INSERT INTO visits VALUES (?, ?, ?, ?) "
+                        "ON CONFLICT (day, hour, species) DO UPDATE SET n = n + excluded.n",
+                        (day, hour, sp, came))
         return risen
 
     def set_evidence(self, ts: datetime, species: str, count: int,
@@ -129,6 +140,17 @@ class Store:
                 per_hour[hour][sp] = n
         return [CountRow(f"{h:02d}", f"{h:02d}–{h + 1:02d}", s / 3600, per_hour[h])
                 for h, s in watched]
+
+    def visits(self, day: date) -> dict[str, int]:
+        """Arrivals per species on `day`. A count of arrivals, not of birds."""
+        with self._lock:
+            rows = self._db.execute(
+                "SELECT species, SUM(n) FROM visits WHERE day = ? GROUP BY species", (day.isoformat(),)).fetchall()
+        out = self._zeros()
+        for sp, n in rows:
+            if sp in out:
+                out[sp] = n
+        return out
 
     def _day_rows(self, start: date | None = None, end: date | None = None) -> list[tuple[date, float, dict[str, int]]]:
         """Watched days in time order: (day, seconds watched, largest count per species)."""

@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Feeder Census</title>
-<link rel="stylesheet" href="/static/style.css">
+<link rel="stylesheet" href="/static/style.css?v=10">
 </head>
 <body>
 <header class="masthead">
@@ -32,13 +32,20 @@
     </figure>
 
     <div class="sheet">
-      <h2>This hour <span class="hour-span" id="hour-span"></span></h2>
+      <h2>Today <span class="sub" id="sheet-day"></span></h2>
       <p class="rule-line">Largest number seen at once. Only surely identified birds are counted.</p>
-      <table class="tally">
-        <thead><tr><th scope="col">Species</th><th scope="col" class="num">In frame now</th><th scope="col" class="num">Hour max</th></tr></thead>
+      <table class="tally" id="tally-table" hidden>
+        <thead><tr>
+          <th scope="col">Species</th>
+          <th scope="col" class="num">In frame now</th>
+          <th scope="col" class="num max">Most at once</th>
+          <th scope="col" class="num visits">Visits</th>
+        </tr></thead>
         <tbody id="tally"></tbody>
       </table>
-      <p class="unidentified" id="unidentified"></p>
+      <p class="unseen" id="unseen">Not watched yet today.</p>
+      <p class="unidentified" id="unidentified" hidden></p>
+      <p class="visits-note">Visits are arrivals at the feeder, not individual birds. The camera cannot tell one bird from another.</p>
       <dl class="facts">
         <div><dt>Hours watched today</dt><dd id="watched-today">—</dd></div>
         <div><dt>Model</dt><dd><span id="model-name">—</span>, <span id="model-ms">—</span> per frame</dd></div>
@@ -88,6 +95,6 @@
     <table class="grid metrics" id="metrics" hidden></table>
   </section>
 </main>
-<script src="/static/app.js"></script>
+<script src="/static/app.js?v=10"></script>
 </body>
 </html>

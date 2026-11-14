@@ -47,6 +47,7 @@ def create_app(
         return {
             "sim_time": s.sim_time.isoformat(), "detector": s.detector, "detect_ms": round(s.detect_ms, 1),
             "now": s.now, "confirmed": s.confirmed, "unidentified": s.unidentified,
+            "day_max": s.day_max, "visits_today": s.visits_today,  # visits are arrivals, not birds
             "time_scale": settings.time_scale, "recorded": True,
             "error": None if error is None else (str(error) or type(error).__name__),
         }
@@ -63,7 +64,7 @@ def create_app(
         return {
             "species": [{"key": s.key, "english": s.english, "finnish": s.finnish, "habitat": s.habitat}
                         for s in visible],
-            "nameable": [{"english": s.english, "finnish": s.finnish} for s in nameable],
+            "nameable": [{"key": s.key, "english": s.english, "finnish": s.finnish} for s in nameable],
             "day": today.isoformat(),
             "period": period.label,
             "hours": [asdict(r) for r in hours],

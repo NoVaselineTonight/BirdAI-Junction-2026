@@ -1,4 +1,5 @@
 import io
+import sqlite3
 from datetime import date, datetime
 
 import pytest
@@ -60,3 +61,33 @@ def test_csv_has_the_form_shape(s):
     out = io.StringIO(); s.export_csv(out, {"great_tit": "Great tit", "blue_tit": "Blue tit"})
     assert out.getvalue().splitlines() == [
         "Period,Hours watched,Great tit,Blue tit", "1–15 November 2026,0.1,5,2"]
+
+def test_visits_add_up_within_a_day_and_stay_out_of_the_csv(s):
+    s.record(dt(2026, 11, 3, 9, 0), {"great_tit": 1}, 120, arrivals={"great_tit": 1})
+    s.record(dt(2026, 11, 3, 9, 2), {"great_tit": 3}, 120, arrivals={"great_tit": 2, "blue_tit": 1})
+    s.record(dt(2026, 11, 3, 14, 0), {"great_tit": 1}, 120, arrivals={"great_tit": 1})
+    s.record(dt(2026, 11, 4, 9, 0), {"great_tit": 1}, 120, arrivals={"great_tit": 1})
+    assert s.visits(date(2026, 11, 3)) == {"great_tit": 4, "blue_tit": 1}
+    assert s.visits(date(2026, 11, 5)) == {"great_tit": 0, "blue_tit": 0}
+    out = io.StringIO(); s.export_csv(out, {"great_tit": "Great tit", "blue_tit": "Blue tit"})
+    assert out.getvalue().splitlines()[0] == "Period,Hours watched,Great tit,Blue tit"
+
+def test_record_without_arrivals_still_works(s):
+    s.record(dt(2026, 11, 3, 9, 0), {"great_tit": 2}, 120)
+    assert s.visits(date(2026, 11, 3)) == {"great_tit": 0, "blue_tit": 0}
+
+def test_arrivals_of_species_not_in_the_store_are_ignored(s):
+    s.record(dt(2026, 11, 3, 9, 0), {}, 120, arrivals={"magpie": 2, "great_tit": 1})
+    assert s.visits(date(2026, 11, 3)) == {"great_tit": 1, "blue_tit": 0}
+
+def test_database_from_before_visits_still_opens(tmp_path):
+    p = tmp_path / "c.db"
+    old = Store(p, ["great_tit"])
+    old.record(dt(2026, 11, 3, 9, 0), {"great_tit": 2}, 120)
+    db = sqlite3.connect(p)
+    db.execute("DROP TABLE visits"); db.commit(); db.close()
+    again = Store(p, ["great_tit"])
+    assert again.visits(date(2026, 11, 3)) == {"great_tit": 0}
+    again.record(dt(2026, 11, 3, 9, 2), {"great_tit": 1}, 120, arrivals={"great_tit": 1})
+    assert again.visits(date(2026, 11, 3)) == {"great_tit": 1}
+    assert again.periods()[0].counts == {"great_tit": 2} and again.total_watched_s() == 240

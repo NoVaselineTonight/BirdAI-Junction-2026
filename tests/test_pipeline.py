@@ -106,6 +106,7 @@ def test_live_state_before_the_first_frame_is_empty(tmp_path, make_video):
     state = p.live()
     assert state.jpeg == b"" and state.unidentified == 0 and state.detector == "scripted"
     assert state.now == state.confirmed == {"great_tit": 0, "blue_tit": 0}
+    assert state.visits_today == state.day_max == {"great_tit": 0, "blue_tit": 0}
     assert state.sim_time == datetime(2026, 11, 1, 8, 0)
 
 
@@ -127,3 +128,38 @@ def test_threaded_pipeline_detects_on_its_worker_and_stops_cleanly(tmp_path, mak
     thread.join(timeout=2)
     assert not thread.is_alive() and p.detector.calls >= 2
     assert p.live().now["great_tit"] == 2
+
+
+def test_visits_count_arrivals_not_birds_in_frame(tmp_path, make_video):
+    p, store = build(tmp_path, make_video, [[GT], [GT], [GT, GT], [GT, GT], [], [], [GT], [GT]])
+    # confirmed great_tit per detection: 0, 1, 1, 2, 0, 0, 0, 1  -> arrivals 1 + 1 + 1
+    run_detections(p, 8)
+    assert store.visits(date(2026, 11, 1))["great_tit"] == 3
+    assert p.live().visits_today["great_tit"] == 3 and p.live().day_max["great_tit"] == 2
+
+
+def test_a_bird_that_stays_is_one_visit(tmp_path, make_video):
+    p, store = build(tmp_path, make_video, [[GT]])
+    run_detections(p, 10)
+    assert store.visits(date(2026, 11, 1))["great_tit"] == 1
+
+
+def test_restart_counts_sitting_birds_once_more_and_keeps_earlier_visits(tmp_path, make_video):
+    p, store = build(tmp_path, make_video, [[GT]])
+    run_detections(p, 3)
+    p2, store2 = build(tmp_path, make_video, [[GT]])
+    before = p2.live()   # earlier numbers show before the first detection of this run
+    assert before.visits_today == {"great_tit": 1, "blue_tit": 0} and before.day_max["great_tit"] == 1
+    run_detections(p2, 3)
+    assert store2.visits(date(2026, 11, 1))["great_tit"] == 2
+
+
+def test_a_new_day_starts_with_no_visits_and_counts_a_sitting_bird_again(tmp_path, make_video):
+    # 2 h of simulated time per detection: detections 1-3 fall on 1 Nov, 4-6 on 2 Nov
+    p, store = build(tmp_path, make_video, [[GT]], time_scale=3600)
+    run_detections(p, 4)
+    assert p.live().visits_today == p.live().day_max == {"great_tit": 0, "blue_tit": 0}
+    run_detections(p, 6)
+    assert store.visits(date(2026, 11, 1))["great_tit"] == 1
+    assert store.visits(date(2026, 11, 2))["great_tit"] == 1
+    assert p.live().visits_today["great_tit"] == 1 and p.live().day_max["great_tit"] == 1

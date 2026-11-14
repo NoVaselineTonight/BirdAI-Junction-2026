@@ -68,6 +68,26 @@ def test_live_state_has_the_fields_the_page_needs(client):
     assert j["error"] is None and j["detector"] == "scripted"
 
 
+def test_live_state_carries_visits_and_day_maximum(client):
+    j = client.get("/api/live").json()
+    assert j["visits_today"]["great_tit"] >= 1 and j["day_max"]["great_tit"] == 2
+    assert set(j["visits_today"]) == set(j["now"])
+    assert set(j["day_max"]) == set(j["now"])
+
+
+def test_page_says_what_a_visit_is(client):
+    assert "Visits are arrivals at the feeder, not individual birds. The camera cannot tell one bird from another." in client.get("/").text
+
+
+def test_visits_stay_out_of_the_census_csv(client):
+    assert "visit" not in client.get("/export/census.csv").text.lower()
+
+
+def test_tables_name_every_species_the_model_can_name_with_its_key(client):
+    nameable = client.get("/api/tables").json()["nameable"]
+    assert nameable[0] == {"key": "great_tit", "english": "Great tit", "finnish": "Talitiainen"}
+
+
 def test_tables_match_the_store(client, store):
     j = client.get("/api/tables").json()
     assert j["periods"][0]["label"] == "1–15 November 2026"
