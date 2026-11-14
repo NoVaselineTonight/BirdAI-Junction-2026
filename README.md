@@ -133,11 +133,11 @@ The shipped student, species with at least 20 held-out boxes (every other specie
 | magpie | 0.79 | 0.63 | 103 |
 | bullfinch | 0.83 | 0.45 | 22 |
 
-The held-out day has no squirrel, so squirrel accuracy is only known from validation footage (training days), where the 960 px student reached precision 0.95 and recall 0.85. On the held-out day the same student named some birds as red squirrel (precision 0.00 for that species, from `models/eval.json`), so a false squirrel alarm is possible.
+The held-out day has no squirrel, so squirrel accuracy is only known from validation footage (training days), where the 960 px student reached precision 0.95 and recall 0.85. On the 899 held-out frames the same student named a squirrel once (confidence 0.64; it is a blurred brown bird in flight). The latch closes only after two analysed photos in a row show a squirrel or rat, so that single frame would not have closed it.
 
 ## What the student was trained on
 
-- **Feeder footage.** One public feeder camera stream, "Talvilintulive" (Haukipudas, Finland), recorded. It belongs to its uploader and is not in this repository. The shipped model was trained on 16 days of that stream: other days from October and November 2026 and two days from earlier winters. It also saw two videos of other (forest) feeders.
+- **Feeder footage.** One public feeder camera stream, "Talvilintulive" (Haukipudas, Finland), recorded. It belongs to its uploader and is not in this repository. The shipped model was trained on 15 days of that stream, all from October and November 2026 (5 and 22 October; 29 and 31 October; 1, 2, 3, 4, 6, 7, 8, 9, 10, 11 and 13 November), plus two videos of other (forest) feeders. No earlier-winter days are in this model.
 - **Squirrels.** 400 Creative Commons photos by 273 iNaturalist observers (the attribution list is kept with the photos, outside this repository), frames of one squirrel documentary video, and squirrel cut-outs pasted into feeder frames. A real red squirrel visits this feeder. The minutes of its first visit on 22 October 2026 were kept out of training and are in the demo reel.
 - **Training only, never shown.** The documentary and the two forest-feeder videos are used for training only and are never shown in the demo.
 - **A worse camera.** One in four training frames also has a degraded copy (smaller, blurred, noisy, re-compressed), so the model copes with a worse camera.
