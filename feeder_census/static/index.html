@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Feeder Census</title>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<header class="masthead">
+  <h1>Feeder Census</h1>
+  <p class="where">Winter feeder · counted by the camera</p>
+  <p class="clock" aria-live="off"><span id="clock-day">—</span> <strong id="clock-time">--:--</strong></p>
+</header>
+
+<div class="stopped" id="stopped" role="alert" hidden>
+  <strong>The counter has stopped.</strong> <span id="stopped-msg"></span>
+  The tables show what was recorded before it stopped.
+</div>
+
+<main>
+  <section class="now" aria-label="Live">
+    <figure class="feed">
+      <div class="window">
+        <img id="feed" alt="Live view of the feeder with a box around each bird the model found">
+        <p class="waiting" id="waiting">Waiting for the first frame…</p>
+      </div>
+      <figcaption class="honesty">
+        <p>Recorded feeder footage, standing in for the camera.</p>
+        <p id="demo-clock">Demo clock: <span id="scale-footage">1 second</span> of footage = <span id="scale-sim">1 minute</span>.</p>
+      </figcaption>
+    </figure>
+
+    <div class="sheet">
+      <h2>This hour <span class="hour-span" id="hour-span"></span></h2>
+      <p class="rule-line">Largest number seen at once. Only surely identified birds are counted.</p>
+      <table class="tally">
+        <thead><tr><th scope="col">Species</th><th scope="col" class="num">In frame now</th><th scope="col" class="num">Hour max</th></tr></thead>
+        <tbody id="tally"></tbody>
+      </table>
+      <p class="unidentified" id="unidentified"></p>
+      <dl class="facts">
+        <div><dt>Hours watched today</dt><dd id="watched-today">—</dd></div>
+        <div><dt>Model</dt><dd><span id="model-name">—</span>, <span id="model-ms">—</span> per frame</dd></div>
+      </dl>
+      <p class="can-name" id="can-name">This model can name: …</p>
+      <p class="accuracy" id="accuracy-short">Accuracy not yet measured on this footage.</p>
+    </div>
+  </section>
+
+  <section class="ledger" aria-label="Counts">
+    <div class="block">
+      <h2>Today by hour <span class="sub" id="today-label"></span></h2>
+      <div class="scroll"><table class="grid" id="hours"></table></div>
+    </div>
+    <div class="block">
+      <h2>This half-month by day <span class="sub" id="period-label"></span></h2>
+      <div class="scroll"><table class="grid" id="days"></table></div>
+    </div>
+    <div class="block">
+      <h2>Half-month periods</h2>
+      <div class="scroll"><table class="grid" id="periods"></table></div>
+      <a class="export" href="/export/census.csv" download="feeder-census.csv">Download the census as CSV</a>
+    </div>
+    <div class="block">
+      <h2>Habitat mix, this half-month</h2>
+      <p class="caveat">Species mix by habitat. Our own grouping, not yet checked against Luomus. One feeder is one data point.</p>
+      <ul class="habitats" id="habitats"></ul>
+    </div>
+  </section>
+
+  <section class="evidence" aria-label="Evidence">
+    <h2>Evidence: the frame behind each day's highest count</h2>
+    <p class="empty" id="evidence-empty">No photos yet. One is kept each time a day's count for a species rises.</p>
+    <ul class="photos" id="photos"></ul>
+  </section>
+
+  <section class="model" aria-label="Model">
+    <h2>The model</h2>
+    <dl class="facts">
+      <div><dt>Detector</dt><dd id="card-name">—</dd></div>
+      <div><dt>On this machine</dt><dd id="card-ms">—</dd></div>
+      <div id="card-board-row" hidden><dt>On the board</dt><dd id="card-board"></dd></div>
+      <div id="card-exact-row" hidden><dt>Counts exactly right</dt><dd id="card-exact"></dd></div>
+    </dl>
+    <p class="accuracy" id="accuracy-long">Accuracy not yet measured on this footage.</p>
+    <table class="grid metrics" id="metrics" hidden></table>
+  </section>
+</main>
+<script src="/static/app.js"></script>
+</body>
+</html>

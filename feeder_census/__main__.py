@@ -5,12 +5,15 @@ import sys
 import threading
 from pathlib import Path
 
+import uvicorn
+
 from feeder_census.camera import SimulatedCamera
 from feeder_census.config import Settings
 from feeder_census.detectors import KINDS, build_detector
 from feeder_census.pipeline import LiveState, Pipeline
 from feeder_census.species import load_species
 from feeder_census.store import Store
+from feeder_census.web import create_app
 
 
 def _roi(text: str) -> tuple[float, float, float, float]:
@@ -44,12 +47,22 @@ def _print_line(state: LiveState) -> None:
     print(f"{state.sim_time:%Y-%m-%d %H:%M:%S}  now={seen}  confirmed={confirmed}  detect_ms={state.detect_ms:.1f}", flush=True)
 
 
+def _serve(app, port: int, stop: threading.Event) -> None:
+    """Serve until Ctrl-C or SIGTERM. Open video streams end first, or the shutdown would wait on them."""
+
+    class Server(uvicorn.Server):
+        def handle_exit(self, sig, frame) -> None:
+            stop.set()
+            app.state.stopping.set()
+            super().handle_exit(sig, frame)
+
+    print(f"Feeder Census: http://localhost:{port}", flush=True)
+    config = uvicorn.Config(app, host="0.0.0.0", port=port, access_log=False, timeout_graceful_shutdown=5)
+    Server(config).run()
+
+
 def main(argv: list[str] | None = None) -> int:
     args = _parser().parse_args(argv)
-    if not args.no_web:
-        print("the web page is not built yet; run with --no-web", file=sys.stderr)
-        return 2
-
     species = load_species()
     names = {s.key: s.english for s in species}
     try:
@@ -63,7 +76,9 @@ def main(argv: list[str] | None = None) -> int:
     args.db.parent.mkdir(parents=True, exist_ok=True)
     store = Store(args.db, detector.species)
     settings = Settings(roi=args.roi, port=args.port, evidence_dir=args.db.parent / "evidence")
-    pipeline = Pipeline(camera, detector, store, settings, names, inline=args.fast, on_result=_print_line)
+    pipeline = Pipeline(
+        camera, detector, store, settings, names, inline=args.fast, on_result=_print_line if args.no_web else None
+    )
 
     stop = threading.Event()
     failure: list[BaseException] = []
@@ -73,18 +88,24 @@ def main(argv: list[str] | None = None) -> int:
             pipeline.run(stop)
         except Exception as exc:
             failure.append(exc)
+            if pipeline.error is None:
+                pipeline.error = exc  # the page shows it instead of looking alive
 
     # `kill` (SIGTERM) stops the run the same clean way as Ctrl-C
     signal.signal(signal.SIGTERM, lambda signum, frame: stop.set())
     thread = threading.Thread(target=work, name="pipeline")
     thread.start()
     try:
-        while thread.is_alive():
-            thread.join(0.2)
+        if args.no_web:
+            while thread.is_alive():
+                thread.join(0.2)
+        else:
+            _serve(create_app(pipeline, store, species, settings, model_card=None), settings.port, stop)
     except KeyboardInterrupt:
         pass
-    stop.set()
-    thread.join()
+    finally:  # also when uvicorn exits early, e.g. the port is taken
+        stop.set()
+        thread.join()
     if failure:
         print(f"error: {failure[0]}", file=sys.stderr)
         return 1
