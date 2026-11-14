@@ -18,11 +18,20 @@ The board must be connected over USB (`adb devices` lists exactly one).
 
 ```
 board/deploy.sh --videos data/videos/demo   # prepares the videos, pushes the code and models, installs the Python packages
+board/deploy.sh --videos data/videos/demo --dry-run   # builds and checks the board's free space, pushes nothing
 board/run.sh                                # starts the demo on the board and forwards its page to http://localhost:8088
+board/run.sh --fresh                        # the same, after deleting the board's counts first (see below)
 board/run.sh --stop                         # stops it and removes the forward
 ```
 
-Everything lives in `/home/arduino/feeder-census` on the board (`feeder_census/`, `models/`, `videos/`, `data/`, `.venv/`, `run.log`). `deploy.sh` is safe to run again; it keeps `.venv/` and `data/`. The board plays a 720p, 15 fps copy of each video (`tools/prepare_video.py`), because decoding 1080p30 in software wastes its CPU.
+`deploy.sh` refuses to push when the board would be left with less than 1 GB free (`FEEDER_MARGIN_KB` changes the margin), and it stops a running demo before replacing its files. It is safe to run again; it keeps `.venv/` and `data/`. The board plays a 720p, 15 fps copy of each video (`tools/prepare_video.py`), because decoding 1080p30 in software wastes its CPU.
+
+Where things are on the board:
+
+- `/home/arduino/feeder-census`: the code, `models/`, `videos/`, `data/` (the census database and evidence photos), `.venv/` and `run.log`. Delete this folder to remove the demo.
+- `/root/.local/bin/` (`uv`, `uvx`, `env`, `env.fish`) and `/root/.cache/uv`: the package installer `deploy.sh` fetches (adb shell is root). Delete these too to remove everything; the installer is told not to edit any shell profile.
+
+The board remembers its counts. `data/census.db` holds the census and the demo clock, so a new `board/run.sh` continues the same days, hours and counts from where the last run stopped. For a clean start of the demo, use `board/run.sh --fresh`: it stops any run, deletes `data/census.db*` and `data/evidence` on the board (nothing else) and starts over at 08:00 on 1 November.
 
 ## Measured speed
 

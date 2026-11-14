@@ -16,11 +16,14 @@ def prepare(src: Path, dst: Path, height: int, fps: float) -> int:
     ok, frame = cap.read()
     if not ok or src_fps <= 0:
         raise ValueError(f"cannot read {src} as a video")
+    expected = round(cap.get(cv2.CAP_PROP_FRAME_COUNT) / src_fps * fps)  # 0 when the file does not say
     src_h, src_w = frame.shape[:2]
     out_h = min(height, src_h) // 2 * 2  # never enlarge; mp4v wants even sizes
     out_w = round(src_w * out_h / src_h / 2) * 2
     dst.parent.mkdir(parents=True, exist_ok=True)
     writer = cv2.VideoWriter(str(dst), cv2.VideoWriter_fourcc(*"mp4v"), fps, (out_w, out_h))
+    if not writer.isOpened():
+        raise ValueError(f"cannot write {dst}: no mp4v encoder, or the path is not writable")
     written, index = 0, 0
     while ok:
         # write this source frame as many times as output ticks fall before the next one
@@ -31,6 +34,9 @@ def prepare(src: Path, dst: Path, height: int, fps: float) -> int:
         index += 1
     writer.release()
     cap.release()
+    if written < 0.95 * expected:  # the decoder gave up part-way
+        dst.unlink(missing_ok=True)
+        raise ValueError(f"{src} stopped decoding early: wrote {written} of about {expected} frames")
     return written
 
 
@@ -43,7 +49,7 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     try:
         frames = prepare(args.src, args.dst, args.height, args.fps)
-    except ValueError as exc:
+    except (ValueError, OSError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1
     print(f"{args.dst}: {frames} frames, {frames / args.fps:.1f} s")
