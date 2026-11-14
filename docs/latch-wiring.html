@@ -311,7 +311,7 @@ td.n { font-variant-numeric: tabular-nums; color: var(--muted); width: 1.5em; }
 
 <section>
   <h2>Connection table</h2>
-  <p class="small">Servo plugs are female, so use male-to-male jumper wires from the plug to the pins. Wire colours below are the servo's own wires <span class="tag-unc" id="colour-tag">Not confirmed</span></p>
+  <p class="small">Servo plugs are female, so use male-to-male jumper wires from the plug to the pins. Wire colours below are the servo's own wires. DFRobot's own page could not be opened. A third-party page for the same DF9GMS 180° servo gives red = power, brown = ground, orange = signal. It also mentions a variant with gray and yellow wires. <strong>If your wires are gray/red/yellow: gray = ground, red = power, yellow = signal.</strong></p>
   <div class="tablewrap">
   <table>
     <thead><tr><th></th><th>From</th><th>To</th></tr></thead>
@@ -430,6 +430,7 @@ td.n { font-variant-numeric: tabular-nums; color: var(--muted); width: 1.5em; }
       <li>Move one servo at a time. <em>Note: the current sketch moves both at the same moment.</em></li>
       <li>Make sure nothing jams the flap. A stalled servo keeps pulling its biggest current.</li>
     </ul>
+    <p class="small" style="margin-top:8px">No stall-current figure for the SER0006 was found, so we cannot say how big that burst is.</p>
   </div>
   <p class="small"><strong>What the datasheet says about the 5V pin.</strong> The <span class="pin">5V</span> pin is wired straight to the board's internal 5 V line, which USB-C feeds through a diode. So with only USB-C plugged in, the pin does give out 5 V. The datasheet gives <strong>no current limit</strong> for taking power out of this pin. Its "up to 3 A" figure is for feeding power <em>into</em> the board through the pin. The board, its Wi-Fi and both servos all share whatever the USB-C supply gives, at most 3 A. Because of the diode, the pin will sit a little below 5 V <span class="tag-unc">Not confirmed how much</span></p>
 </section>
@@ -451,11 +452,13 @@ td.n { font-variant-numeric: tabular-nums; color: var(--muted); width: 1.5em; }
 <section class="unc">
   <h2>Not confirmed</h2>
   <ul id="unc-list">
-    <li><strong>Servo wire colours</strong> (brown = ground, red = +5 V, orange = signal) are the usual hobby-servo colours, not yet checked against DFRobot's SER0006 page. Check the plug: the middle wire is power.</li>
-    <li><strong>3.3 V signal is enough</strong> for the SER0006 is assumed from typical hobby servos. Not checked on DFRobot's page.</li>
+    <li><strong>Servo wire colours</strong> (brown = ground, red = +5 V, orange = signal) are confirmed by a third-party page only; DFRobot's own page could not be opened. Gray/red/yellow variant: gray = ground, red = power, yellow = signal. Check the plug: the middle wire is power.</li>
+    <li><strong>3.3 V signal is enough</strong> for the SER0006 is assumed from typical hobby servos. No source states the signal level.</li>
+    <li><strong>Servo current.</strong> Rated voltage is 4.8 V per a distributor listing. No stall-current figure was found.</li>
+    <li><strong>Which pins cannot take 5 V.</strong> The official pinout sheet's warning names only <span class="pin">A0</span> and <span class="pin">A1</span>. The datasheet text is stricter: also <span class="pin">D3</span>, and <span class="pin">A0</span>–<span class="pin">A5</span> when used as analog pins. This page keeps the stricter rule.</li>
     <li><strong>Printed labels on the board</strong> were not checked. Pin order comes from the official UNO Q datasheet pinout. If your board's printing disagrees, trust the board and ask.</li>
     <li><strong>How much current the 5V pin can give</strong> when the board runs on USB-C. The datasheet does not say.</li>
-    <li><strong>The 5V pin's exact voltage</strong> on USB-C. It sits a bit below 5 V because of a diode. The SER0006 is rated 4.8–6 V, so it may run slightly under its rating.</li>
+    <li><strong>The 5V pin's exact voltage</strong> on USB-C. It sits a bit below 5 V because of a diode. The SER0006 is rated 4.8 V (distributor listing), so it may run slightly under its rating.</li>
     <li><strong>Capacitor size and voltage</strong> (470–1000 µF, 10 V or more) and the claim that reversed servo power kills a servo are common practice, not from a source checked here.</li>
   </ul>
   <p class="small" style="margin-top:12px">If your other board has rows of three-pin servo headers or screw terminals, tell us what is printed on it before connecting it.</p>
