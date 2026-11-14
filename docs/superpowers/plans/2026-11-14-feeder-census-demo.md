@@ -8,7 +8,7 @@
 
 **Tech Stack:** Python 3.12 (laptop) and 3.13 (board), uv, numpy, opencv-python-headless, onnxruntime, ai-edge-litert, FastAPI, uvicorn, SQLite, pytest. For labelling and training only, on a rented Verda GPU machine: ultralytics, pybioclip, torch. Modal is the backup for training.
 
-**Spec:** `feeder-census-sketch.md` (what the device does, demo plan, honesty rules), `arduino-uno-q-spec-sheet.md` (board limits) and `compute-plan-verda-modal.md` (where labelling and training run). Read all three. The repo is `NoVaselineTonight/challenge-3` (to be renamed BirdAI); every path below is relative to its root.
+**Spec:** `feeder-census-sketch.md` (what the device does, demo plan, honesty rules), `arduino-uno-q-spec-sheet.md` (board limits) and `compute-plan-verda-modal.md` (where labelling and training run). Read all three. The repo is `NoVaselineTonight/BirdAI-Junction-2026` (formerly `challenge-3`); every path below is relative to its root.
 
 ## Global Constraints
 
