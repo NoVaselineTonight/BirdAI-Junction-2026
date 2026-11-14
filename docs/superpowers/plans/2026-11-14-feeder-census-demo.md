@@ -681,7 +681,7 @@ Large models label the footage so that people only check. A strong generic detec
 - Test: `tests/test_labelling.py`
 
 **Interfaces:**
-- Consumes: `Species`, `load_species` (Task 1); `InatClassifier` (Task 3).
+- Consumes: `Species`, `load_species` (Task 1); `InatClassifier` (Task 3). Only `autolabel.main()` uses `InatClassifier`, so this task's tools and tests can be written straight after Task 1; the labelling run in Step 6 needs Task 3 finished.
 - Footage layout (from the team): `data/videos/train/` holds footage from at least two different feeders; `data/videos/demo/` holds the held-out demo footage from a feeder that is not in `train/`.
 - Produces:
   - `tools/remote.sh push | run "<command>" | pull` — reads `VERDA_HOST` (for example `root@203.0.113.7`). `push` rsyncs the repo and `data/videos/` to `~/birdai`; `run` executes a command there inside `uv run --group train`; `pull` brings back `data/labels/`, `data/review/`, `data/dataset/classes.json` and `models/student/`.
@@ -964,14 +964,16 @@ Write the measured accuracy, the ms per frame and the parts cost line into `READ
 
 ## Order and timing
 
-Two tracks run in parallel. Track A needs nothing from outside; Track B needs footage and the Verda machine.
+Task 1 comes first and takes about half an hour. After it, two tracks run in parallel from the start, each with its own worker in the same worktree (both under the agent name `birdai-plan`; they touch different files). Track A needs nothing from outside. Track B waits only on footage and the Verda machine, never on Track A's page or board work.
 
 | Track | Tasks | Needs | Target (14 Nov) |
 |---|---|---|---|
-| A: runtime | 1 → 2 → 3 → 4 → 5 → 6 | board on USB; one demo clip for the visual checks | Milestone A 16:30, Milestone B 18:00 |
-| B: model | 7 → 8 → 9 (after Task 3) | footage by 15:00, `VERDA_HOST`, 15 minutes of a person's label checking | labels 17:30, models 19:00, Milestone C 21:00 |
+| A: runtime | 1 → 3 → 2 → 4 → 5 → 6 | board on USB; one demo clip for the visual checks | Milestone A 16:30, Milestone B 18:00 |
+| B: model | 7 → 8 → 9 | `VERDA_HOST` by 13:30, footage by 14:00, 15 minutes of a person's label checking | tools and GPU machine ready 14:00, labels 15:00, first student 16:00, second round until 18:00, Milestone C 20:00 |
 
-21:00–23:00 is rehearsal, the backup recording and slack. If Track B misses its 20:00 gate (no qualifying student), the demo ships the pretrained two-stage detector on the board and the pitch says the trained model is the next step.
+Track A does Task 3 before Task 2 so that `InatClassifier` exists before Track B's first labelling run. While footage is still being collected, Track B writes the Task 7 and Task 8 tools and prepares the Verda machine (Task 7 Step 5), including downloading the teacher weights. Starting early buys one full extra loop of "look at mistakes, fix labels, retrain" (`compute-plan-verda-modal.md`). Task 9's accuracy tables can be produced as soon as a student exists; only its board timings wait for Task 6.
+
+20:00–22:00 is rehearsal and the backup recording, and the rest is slack. If no student qualifies by 19:00, the demo ships the pretrained two-stage detector on the board and the pitch says the trained model is the next step.
 
 ## Not in this plan
 

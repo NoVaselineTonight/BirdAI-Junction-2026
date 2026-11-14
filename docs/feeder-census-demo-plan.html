@@ -100,7 +100,7 @@ ul.plain { margin: 0; padding-left: 1.1rem; display: flex; flex-direction: colum
   <div class="stones">
     <div class="stone"><span class="when">Milestone A · 16:30</span><h3>It works on the laptop</h3><p>Live feed with boxes and species names, counts per hour, day and half-month, hours watched, evidence photos, CSV export. Uses ready-made models, so it does not wait for training.</p></div>
     <div class="stone"><span class="when">Milestone B · 18:00</span><h3>It runs on the UNO Q</h3><p>The board does detection, counting and serves the page. The laptop is only its screen, connected over the USB cable.</p></div>
-    <div class="stone"><span class="when">Milestone C · 21:00</span><h3>Our own model is on the board</h3><p>A small detector trained today on Finnish feeder footage, with its accuracy measured on footage it never saw and shown on the page.</p></div>
+    <div class="stone"><span class="when">Milestone C · 20:00</span><h3>Our own model is on the board</h3><p>A small detector trained today on Finnish feeder footage, with its accuracy measured on footage it never saw and shown on the page.</p></div>
   </div>
   <p>Each milestone is a demo you could show if everything after it failed.</p>
 </section>
@@ -132,7 +132,7 @@ ul.plain { margin: 0; padding-left: 1.1rem; display: flex; flex-direction: colum
   <div class="answer">
     <p><b>Yes, and the plan does exactly that.</b> Three large models label your footage, and a model about 10 MB in size learns from those labels. It only has to know the handful of species at your feeders, which is why something that small can be accurate.</p>
     <p><b>One correction.</b> Memory is not what limits the board: it has about 1.3 GB free and the model needs a few tens of MB. Speed is the limit. The board has no AI chip, so one frame takes roughly 0.3 to 0.8 seconds. Counting needs a frame every couple of seconds, so that is enough.</p>
-    <p><b>Why keep a ready-made model too.</b> Two small open models already exist that find birds and name all eight of the sketch's species without training. The demo is built on them first. At 20:00 both are measured on unseen footage and the better one ships. If training goes wrong, you still have a demo.</p>
+    <p><b>Why keep a ready-made model too.</b> Two small open models already exist that find birds and name all eight of the sketch's species without training. The demo is built on them first. Around 18:30 both are measured on unseen footage and the better one ships. If training goes wrong, you still have a demo.</p>
   </div>
 </section>
 
@@ -145,47 +145,48 @@ ul.plain { margin: 0; padding-left: 1.1rem; display: flex; flex-direction: colum
 
       <div class="lane">Demo software</div>
       <div class="fill" style="grid-column: 2 / 3"></div>
-      <div class="bar a" style="grid-column: 3 / 5">Counting</div>
-      <div class="bar a" style="grid-column: 5 / 7">Detector</div>
+      <div class="bar a" style="grid-column: 3 / 4">Core</div>
+      <div class="bar a" style="grid-column: 4 / 6">Detector</div>
+      <div class="bar a" style="grid-column: 6 / 7">Store</div>
       <div class="bar a" style="grid-column: 7 / 9">Camera, pipeline</div>
       <div class="bar a" style="grid-column: 9 / 11">Page · A</div>
       <div class="bar a" style="grid-column: 11 / 14">On the board · B</div>
       <div class="fill" style="grid-column: 14 / 26"></div>
 
       <div class="lane">Our model</div>
-      <div class="fill" style="grid-column: 2 / 7"></div>
-      <div class="bar b" style="grid-column: 7 / 10">Labelling tools</div>
-      <div class="bar b" style="grid-column: 10 / 13">Label footage</div>
-      <div class="bar b" style="grid-column: 13 / 16">Train</div>
-      <div class="bar b" style="grid-column: 16 / 18">Measure</div>
-      <div class="bar gate" style="grid-column: 18 / 20">Choose, ship · C</div>
-      <div class="fill" style="grid-column: 20 / 26"></div>
+      <div class="fill" style="grid-column: 2 / 4"></div>
+      <div class="bar b" style="grid-column: 4 / 6">Tools, GPU setup</div>
+      <div class="bar b" style="grid-column: 6 / 8">Label footage</div>
+      <div class="bar b" style="grid-column: 8 / 10">Train, round 1</div>
+      <div class="bar b" style="grid-column: 10 / 14">Fix labels, retrain</div>
+      <div class="bar b" style="grid-column: 14 / 16">Measure, choose</div>
+      <div class="bar gate" style="grid-column: 16 / 18">Ship · C</div>
+      <div class="fill" style="grid-column: 18 / 26"></div>
 
       <div class="lane">You</div>
       <div class="bar you" style="grid-column: 2 / 3">OK plan</div>
-      <div class="fill" style="grid-column: 3 / 6"></div>
-      <div class="bar you" style="grid-column: 6 / 8">Footage, Verda</div>
-      <div class="fill" style="grid-column: 8 / 12"></div>
-      <div class="bar you" style="grid-column: 12 / 13">Check</div>
-      <div class="fill" style="grid-column: 13 / 18"></div>
-      <div class="bar you" style="grid-column: 18 / 19">Decide</div>
-      <div class="fill" style="grid-column: 19 / 20"></div>
-      <div class="bar you" style="grid-column: 20 / 24">Rehearse, record backup</div>
-      <div class="fill" style="grid-column: 24 / 26"></div>
+      <div class="bar you" style="grid-column: 3 / 6">Footage, Verda</div>
+      <div class="fill" style="grid-column: 6 / 8"></div>
+      <div class="bar you" style="grid-column: 8 / 9">Check</div>
+      <div class="fill" style="grid-column: 9 / 14"></div>
+      <div class="bar you" style="grid-column: 14 / 16">Decide</div>
+      <div class="fill" style="grid-column: 16 / 18"></div>
+      <div class="bar you" style="grid-column: 18 / 22">Rehearse, record backup</div>
+      <div class="fill" style="grid-column: 22 / 26"></div>
     </div>
   </div>
-  <p>23:00 to midnight is slack. The two software rows run at the same time; the model row cannot start labelling until footage and the GPU machine exist.</p>
+  <p>Both software rows start together at 13:00, after half an hour of shared groundwork. The model row does not wait for the demo software, only for footage and the GPU machine: while you collect footage it builds the labelling and training tools and loads the teacher models onto the GPU machine. Starting early buys a second round of fixing labels and retraining. 22:00 to midnight is slack.</p>
 </section>
 
 <section>
   <h2>What I need from you</h2>
   <ul class="todo">
     <li><span class="by">now</span><div><b>Read this and say go</b><p>Also say how to run it: one session doing every task in order (faster, my recommendation), or a fresh agent per task with a reviewer after each (more thorough, slower).</p></div></li>
-    <li><span class="by">by 15:00</span><div><b>Footage</b><p>Training: video from at least two different feeders, ideally Finnish or Nordic, 10 minutes or more each, fixed camera, daylight, 720p or better, birds reasonably large in the frame. Demo: 2 to 5 lively minutes from a third feeder that is not in the training set. Put them in <code>data/videos/train/</code> and <code>data/videos/demo/</code>. Prefer Creative Commons or your own footage.</p></div></li>
-    <li><span class="by">by 15:00</span><div><b>A Verda GPU machine</b><p>Start one L40S or A100-class instance with your SSH key and send me the address, for example <code>root@1.2.3.4</code>. Expected use tonight is 2 to 3 hours, a few euros. Stop it when we are done; it bills while it runs.</p></div></li>
-    <li><span class="by">about 17:30</span><div><b>15 minutes of label checking</b><p>I prepare contact sheets of bird crops per species and do a first pass. Someone who knows the birds confirms, mainly tree sparrow against house sparrow and willow tit against the other tits.</p></div></li>
+    <li><span class="by">by 14:00</span><div><b>Footage, the earlier the better</b><p>Training: video from at least two different feeders, ideally Finnish or Nordic, 10 minutes or more each, fixed camera, daylight, 720p or better, birds reasonably large in the frame. Demo: 2 to 5 lively minutes from a third feeder that is not in the training set. Put them in <code>data/videos/train/</code> and <code>data/videos/demo/</code>. Prefer Creative Commons or your own footage.</p></div></li>
+    <li><span class="by">by 13:30</span><div><b>A Verda GPU machine</b><p>Start one L40S or A100-class instance with your SSH key and send me the address, for example <code>root@1.2.3.4</code>. Expected use tonight is 2 to 3 hours, a few euros. Stop it when we are done; it bills while it runs.</p></div></li>
+    <li><span class="by">about 15:00</span><div><b>15 minutes of label checking</b><p>I prepare contact sheets of bird crops per species and do a first pass. Someone who knows the birds confirms, mainly tree sparrow against house sparrow and willow tit against the other tits.</p></div></li>
     <li><span class="by">all day</span><div><b>The board on the USB-C data cable</b><p>Directly to the laptop, not through the dongle. It is connected now. No Wi-Fi or camera needed.</p></div></li>
-    <li><span class="by">20:00</span><div><b>Look at the measured numbers</b><p>You see a table of precision and recall per species for the trained model and the ready-made one, and which one the rule picks.</p></div></li>
+    <li><span class="by">about 18:30</span><div><b>Look at the measured numbers</b><p>You see a table of precision and recall per species for the trained model and the ready-made one, and which one the rule picks.</p></div></li>
   </ul>
 </section>
 
@@ -219,7 +220,7 @@ ul.plain { margin: 0; padding-left: 1.1rem; display: flex; flex-direction: colum
   <h2>Risks</h2>
   <div class="note"><p><b>The footage is the whole schedule.</b> The model can only learn a species it has seen about 60 times or more. Late footage, or footage with two species in it, means a model that knows two species. If nothing arrives by about 17:00, the trained model will not make midnight and the demo ships with the ready-made models.</p></div>
   <ul class="plain">
-    <li><b>Accuracy is unknown until 20:00.</b> Nobody has measured these models on Finnish feeder video. The plan measures it and shows the number. Tree sparrow against house sparrow will be the weak spot.</li>
+    <li><b>Accuracy is unknown until the first model is measured, around 16:00.</b> Nobody has measured these models on Finnish feeder video. The plan measures it and shows the number. Tree sparrow against house sparrow will be the weak spot.</li>
     <li><b>Labels come from models.</b> The accuracy number is measured against teacher labels checked by a person, not against an expert's ground truth. The page and README say that.</li>
     <li><b>Licence.</b> The student is trained with Ultralytics, which is AGPL-3.0 and claims the trained weights. Fine for a hackathon and an open repo, a problem for a closed product. The ready-made models are Apache-2.0.</li>
     <li><b>Small birds.</b> If birds are tiny in the frame, neither model will name them. Footage where the feeder fills the picture matters more than resolution.</li>
