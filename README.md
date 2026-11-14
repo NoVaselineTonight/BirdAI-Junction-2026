@@ -44,11 +44,11 @@ Two hobby servos close a latch over the feeder while a squirrel or a rat is at i
 The servos are DFRobot SER0006 (9 g, 180° position servos, 4.8–6 V). The UNO Q's microcontroller drives them with `board/latch/latch.ino`. Wiring, in words:
 
 - Servo 1's signal wire to D9, servo 2's signal wire to D10.
-- Servo power from a separate 5 V supply, not from the board's 5 V pin.
-- Join that supply's ground to a GND pin on the board.
+- Recommended: servo power from a separate 5 V supply, with that supply's ground joined to a GND pin on the board.
+- Fallback we use (no separate supply): servo power from the board's 5V and GND pins. Keep the flap light; a jammed servo can reset the board.
 - Never put 5 V on D3 or A0–A5.
 
-The open and closed angles are constants at the top of the sketch (10 and 100; the second servo is mounted mirrored). The sketch opens the latch by itself 30 seconds after the last close command, so the feeder does not stay shut when the program on the Linux side stops. The program repeats the close command at every detection while the latch should stay closed.
+The open and closed angles are constants at the top of the sketch (10 and 100; the second servo is mounted mirrored). The two servos never start at the same moment: the second moves 300 ms (`STAGGER_MS`) after the first, so their start-up currents do not add up on the board's 5V pin. The sketch opens the latch by itself 30 seconds after the last close command, so the feeder does not stay shut when the program on the Linux side stops. The program repeats the close command at every detection while the latch should stay closed.
 
 `--latch` (on `python -m feeder_census` and `board/run.sh`) picks the mode:
 
