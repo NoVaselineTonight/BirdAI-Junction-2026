@@ -1,0 +1,468 @@
+<title>Latch Wiring</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500;600&family=IBM+Plex+Sans:wght@400;600;700&display=swap">
+<style>
+/* Layout: one narrow bench-sheet column; diagrams full column width; tables and checklists stacked below. */
+:root {
+  --bg: #f3f5f4;
+  --surface: #ffffff;
+  --fg: #16201d;
+  --muted: #55625e;
+  --line: #cfd8d5;
+  --pcb: #0e6f73;          /* UNO Q board teal */
+  --pcb-ink: #e9f5f4;
+  --header: #1b1f1e;
+  --pin: #c9b06a;
+  --danger: #b3261e;
+  --danger-bg: #fbeceb;
+  --warn-bg: #fff6df;
+  --warn-line: #d9a520;
+  --ok: #1d6b45;
+  --unconf: #8a5a00;
+  --unconf-bg: #fff1cc;
+  /* real wire colours */
+  --w-sig: #f28c00;        /* orange signal */
+  --w-pwr: #d7261b;        /* red +5 V */
+  --w-gnd: #7a4719;        /* brown ground */
+  --w-jmp: #141414;        /* black jumper */
+  --w-edge: #ffffff;       /* outline so wires read on any ground */
+  --servo: #2a3a8f;
+  --servo-ink: #ffffff;
+  --supply: #3b4544;
+  --font-body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #111615; --surface: #1a201f; --fg: #e6ecea; --muted: #a2b0ac; --line: #33403d;
+    --pcb: #0b5558; --pcb-ink: #dff1f0; --header: #050606; --pin: #d8c27f;
+    --danger: #ff7a70; --danger-bg: #3a1714; --warn-bg: #33290f; --warn-line: #d9a520;
+    --ok: #6fd3a0; --unconf: #ffcf6b; --unconf-bg: #3a2e0c;
+    --w-sig: #ff9a1a; --w-pwr: #ff3b2f; --w-gnd: #8a5424; --w-jmp: #0b0b0b; --w-edge: #e9eeec;
+    --servo: #3747a8; --supply: #4a5655;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #111615; --surface: #1a201f; --fg: #e6ecea; --muted: #a2b0ac; --line: #33403d;
+  --pcb: #0b5558; --pcb-ink: #dff1f0; --header: #050606; --pin: #d8c27f;
+  --danger: #ff7a70; --danger-bg: #3a1714; --warn-bg: #33290f; --warn-line: #d9a520;
+  --ok: #6fd3a0; --unconf: #ffcf6b; --unconf-bg: #3a2e0c;
+  --w-sig: #ff9a1a; --w-pwr: #ff3b2f; --w-gnd: #8a5424; --w-jmp: #0b0b0b; --w-edge: #e9eeec;
+  --servo: #3747a8; --supply: #4a5655;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body {
+  background: var(--bg); color: var(--fg);
+  font-family: var(--font-body); font-size: 16px; line-height: 1.5;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 20px 48px;
+}
+main { max-width: 640px; margin: 0 auto; display: flex; flex-direction: column; gap: 28px; }
+h1 { font-size: 1.6rem; line-height: 1.2; margin: 0 0 6px; letter-spacing: -0.01em; text-wrap: balance; }
+h2 { font-size: 1.15rem; margin: 0 0 10px; text-wrap: balance; }
+p { margin: 0 0 10px; }
+p:last-child { margin-bottom: 0; }
+.lead { font-size: 1.05rem; }
+.lead strong { color: var(--danger); }
+code, .pin { font-family: var(--font-mono); font-weight: 600; font-size: 0.92em; }
+.small { font-size: 0.875rem; color: var(--muted); }
+.tag-unc {
+  display: inline-block; font-size: 0.72rem; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase;
+  color: var(--unconf); background: var(--unconf-bg); border: 1px solid var(--unconf);
+  border-radius: 4px; padding: 0 5px; vertical-align: 1px; white-space: nowrap;
+}
+figure { margin: 0; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 10px; }
+figure svg { display: block; width: 100%; height: auto; }
+figcaption { font-size: 0.875rem; color: var(--muted); margin-top: 8px; }
+.sw { display: inline-block; width: 0.9em; height: 0.9em; border-radius: 2px; border: 1.5px solid var(--fg); vertical-align: -1px; margin-right: 4px; }
+.sw.sig { background: var(--w-sig); } .sw.pwr { background: var(--w-pwr); } .sw.gnd { background: var(--w-gnd); } .sw.jmp { background: var(--w-jmp); }
+.tablewrap { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; font-size: 0.93rem; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; }
+th, td { text-align: left; padding: 8px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); }
+tr:last-child td { border-bottom: 0; }
+td.n { font-variant-numeric: tabular-nums; color: var(--muted); width: 1.5em; }
+.donot { background: var(--danger-bg); border: 2px solid var(--danger); border-radius: 10px; padding: 14px 14px 12px; }
+.donot h2 { color: var(--danger); }
+.donot ul, .check ol, .unc ul { margin: 0; padding-left: 1.25em; display: flex; flex-direction: column; gap: 8px; }
+.fallback { border-top: 3px dashed var(--warn-line); padding-top: 16px; }
+.fallback h2 .badge { font-size: 0.75rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; background: var(--warn-bg); color: var(--fg); border: 1px solid var(--warn-line); border-radius: 4px; padding: 1px 6px; margin-left: 6px; vertical-align: 2px; }
+.risk { background: var(--warn-bg); border-left: 4px solid var(--warn-line); padding: 10px 12px; border-radius: 0 8px 8px 0; margin: 12px 0; }
+.risk ul { margin: 6px 0 0; padding-left: 1.2em; display: flex; flex-direction: column; gap: 4px; }
+.check { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px; }
+.check ol li::marker { font-weight: 700; }
+.unc { background: var(--unconf-bg); border: 1px solid var(--unconf); border-radius: 10px; padding: 14px; }
+.unc h2 { color: var(--unconf); }
+.find { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; }
+/* SVG classes */
+.edge { fill: none; stroke: var(--w-edge); stroke-width: 6.5; stroke-linejoin: round; stroke-linecap: round; }
+.w { fill: none; stroke-width: 3.5; stroke-linejoin: round; stroke-linecap: round; }
+.sig { stroke: var(--w-sig); } .pwr { stroke: var(--w-pwr); } .gnd { stroke: var(--w-gnd); } .jmp { stroke: var(--w-jmp); }
+.dot-pwr { fill: var(--w-pwr); stroke: var(--w-edge); stroke-width: 1.5; }
+.dot-gnd { fill: var(--w-jmp); stroke: var(--w-edge); stroke-width: 1.5; }
+.board { fill: var(--pcb); }
+.hdr { fill: var(--header); }
+.pinsq { fill: var(--pin); }
+.pinbad { fill: none; stroke: #ff5a4f; stroke-width: 1.4; }
+.pinkey { fill: none; stroke: #ffffff; stroke-width: 1.6; }
+.pl { font-family: var(--font-mono); font-size: 8.5px; fill: var(--pcb-ink); }
+.pl.key { font-size: 10px; font-weight: 600; fill: #ffffff; }
+.pl.bad { fill: #ffb3ad; }
+.bt { font-family: var(--font-body); font-size: 11px; font-weight: 700; fill: var(--pcb-ink); }
+.bs { font-family: var(--font-body); font-size: 8.5px; fill: var(--pcb-ink); }
+.lbl { font-family: var(--font-body); font-size: 9.5px; font-weight: 600; fill: var(--fg); }
+.lblm { font-family: var(--font-mono); font-size: 10px; font-weight: 600; fill: var(--fg); }
+.servo { fill: var(--servo); }
+.st { font-family: var(--font-body); font-size: 11px; font-weight: 700; fill: var(--servo-ink); }
+.ss { font-family: var(--font-body); font-size: 8.5px; fill: var(--servo-ink); }
+.horn { fill: #f2f2f2; stroke: #444; stroke-width: 0.8; }
+.supply { fill: var(--supply); }
+.supt { font-family: var(--font-body); font-size: 11px; font-weight: 700; fill: #ffffff; }
+.sups { font-family: var(--font-body); font-size: 8.5px; fill: #e4e9e8; }
+.rail { fill: var(--w-jmp); stroke: var(--w-edge); stroke-width: 1.2; }
+.term { fill: var(--w-pwr); stroke: var(--w-edge); stroke-width: 1.2; }
+.usb { fill: #9aa3a1; stroke: #5d6664; stroke-width: 1; }
+.cap { fill: #23306b; stroke: var(--w-edge); stroke-width: 1; }
+.capstripe { fill: #c9cfe6; }
+.capt { font-family: var(--font-mono); font-size: 9px; font-weight: 700; fill: #23306b; }
+.arrow { fill: var(--w-sig); stroke: var(--w-edge); stroke-width: 1; }
+</style>
+
+<main>
+
+<header>
+  <h1>Latch Wiring</h1>
+  <p class="lead">This connects the two latch servos to the Arduino UNO Q. <strong>Unplug the board and the servo supply from power before you wire anything.</strong></p>
+  <p class="small">Servo A = <code>servo1</code> in the sketch, on pin <span class="pin">D9</span>. Servo B = <code>servo2</code>, on pin <span class="pin">D10</span>. Servo B is mounted mirrored.</p>
+</header>
+
+<section>
+  <h2>Recommended: separate 5 V supply</h2>
+  <figure>
+    <svg viewBox="0 0 360 462" role="img" aria-label="Wiring with a separate 5 V supply. Servo A orange signal to UNO Q D9, servo B orange signal to D10. Both red wires to supply +5 V. Both brown wires to supply GND. A black jumper joins UNO Q GND, on the digital header next to D13, to supply GND. Nothing goes to the UNO Q 5V pin.">
+      <!-- ===== Supply ===== -->
+      <rect class="supply" x="108" y="20" width="144" height="52" rx="6"/>
+      <text class="supt" x="184" y="40" text-anchor="middle">Separate 5 V supply</text>
+      <text class="sups" x="184" y="54" text-anchor="middle">power bank + USB breakout</text>
+      <rect class="rail" x="100" y="24" width="9" height="44" rx="2"/>
+      <text class="sups" x="114" y="66">GND</text>
+      <rect class="term" x="174" y="68" width="12" height="8" rx="2"/>
+      <text class="sups" x="198" y="66" text-anchor="middle">+5 V</text>
+
+      <!-- ===== Wires (edge first, colour on top) ===== -->
+      <!-- black jumper: UNO Q GND -> supply GND -->
+      <path class="edge" d="M112,312 V216 H22 V34 H100"/>
+      <path class="w jmp" d="M112,312 V216 H22 V34 H100"/>
+      <!-- B brown -> supply GND -->
+      <path class="edge" d="M70,160 V206 H31 V48 H100"/>
+      <path class="w gnd" d="M70,160 V206 H31 V48 H100"/>
+      <!-- A brown -> supply GND (over the top) -->
+      <path class="edge" d="M290,160 V206 H340 V10 H104 V24"/>
+      <path class="w gnd" d="M290,160 V206 H340 V10 H104 V24"/>
+      <!-- B red -> +5V junction -->
+      <path class="edge" d="M82,160 V196 H40 V90 H180"/>
+      <path class="w pwr" d="M82,160 V196 H40 V90 H180"/>
+      <!-- A red -> +5V junction -->
+      <path class="edge" d="M278,160 V196 H330 V90 H180 V76"/>
+      <path class="w pwr" d="M278,160 V196 H330 V90 H180 V76"/>
+      <!-- B orange -> D10 -->
+      <path class="edge" d="M94,160 V176 H168 V312"/>
+      <path class="w sig" d="M94,160 V176 H168 V312"/>
+      <!-- A orange -> D9 -->
+      <path class="edge" d="M266,160 V190 H182 V312"/>
+      <path class="w sig" d="M266,160 V190 H182 V312"/>
+      <circle class="dot-pwr" cx="180" cy="90" r="4"/>
+
+      <!-- wire labels -->
+      <text class="lbl" x="36" y="30">GND jumper</text>
+      <text class="lbl" x="38" y="44">B brown</text>
+      <text class="lbl" x="300" y="24" text-anchor="middle">A brown</text>
+      <text class="lbl" x="110" y="86" text-anchor="middle">B red +5 V</text>
+      <text class="lbl" x="255" y="86" text-anchor="middle">A red +5 V</text>
+      <text class="lbl" x="131" y="172" text-anchor="middle">B signal</text>
+      <text class="lbl" x="224" y="202" text-anchor="middle">A signal</text>
+      <text class="lbl" x="66" y="230" text-anchor="middle">GND jumper (black)</text>
+      <text class="lbl" x="66" y="242" text-anchor="middle">= common ground</text>
+      <text class="lblm" x="108" y="296" text-anchor="end">GND</text>
+      <text class="lblm" x="164" y="296" text-anchor="end">D10</text>
+      <text class="lblm" x="186" y="296">D9</text>
+
+      <!-- ===== Servos ===== -->
+      <rect class="servo" x="50" y="112" width="80" height="48" rx="5"/>
+      <circle class="horn" cx="66" cy="112" r="5"/><rect class="horn" x="62" y="102" width="30" height="6" rx="3"/>
+      <text class="st" x="112" y="132" text-anchor="middle">Servo B</text>
+      <text class="ss" x="112" y="146" text-anchor="middle">to D10</text>
+      <rect class="servo" x="230" y="112" width="90" height="48" rx="5"/>
+      <circle class="horn" cx="304" cy="112" r="5"/><rect class="horn" x="278" y="102" width="30" height="6" rx="3"/>
+      <text class="st" x="252" y="132" text-anchor="middle">Servo A</text>
+      <text class="ss" x="252" y="146" text-anchor="middle">to D9</text>
+
+      <!-- ===== Board: USB-C left, digital header top, power header bottom ===== -->
+      <rect class="board" x="16" y="300" width="320" height="152" rx="10"/>
+      <rect class="usb" x="8" y="356" width="20" height="34" rx="4"/>
+      <text class="bt" x="36" y="370">ARDUINO UNO Q</text>
+      <text class="bs" x="36" y="383">USB-C on this side</text>
+      <text class="bs" x="36" y="394">(board power, plug in last)</text>
+      <text class="bs" x="330" y="376" text-anchor="end" style="fill:#ffb3ad;font-weight:700">red-ringed pins:</text>
+      <text class="bs" x="330" y="388" text-anchor="end" style="fill:#ffb3ad;font-weight:700">never 5 V</text>
+
+      <!-- digital header strips -->
+      <rect class="hdr" x="63" y="305" width="140" height="14" rx="2"/>
+      <rect class="hdr" x="211" y="305" width="112" height="14" rx="2"/>
+      <g class="pins-top">
+        <rect class="pinsq" x="67" y="309" width="6" height="6"/>
+        <rect class="pinsq" x="81" y="309" width="6" height="6"/>
+        <rect class="pinsq" x="95" y="309" width="6" height="6"/>
+        <rect class="pinsq" x="109" y="309" width="6" height="6"/>
+        <rect class="pinsq" x="123" y="309" width="6" height="6"/>
+        <rect class="pinsq" x="137" y="309" width="6" height="6"/>
+        <rect class="pinsq" x="151" y="309" width="6" height="6"/>
+        <rect class="pinsq" x="165" y="309" width="6" height="6"/>
+        <rect class="pinsq" x="179" y="309" width="6" height="6"/>
+        <rect class="pinsq" x="193" y="309" width="6" height="6"/>
+        <rect class="pinsq" x="215" y="309" width="6" height="6"/>
+        <rect class="pinsq" x="229" y="309" width="6" height="6"/>
+        <rect class="pinsq" x="243" y="309" width="6" height="6"/>
+        <rect class="pinsq" x="257" y="309" width="6" height="6"/>
+        <rect class="pinsq" x="271" y="309" width="6" height="6"/>
+        <rect class="pinsq" x="285" y="309" width="6" height="6"/>
+        <rect class="pinsq" x="299" y="309" width="6" height="6"/>
+        <rect class="pinsq" x="313" y="309" width="6" height="6"/>
+      </g>
+      <circle class="pinkey" cx="112" cy="312" r="6"/>
+      <circle class="pinkey" cx="168" cy="312" r="6"/>
+      <circle class="pinkey" cx="182" cy="312" r="6"/>
+      <circle class="pinbad" cx="274" cy="312" r="6"/>
+      <!-- top labels (read bottom to top) -->
+      <g>
+        <text class="pl" transform="translate(73,324) rotate(-90)" text-anchor="end">D21</text>
+        <text class="pl" transform="translate(87,324) rotate(-90)" text-anchor="end">D20</text>
+        <text class="pl" transform="translate(101,324) rotate(-90)" text-anchor="end">AREF</text>
+        <text class="pl key" transform="translate(116,324) rotate(-90)" text-anchor="end">GND</text>
+        <text class="pl" transform="translate(129,324) rotate(-90)" text-anchor="end">D13</text>
+        <text class="pl" transform="translate(143,324) rotate(-90)" text-anchor="end">D12</text>
+        <text class="pl" transform="translate(157,324) rotate(-90)" text-anchor="end">~D11</text>
+        <text class="pl key" transform="translate(172,324) rotate(-90)" text-anchor="end">~D10</text>
+        <text class="pl key" transform="translate(186,324) rotate(-90)" text-anchor="end">~D9</text>
+        <text class="pl" transform="translate(199,324) rotate(-90)" text-anchor="end">D8</text>
+        <text class="pl" transform="translate(221,324) rotate(-90)" text-anchor="end">D7</text>
+        <text class="pl" transform="translate(235,324) rotate(-90)" text-anchor="end">~D6</text>
+        <text class="pl" transform="translate(249,324) rotate(-90)" text-anchor="end">~D5</text>
+        <text class="pl" transform="translate(263,324) rotate(-90)" text-anchor="end">D4</text>
+        <text class="pl bad" transform="translate(277,324) rotate(-90)" text-anchor="end">~D3</text>
+        <text class="pl" transform="translate(291,324) rotate(-90)" text-anchor="end">D2</text>
+        <text class="pl" transform="translate(305,324) rotate(-90)" text-anchor="end">D1</text>
+        <text class="pl" transform="translate(319,324) rotate(-90)" text-anchor="end">D0</text>
+      </g>
+
+      <!-- power + analog header strips (bottom) -->
+      <rect class="hdr" x="119" y="433" width="112" height="14" rx="2"/>
+      <rect class="hdr" x="239" y="433" width="84" height="14" rx="2"/>
+      <g>
+        <rect class="pinsq" x="123" y="437" width="6" height="6"/>
+        <rect class="pinsq" x="137" y="437" width="6" height="6"/>
+        <rect class="pinsq" x="151" y="437" width="6" height="6"/>
+        <rect class="pinsq" x="165" y="437" width="6" height="6"/>
+        <rect class="pinsq" x="179" y="437" width="6" height="6"/>
+        <rect class="pinsq" x="193" y="437" width="6" height="6"/>
+        <rect class="pinsq" x="207" y="437" width="6" height="6"/>
+        <rect class="pinsq" x="221" y="437" width="6" height="6"/>
+        <rect class="pinsq" x="243" y="437" width="6" height="6"/>
+        <rect class="pinsq" x="257" y="437" width="6" height="6"/>
+        <rect class="pinsq" x="271" y="437" width="6" height="6"/>
+        <rect class="pinsq" x="285" y="437" width="6" height="6"/>
+        <rect class="pinsq" x="299" y="437" width="6" height="6"/>
+        <rect class="pinsq" x="313" y="437" width="6" height="6"/>
+      </g>
+      <circle class="pinbad" cx="246" cy="440" r="6"/><circle class="pinbad" cx="260" cy="440" r="6"/>
+      <circle class="pinbad" cx="274" cy="440" r="6"/><circle class="pinbad" cx="288" cy="440" r="6"/>
+      <circle class="pinbad" cx="302" cy="440" r="6"/><circle class="pinbad" cx="316" cy="440" r="6"/>
+      <g>
+        <text class="pl" transform="translate(129,428) rotate(-90)">BOOT</text>
+        <text class="pl" transform="translate(143,428) rotate(-90)">IOREF</text>
+        <text class="pl" transform="translate(157,428) rotate(-90)">RESET</text>
+        <text class="pl" transform="translate(171,428) rotate(-90)">3V3</text>
+        <text class="pl" transform="translate(185,428) rotate(-90)">5V</text>
+        <text class="pl" transform="translate(199,428) rotate(-90)">GND</text>
+        <text class="pl" transform="translate(213,428) rotate(-90)">GND</text>
+        <text class="pl" transform="translate(227,428) rotate(-90)">VIN</text>
+        <text class="pl bad" transform="translate(249,428) rotate(-90)">A0</text>
+        <text class="pl bad" transform="translate(263,428) rotate(-90)">A1</text>
+        <text class="pl bad" transform="translate(277,428) rotate(-90)">A2</text>
+        <text class="pl bad" transform="translate(291,428) rotate(-90)">A3</text>
+        <text class="pl bad" transform="translate(305,428) rotate(-90)">A4</text>
+        <text class="pl bad" transform="translate(319,428) rotate(-90)">A5</text>
+      </g>
+    </svg>
+    <figcaption>Board seen from above, turned so USB-C is on the left. Pin order follows the official UNO Q pinout. Dots mean wires joined at the same point (same screw terminal, or same breadboard row). The board's own <span class="pin">5V</span> pin stays empty in this setup.</figcaption>
+  </figure>
+</section>
+
+<section class="find">
+  <h2>Finding the pins</h2>
+  <p>Hold the board with USB-C on your left. The long header along the top edge has a small gap in it.</p>
+  <p>From that gap, walk left toward USB-C: <span class="pin">D8</span>, then <span class="pin">D9</span>, then <span class="pin">D10</span>. Keep going: <span class="pin">D11</span>, <span class="pin">D12</span>, <span class="pin">D13</span>, then <span class="pin">GND</span>.</p>
+  <p class="small">If the labels printed on your board disagree with this, stop and trust the board. Ask before wiring.</p>
+</section>
+
+<section>
+  <h2>Connection table</h2>
+  <p class="small">Servo plugs are female, so use male-to-male jumper wires from the plug to the pins. Wire colours below are the servo's own wires <span class="tag-unc" id="colour-tag">Not confirmed</span></p>
+  <div class="tablewrap">
+  <table>
+    <thead><tr><th></th><th>From</th><th>To</th></tr></thead>
+    <tbody>
+      <tr><td class="n">1</td><td><span class="sw sig"></span>Servo A signal (orange)</td><td>UNO Q <span class="pin">D9</span></td></tr>
+      <tr><td class="n">2</td><td><span class="sw sig"></span>Servo B signal (orange)</td><td>UNO Q <span class="pin">D10</span></td></tr>
+      <tr><td class="n">3</td><td><span class="sw pwr"></span>Servo A power (red)</td><td>Supply <span class="pin">+5 V</span></td></tr>
+      <tr><td class="n">4</td><td><span class="sw pwr"></span>Servo B power (red)</td><td>Supply <span class="pin">+5 V</span></td></tr>
+      <tr><td class="n">5</td><td><span class="sw gnd"></span>Servo A ground (brown)</td><td>Supply <span class="pin">GND</span></td></tr>
+      <tr><td class="n">6</td><td><span class="sw gnd"></span>Servo B ground (brown)</td><td>Supply <span class="pin">GND</span></td></tr>
+      <tr><td class="n">7</td><td><span class="sw jmp"></span>Black jumper from UNO Q <span class="pin">GND</span> (top header, next to <span class="pin">D13</span>)</td><td>Supply <span class="pin">GND</span>. This is the common ground. Without it the servos get no usable signal.</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <p class="small" style="margin-top:8px">Not sure which wire is which? On a standard servo plug the <strong>middle</strong> wire is power (+). Of the two outer wires, the darkest one is ground. The remaining one is signal.</p>
+</section>
+
+<section class="donot">
+  <h2>Do not</h2>
+  <ul>
+    <li><strong>Never put 5 V on <span class="pin">D3</span> or <span class="pin">A0</span>–<span class="pin">A5</span>.</strong> These pins only take up to about 3.6 V. 5 V there can destroy the microcontroller. They are ringed in red in the drawings.</li>
+    <li><strong>Never put a red (power) wire on a signal pin</strong> such as <span class="pin">D9</span> or <span class="pin">D10</span>. Signal pins carry a 3.3 V control pulse, not motor power.</li>
+    <li><strong>Never swap a servo's red and brown wires.</strong> Power the wrong way round can kill the servo. And never wire with anything plugged in: one slipped jumper can short the supply.</li>
+  </ul>
+</section>
+
+<section class="fallback">
+  <h2>Fallback: no separate supply <span class="badge">Riskier</span></h2>
+  <p>Use this only if you have no separate 5 V supply. Both servos take power from the UNO Q's own <span class="pin">5V</span> pin. The signal wires stay the same: <span class="pin">D9</span> and <span class="pin">D10</span>. No extra ground jumper is needed, because the servos already share the board's ground.</p>
+  <figure>
+    <svg viewBox="0 0 360 272" role="img" aria-label="Fallback wiring. Both servo red wires join at the UNO Q 5V pin on the power header. Both brown wires join at the GND pin next to it. A 470 to 1000 microfarad capacitor sits across 5 V and GND, stripe side to GND. Orange signal wires still go to D10 and D9 on the top header.">
+      <!-- power header close-up -->
+      <rect class="board" x="78" y="2" width="216" height="62" rx="6"/>
+      <rect class="hdr" x="83" y="43" width="112" height="14" rx="2"/>
+      <rect class="hdr" x="203" y="43" width="84" height="14" rx="2"/>
+      <g>
+        <rect class="pinsq" x="87" y="47" width="6" height="6"/><rect class="pinsq" x="101" y="47" width="6" height="6"/>
+        <rect class="pinsq" x="115" y="47" width="6" height="6"/><rect class="pinsq" x="129" y="47" width="6" height="6"/>
+        <rect class="pinsq" x="143" y="47" width="6" height="6"/><rect class="pinsq" x="157" y="47" width="6" height="6"/>
+        <rect class="pinsq" x="171" y="47" width="6" height="6"/><rect class="pinsq" x="185" y="47" width="6" height="6"/>
+        <rect class="pinsq" x="207" y="47" width="6" height="6"/><rect class="pinsq" x="221" y="47" width="6" height="6"/>
+        <rect class="pinsq" x="235" y="47" width="6" height="6"/><rect class="pinsq" x="249" y="47" width="6" height="6"/>
+        <rect class="pinsq" x="263" y="47" width="6" height="6"/><rect class="pinsq" x="277" y="47" width="6" height="6"/>
+      </g>
+      <circle class="pinkey" cx="146" cy="50" r="6"/><circle class="pinkey" cx="160" cy="50" r="6"/>
+      <circle class="pinbad" cx="210" cy="50" r="6"/><circle class="pinbad" cx="224" cy="50" r="6"/>
+      <circle class="pinbad" cx="238" cy="50" r="6"/><circle class="pinbad" cx="252" cy="50" r="6"/>
+      <circle class="pinbad" cx="266" cy="50" r="6"/><circle class="pinbad" cx="280" cy="50" r="6"/>
+      <g>
+        <text class="pl" transform="translate(93,40) rotate(-90)">BOOT</text>
+        <text class="pl" transform="translate(107,40) rotate(-90)">IOREF</text>
+        <text class="pl" transform="translate(121,40) rotate(-90)">RESET</text>
+        <text class="pl" transform="translate(135,40) rotate(-90)">3V3</text>
+        <text class="pl key" transform="translate(150,40) rotate(-90)">5V</text>
+        <text class="pl key" transform="translate(164,40) rotate(-90)">GND</text>
+        <text class="pl" transform="translate(177,40) rotate(-90)">GND</text>
+        <text class="pl" transform="translate(191,40) rotate(-90)">VIN</text>
+        <text class="pl bad" transform="translate(213,40) rotate(-90)">A0</text>
+        <text class="pl bad" transform="translate(227,40) rotate(-90)">A1</text>
+        <text class="pl bad" transform="translate(241,40) rotate(-90)">A2</text>
+        <text class="pl bad" transform="translate(255,40) rotate(-90)">A3</text>
+        <text class="pl bad" transform="translate(269,40) rotate(-90)">A4</text>
+        <text class="pl bad" transform="translate(283,40) rotate(-90)">A5</text>
+      </g>
+      <text class="lbl" x="16" y="20">UNO Q</text>
+      <text class="lbl" x="16" y="32">power</text>
+      <text class="lbl" x="16" y="44">header</text>
+
+      <!-- GND wires -->
+      <path class="edge" d="M160,50 V150"/><path class="w jmp" d="M160,50 V150"/>
+      <path class="edge" d="M70,220 V150 H160"/><path class="w gnd" d="M70,220 V150 H160"/>
+      <path class="edge" d="M270,220 V150 H160"/><path class="w gnd" d="M270,220 V150 H160"/>
+      <!-- 5V wires -->
+      <path class="edge" d="M146,50 V100"/><path class="w pwr" d="M146,50 V100"/>
+      <path class="edge" d="M55,220 V100 H146"/><path class="w pwr" d="M55,220 V100 H146"/>
+      <path class="edge" d="M285,220 V100 H167 A7,7 0 0 0 153,100 H146"/>
+      <path class="w pwr" d="M285,220 V100 H167 A7,7 0 0 0 153,100 H146"/>
+      <!-- capacitor -->
+      <path class="edge" d="M215,100 V112 M215,138 V150"/>
+      <path class="w pwr" d="M215,100 V112"/><path class="w jmp" d="M215,138 V150"/>
+      <rect class="cap" x="204" y="112" width="22" height="26" rx="4"/>
+      <rect class="capstripe" x="204" y="130" width="22" height="8"/>
+      <text class="capt" x="215" y="137" text-anchor="middle">−</text>
+      <text class="lbl" x="232" y="124">+ top</text>
+      <circle class="dot-pwr" cx="146" cy="100" r="4"/><circle class="dot-pwr" cx="215" cy="100" r="4"/>
+      <circle class="dot-gnd" cx="160" cy="150" r="4"/><circle class="dot-gnd" cx="215" cy="150" r="4"/>
+      <text class="lbl" x="170" y="172" text-anchor="middle">Capacitor 470–1000 µF,</text>
+      <text class="lbl" x="170" y="185" text-anchor="middle">10 V or more. Long leg</text>
+      <text class="lbl" x="170" y="198" text-anchor="middle">to 5 V, stripe to GND</text>
+      <text class="lbl" x="100" y="96" text-anchor="middle">red +5 V</text>
+      <text class="lbl" x="100" y="146" text-anchor="middle">brown GND</text>
+      <!-- signals -->
+      <path class="edge" d="M40,220 V96"/><path class="w sig" d="M40,220 V96"/>
+      <polygon class="arrow" points="40,82 34,96 46,96"/>
+      <text class="lblm" x="40" y="76" text-anchor="middle">to D10</text>
+      <path class="edge" d="M300,220 V96"/><path class="w sig" d="M300,220 V96"/>
+      <polygon class="arrow" points="300,82 294,96 306,96"/>
+      <text class="lblm" x="300" y="76" text-anchor="middle">to D9</text>
+      <!-- servos -->
+      <rect class="servo" x="20" y="220" width="90" height="44" rx="5"/>
+      <text class="st" x="65" y="240" text-anchor="middle">Servo B</text>
+      <text class="ss" x="65" y="254" text-anchor="middle">signal to D10</text>
+      <rect class="servo" x="250" y="220" width="90" height="44" rx="5"/>
+      <text class="st" x="295" y="240" text-anchor="middle">Servo A</text>
+      <text class="ss" x="295" y="254" text-anchor="middle">signal to D9</text>
+    </svg>
+    <figcaption>Close-up of the power header (the bottom edge of the board in the main drawing). The small bump in A's red wire means it crosses the GND wire without touching it. Both reds join at <span class="pin">5V</span>; both browns join at the <span class="pin">GND</span> right next to it. A small breadboard makes these joins easy.</figcaption>
+  </figure>
+
+  <div class="risk">
+    <p><strong>The risk.</strong> A servo pulls a burst of current every time it starts to move. That burst can drag the board's 5 V down far enough to reset the UNO Q, which is also running the demo.</p>
+    <p style="margin-top:8px"><strong>What lowers the risk:</strong></p>
+    <ul>
+      <li>Power the board from a strong USB-C supply: 5 V, 3 A, with a good cable.</li>
+      <li>Fit the capacitor shown above, right at the servo power wires. Its striped side must go to GND. Backwards, it can burst.</li>
+      <li>Move one servo at a time. <em>Note: the current sketch moves both at the same moment.</em></li>
+      <li>Make sure nothing jams the flap. A stalled servo keeps pulling its biggest current.</li>
+    </ul>
+  </div>
+  <p class="small"><strong>What the datasheet says about the 5V pin.</strong> The <span class="pin">5V</span> pin is wired straight to the board's internal 5 V line, which USB-C feeds through a diode. So with only USB-C plugged in, the pin does give out 5 V. The datasheet gives <strong>no current limit</strong> for taking power out of this pin. Its "up to 3 A" figure is for feeding power <em>into</em> the board through the pin. The board, its Wi-Fi and both servos all share whatever the USB-C supply gives, at most 3 A. Because of the diode, the pin will sit a little below 5 V <span class="tag-unc">Not confirmed how much</span></p>
+</section>
+
+<section class="check">
+  <h2>Check before power</h2>
+  <ol>
+    <li>Board USB-C and servo supply are both unplugged while you check.</li>
+    <li>Orange wires sit on <span class="pin">D9</span> (servo A) and <span class="pin">D10</span> (servo B), and nothing touches <span class="pin">D3</span> or <span class="pin">A0</span>–<span class="pin">A5</span>.</li>
+    <li>Every red wire goes to +5 V and every brown wire goes to GND. No red wire is on a <span class="pin">D</span> pin.</li>
+    <li>Separate supply: the black jumper joins UNO Q <span class="pin">GND</span> to supply GND.</li>
+    <li>No bare metal of two wires touches, and the flap can swing freely by hand.</li>
+  </ol>
+  <h2 style="margin-top:18px">First power-on</h2>
+  <p>When the latch sketch starts, both servos swing to the <strong>open</strong> position and stay there. They may move fast, so keep fingers out of the flap. Servo B turns the opposite way to A, because it is mounted mirrored.</p>
+  <p>Until the sketch is uploaded, the servos do nothing at all. That is normal, not a wiring fault. Linux on the board also takes a while to start; the LED matrix shows a logo for about 20–30 seconds meanwhile.</p>
+</section>
+
+<section class="unc">
+  <h2>Not confirmed</h2>
+  <ul id="unc-list">
+    <li><strong>Servo wire colours</strong> (brown = ground, red = +5 V, orange = signal) are the usual hobby-servo colours, not yet checked against DFRobot's SER0006 page. Check the plug: the middle wire is power.</li>
+    <li><strong>3.3 V signal is enough</strong> for the SER0006 is assumed from typical hobby servos. Not checked on DFRobot's page.</li>
+    <li><strong>Printed labels on the board</strong> were not checked. Pin order comes from the official UNO Q datasheet pinout. If your board's printing disagrees, trust the board and ask.</li>
+    <li><strong>How much current the 5V pin can give</strong> when the board runs on USB-C. The datasheet does not say.</li>
+    <li><strong>The 5V pin's exact voltage</strong> on USB-C. It sits a bit below 5 V because of a diode. The SER0006 is rated 4.8–6 V, so it may run slightly under its rating.</li>
+    <li><strong>Capacitor size and voltage</strong> (470–1000 µF, 10 V or more) and the claim that reversed servo power kills a servo are common practice, not from a source checked here.</li>
+  </ul>
+  <p class="small" style="margin-top:12px">If your other board has rows of three-pin servo headers or screw terminals, tell us what is printed on it before connecting it.</p>
+</section>
+
+<footer class="small">
+  Sources: Arduino UNO Q datasheet ABX00162-ABX00173 (pinout page; JDIGITAL and JANALOG pin maps; power inputs and rails), and the latch sketch <code>board/latch/latch.ino</code>.
+</footer>
+
+</main>
