@@ -3,6 +3,8 @@ import os
 import shutil
 import subprocess
 import sys
+import time
+from concurrent.futures.process import BrokenProcessPool
 from pathlib import Path
 
 import cv2
@@ -580,3 +582,84 @@ def test_one_video_failing_does_not_stop_the_others_but_the_run_exits_1(make_vid
     assert "train/a.mp4" in err and "decoder blew up" in err
     assert len(list((out / "demo" / "b").iterdir())) == 3
     assert [r["video"] for r in _rows(out)] == ["b", "b", "b"]
+
+
+# a dead worker and a failing video do not abort the run -----------------------------------------
+
+def _double_or_die(x):
+    if x == "die":
+        os._exit(1)  # like an OOM kill: no exception, the process is just gone
+    return x * 2
+
+
+def test_a_runner_survives_a_dead_worker_and_reports_the_task_that_died():
+    runner = mine_frames.Runner(2)
+    try:
+        dead = runner.submit(_double_or_die, "die")
+        with pytest.raises(BrokenProcessPool):
+            dead.result()
+        assert runner.submit(_double_or_die, 3).result() == 6  # a fresh pool took over
+        assert [runner.submit(_double_or_die, i).result() for i in (1, 2)] == [2, 4]
+        assert runner.rebuilds == 1
+    finally:
+        runner.close()
+
+
+def test_a_runner_gives_up_after_three_rebuilds_with_a_clear_reason():
+    runner = mine_frames.Runner(2)
+    try:
+        for _ in range(4):  # the first pool and three rebuilt ones all die
+            with pytest.raises(BrokenProcessPool):
+                runner.submit(_double_or_die, "die").result()
+        assert runner.rebuilds == 3
+        for _ in range(2):
+            with pytest.raises(RuntimeError, match="worker pool kept dying"):
+                runner.submit(_double_or_die, 1).result()
+    finally:
+        runner.close()
+
+
+_real_decode = mine_frames.decode_samples
+
+
+def _decode_or_die(video, every, imgsz, dest, use_ffmpeg):
+    if video.stem == "b":
+        time.sleep(0.6)  # lets the neighbouring videos finish first, so only b is lost
+        os._exit(1)
+    return _real_decode(video, every, imgsz, dest, use_ffmpeg)
+
+
+def test_a_worker_dying_in_a_run_fails_only_its_video_and_the_run_carries_on(make_video, tmp_path, monkeypatch, capsys):
+    for name in ("train/a", "train/b", "demo/c", "demo/d"):
+        make_video(f"videos/{name}.mp4", seconds=3.0)
+    monkeypatch.setattr(mine_frames, "decode_samples", _decode_or_die)
+    out = tmp_path / "frames"
+    code = _exit_code(["--videos", str(tmp_path / "videos"), "--out", str(out), "--workers", "2"],
+                      Stub([(1, 0.9), (0, 0.0), (0, 0.0)] * 3))
+    assert code == 1
+    err = capsys.readouterr().err
+    assert "train/b.mp4" in err and "1 problem" in err
+    assert sorted(p.name for p in out.rglob("*.jpg")) == sorted(
+        f"{v}_{ms:08d}.jpg" for v in "acd" for ms in (0, 1000, 2000))
+    assert [r["video"] for r in _rows(out)] == ["a"] * 3 + ["c"] * 3 + ["d"] * 3
+
+
+def test_an_exception_while_finishing_one_video_fails_only_that_video(make_video, tmp_path, monkeypatch, capsys):
+    make_video("videos/train/a.mp4", seconds=3.0)
+    make_video("videos/demo/b.mp4", seconds=3.0)
+    real = mine_frames.finish_video
+
+    def finish(p, out, table, failures):
+        if p.video.stem == "a":
+            raise RuntimeError("cv2 blew up")
+        return real(p, out, table, failures)
+
+    monkeypatch.setattr(mine_frames, "finish_video", finish)
+    out = tmp_path / "frames"
+    code = _exit_code(["--videos", str(tmp_path / "videos"), "--out", str(out), "--workers", "1"],
+                      Stub([(1, 0.9), (0, 0.0), (0, 0.0)] * 2))
+    assert code == 1
+    err = capsys.readouterr().err
+    assert "train/a.mp4" in err and "cv2 blew up" in err
+    assert len(list((out / "demo" / "b").iterdir())) == 3
+    assert [r["video"] for r in _rows(out)] == ["b"] * 3

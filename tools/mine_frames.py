@@ -32,7 +32,9 @@ import tempfile
 from collections import deque
 from collections.abc import Callable, Iterator
 from concurrent.futures import Future, ProcessPoolExecutor
+from concurrent.futures.process import BrokenProcessPool
 from fractions import Fraction
+from functools import partial
 from pathlib import Path
 from typing import NamedTuple, NoReturn
 
@@ -46,6 +48,7 @@ SCAN_FLOOR = 0.05  # detections below this are not even reported; at or above it
 MIN_EMPTY = 20
 BATCH = 32
 JPEG_QUALITY = 92
+MAX_POOL_REBUILDS = 3  # dead worker pools replaced per run before the run gives up
 CHECK_SAMPLES = 5  # kept samples per video compared with their saved frame
 CHECK_THRESHOLD = 12.0  # mean absolute pixel difference (0 to 255) above which a saved frame is not the scanned one
 CSV_COLUMNS = ["split", "video", "ms", "n_boxes", "max_conf", "kept", "reason", "check_diff"]
@@ -272,20 +275,54 @@ def decode_samples(video: Path, every: float, imgsz: int, dest: Path, use_ffmpeg
 
 
 class Runner:
-    """Runs functions in a process pool, or inline for one worker. Always hands back a Future."""
+    """Runs functions in a process pool, or inline for one worker. Always hands back a Future.
 
-    def __init__(self, workers: int):
+    A worker that dies (an OOM kill) breaks the whole pool: the futures of that pool fail with
+    BrokenProcessPool, and the next `submit` replaces the dead pool with a fresh one. After
+    `max_rebuilds` replacements it stops submitting and every new task fails with "worker pool kept dying".
+    """
+
+    def __init__(self, workers: int, max_rebuilds: int = MAX_POOL_REBUILDS):
+        self.workers, self.max_rebuilds, self.rebuilds = workers, max_rebuilds, 0
         self.pool = ProcessPoolExecutor(workers) if workers > 1 else None
+        self.broken = False
+        self.gave_up = False
 
     def submit(self, fn, *args) -> Future:
-        if self.pool:
-            return self.pool.submit(fn, *args)
         future: Future = Future()
-        try:
-            future.set_result(fn(*args))
-        except Exception as err:
-            future.set_exception(err)
-        return future
+        if self.pool is None:
+            try:
+                future.set_result(fn(*args))
+            except Exception as err:
+                future.set_exception(err)
+            return future
+        while True:
+            if self.broken and not self._rebuild():
+                future.set_exception(RuntimeError("worker pool kept dying"))
+                return future
+            try:
+                future = self.pool.submit(fn, *args)
+            except BrokenProcessPool:
+                self.broken = True
+                continue
+            future.add_done_callback(partial(self._watch, self.pool))
+            return future
+
+    def _watch(self, pool, future: Future) -> None:
+        if not future.cancelled() and isinstance(future.exception(), BrokenProcessPool) and pool is self.pool:
+            self.broken = True
+
+    def _rebuild(self) -> bool:
+        if self.gave_up or self.rebuilds >= self.max_rebuilds:
+            self.gave_up = True
+            return False
+        self.rebuilds += 1
+        print(f"warning: a worker process died; starting a new pool ({self.rebuilds}/{self.max_rebuilds})",
+              file=sys.stderr)
+        self.pool.shutdown(wait=True, cancel_futures=True)
+        self.pool = ProcessPoolExecutor(self.workers)
+        self.broken = False
+        return True
 
     def close(self) -> None:
         if self.pool:
@@ -566,7 +603,13 @@ def main(argv: list[str] | None = None, scan_fn: Callable[[list], list[tuple[int
 
         def finish(p: Pending) -> None:
             nonlocal totals, highlight_source
-            totals = [a + b for a, b in zip(totals, finish_video(p, args.out, table, failures))]
+            try:
+                counts = finish_video(p, args.out, table, failures)
+            except Exception as err:
+                failures.append((f"{p.split}/{p.video.name}", f"finishing the video failed: {err}"))
+                print(f"error: {p.split}/{p.video.name}: finishing the video failed: {err}", file=sys.stderr)
+                return
+            totals = [a + b for a, b in zip(totals, counts)]
             f.flush()
             if p.video.stem == args.highlights_from:
                 highlight_source = (p.video, p.samples)
@@ -614,6 +657,8 @@ def main(argv: list[str] | None = None, scan_fn: Callable[[list], list[tuple[int
                 table.writerow([start, end, peak])
                 print(f"highlight {start:.1f}-{end:.1f} s (peak {peak} birds)")
         print(f"highlights: {len(segments)} segments, {sum(e - s for s, e in segments):.1f} s in {args.highlights}")
+    if args.highlights and not highlight_source:
+        print(f"warning: no highlights clip, {args.highlights_from} was not mined successfully", file=sys.stderr)
     if failures:
         print(f"{len(failures)} problem(s), exit 1:", file=sys.stderr)
         for label, message in failures:
