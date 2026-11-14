@@ -78,10 +78,10 @@ Milliseconds per frame on the Arduino UNO Q (4-core Kryo-V2), measured on 14 Nov
 | Detector | median | p90 | inside the 1500 ms budget |
 |---|---|---|---|
 | two_stage (pretrained) | 169.8 ms | 171.8 ms | yes |
-| student 640 px | 506.6 ms | 520.4 ms | yes |
-| student 960 px (shipped) | 1108.5 ms | 1127.9 ms | yes |
+| student 640 px (shipped) | 506.6 ms | 520.4 ms | yes |
+| student 960 px | 1108.5 ms | 1127.9 ms | yes |
 
-Both student sizes stay inside the 1.5 s budget. Started with `--photo-every-s 5`, as we run it, the demo analyses one photo every 5 s (photo mode, above); without it the demo plays the video and analyses a frame every 2 s. One photo every 5 s leaves time to spare even for the 960 px student.
+Both student sizes stay inside the 1.5 s budget. Started with `--photo-every-s 5`, as we run it, the demo analyses one photo every 5 s (photo mode, above); without it the demo plays the video and analyses a frame every 2 s. One photo every 5 s leaves time to spare for either student; the shipped 640 px student needs about half a second.
 
 Earlier stand-in measurement, for the pretrained two-stage detector only (`python -m feeder_census.bench --detector two_stage --video CLIP.mp4 --frames 30`). Both rows use the same 60 s, 1280x720, 15 fps test clip. **That clip is a stand-in, not feeder footage: it is made of three still photos of a great tit, a blue tit and a bullfinch, panned and zoomed.**
 
@@ -121,27 +121,30 @@ Held-out day, 12 November 2026, 899 frames. "Named birds right" is the share of 
 
 | Detector | board median | cut-off | named birds right | birds found | frames counted exactly right | held-out frames |
 |---|---|---|---|---|---|---|
-| two_stage (pretrained) | 169.8 ms | 0.60 (fixed) | 0.00 | 0.00 | 0.208 | 899 |
-| student 640 px | 506.6 ms | 0.50 | 0.90 | 0.69 | 0.563 | 899 |
-| student 960 px (shipped) | 1108.5 ms | 0.50 | 0.93 | 0.72 | 0.582 | 899 |
+| two_stage (pretrained) | 169.8 ms | 0.60 (fixed) | 0.00 | 0.00 | 0.214 | 899 |
+| student 640 px (shipped) | 506.6 ms | 0.50 | 0.91 | 0.73 | 0.614 | 899 |
+| student 960 px | 1108.5 ms | 0.50 | 0.93 | 0.75 | 0.602 | 899 |
 
-The pretrained two-stage detector finds no birds at all on this camera (recall 0.00). Its 0.208 can only come from frames with no bird in them. The 960 px student "qualifies" under the rule above (three species at precision 0.90 or more and recall 0.50 or more) only because the third species is house sparrow with a single held-out box; great tit and blue tit are the other two. The 640 px student does not qualify.
+The 640 px student ships. It was picked over the 960 px student because it counts slightly more held-out frames exactly right (0.614 against 0.602) and is twice as fast on the board.
 
-The shipped student, species with at least 20 held-out boxes (every other species has fewer than 20, or none):
+The pretrained two-stage detector finds no birds at all on this camera (recall 0.00). Its 0.214 can only come from frames with no bird in them. Both students qualify under the rule above (at least three species at precision 0.90 or more and recall 0.50 or more). For the 640 px student, four species pass: great tit, blue tit, bullfinch and great spotted woodpecker. Bullfinch (19 held-out boxes) and great spotted woodpecker (17) have fewer than 20, so they can pass on luck, and blue tit passes narrowly (precision 0.905). Without those two small species, only two species would pass. For the 960 px student, five species pass (great tit, blue tit, tree sparrow with one held-out box, house sparrow with two, and great spotted woodpecker), so three of its five passes also rest on very few boxes.
+
+The shipped 640 px student, the four species that pass and magpie (every other species has fewer than 5 held-out boxes, or none):
 
 | Species | named birds right (precision) | birds found (recall) | held-out boxes |
 |---|---|---|---|
-| great tit | 0.94 | 0.75 | 1466 |
-| blue tit | 0.93 | 0.69 | 308 |
-| magpie | 0.79 | 0.63 | 103 |
-| bullfinch | 0.83 | 0.45 | 22 |
+| great tit | 0.92 | 0.75 | 1462 |
+| blue tit | 0.90 | 0.66 | 301 |
+| magpie | 0.81 | 0.70 | 102 |
+| bullfinch | 0.92 | 0.63 | 19 |
+| great spotted woodpecker | 0.94 | 0.94 | 17 |
 
-The held-out day has no squirrel, so squirrel accuracy is only known from validation footage, where the 960 px student reached precision 0.95 and recall 0.85. Validation is the held-back last 15 % of each training video, the same footage that set the cut-off, and its squirrel boxes are mostly photos, documentary frames and pasted cut-outs; so the figure is optimistic for this feeder. On the 899 held-out frames the same student named a squirrel once (confidence 0.64; it is a blurred brown bird in flight). The latch closes only after two analysed photos in a row show a squirrel or rat, so that single frame would not have closed it.
+The held-out day has no squirrel, so squirrel accuracy is only known from validation footage, where the 640 px student reached precision 0.92 and recall 0.84. Validation is the held-back last 15 % of each training video, the same footage that set the cut-off, and its squirrel boxes are mostly photos, documentary frames and pasted cut-outs; so the figure is optimistic for this feeder. On the 899 held-out frames the same student named a squirrel once at or above the latch cut-off (confidence 0.81; it is a blurred brown bird in flight). The latch closes only after two analysed photos in a row show a squirrel or rat, so that single frame would not have closed it.
 
 ## What the student was trained on
 
-- **Feeder footage.** One public feeder camera stream, "Talvilintulive" (Haukipudas, Finland), recorded. It belongs to its uploader and is not in this repository. The shipped model was trained on 15 days of that stream, all from October and November 2026 (5 and 22 October; 29 and 31 October; 1, 2, 3, 4, 6, 7, 8, 9, 10, 11 and 13 November), plus two videos of other (forest) feeders. No earlier-winter days are in this model.
-- **Squirrels.** 400 Creative Commons photos by 273 iNaturalist observers (the attribution list is kept with the photos, outside this repository), frames of one squirrel documentary video, and squirrel cut-outs pasted into feeder frames. A real red squirrel visits this feeder. The training footage also contains this real red squirrel: about 650 labelled boxes from its visits on 29 and 31 October and 6 and 11 November 2026 and from its second visit on 22 October. Only the minutes of its first visit on 22 October 2026 were kept out of training; that clip is in the demo reel. So the demo shows the model recognising the same animal at the same feeder in a visit it had not seen, not a squirrel it had never met.
+- **Feeder footage.** One public feeder camera stream, "Talvilintulive" (Haukipudas, Finland), recorded. It belongs to its uploader and is not in this repository. The shipped model was trained on 25 days of that stream: 2 December 2024 and 2 January 2025 (earlier winter), and from 2026 the 5, 8, 12, 15, 18, 20, 22, 24, 26, 28, 29 and 31 of October and the 1, 2, 3, 4, 6, 7, 8, 9, 10, 11 and 13 of November, plus two videos of other (forest) feeders. 12 November 2026 is not among them.
+- **Squirrels.** 400 Creative Commons photos by 273 iNaturalist observers (the attribution list is kept with the photos, outside this repository), frames of one squirrel documentary video, and squirrel cut-outs pasted into feeder frames. A real red squirrel visits this feeder. The training footage also contains this real red squirrel: about 790 labelled boxes, most from 6 and 11 November, 8 and 31 October, and its second visit on 22 October. Only the minutes of its first visit on 22 October 2026 were kept out of training; that clip is in the demo reel. So the demo shows the model recognising the same animal at the same feeder in a visit it had not seen, not a squirrel it had never met.
 - **Training only, never shown.** The documentary and the two forest-feeder videos are used for training only and are never shown in the demo.
 - **A worse camera.** One in four training frames also has a degraded copy (smaller, blurred, noisy, re-compressed), so the model copes with a worse camera.
 - **Held out.** The test day, 12 November 2026, was not used for training (see above).
