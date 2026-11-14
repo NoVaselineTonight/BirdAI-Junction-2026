@@ -273,8 +273,9 @@ function renderModel() {
   $("card-name").textContent = modelCard.name || (live ? live.detector : DASH);
   const m = modelCard.metrics;
   let line = m ? "Measured on footage the model had not seen." : "Accuracy not yet measured on this footage.";
-  // `qualified` is false when the model ships although it misses the accuracy bar; absent or true says nothing.
-  if (m && m.qualified === false) line += " Below our accuracy bar; it ships because it counts better than the alternative.";
+  // `qualified` is false when a student ships although it misses the accuracy bar. The two-stage detector's card
+  // is always false too, but it is not "shipping because it counts better", so only a student's card says it.
+  if (m && modelCard.kind === "student" && m.qualified === false) line += " Below our accuracy bar; it ships because it counts better than the alternative.";
   $("accuracy-short").textContent = line;
   $("accuracy-long").textContent = line;
   if (modelCard.board_ms != null) {

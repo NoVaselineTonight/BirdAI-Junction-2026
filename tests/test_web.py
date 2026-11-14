@@ -198,7 +198,7 @@ def test_page_has_a_place_for_the_photo_note_and_the_script_words_it(client):
 def test_script_says_when_the_model_card_is_below_the_accuracy_bar_and_only_for_an_exact_false(client):
     js = client.get("/static/app.js").text
     assert "Below our accuracy bar; it ships because it counts better than the alternative." in js
-    assert "m.qualified === false" in js
+    assert 'modelCard.kind === "student" && m.qualified === false' in js
 
 
 def test_page_has_a_place_for_the_footage_note_after_the_recorded_line(client):
@@ -247,7 +247,7 @@ def test_live_state_carries_the_latch(tmp_path, make_video, client):
 
 def test_page_says_what_the_latch_does(client):
     html = client.get("/").text
-    assert "The latch closes when a squirrel or rat is at the feeder." in html
+    assert "The latch closes when a squirrel is at the feeder. This model has not learned rats yet." in html
     assert "Latch not connected: showing what it would do." in html
     assert "Latch not answering:" in html
     assert 'id="latch" hidden' in html
