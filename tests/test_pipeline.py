@@ -257,7 +257,9 @@ def test_a_latch_that_fails_never_stops_the_counting(tmp_path, make_video):
                  inline=True, latch=hardware)
     run_detections(p, 4)
     live = p.live()
-    assert live.latch.closed and live.latch.error == "no router socket" and hardware.calls == 3
+    # an open at start-up, tried again at the 1st detection, then a close at the 2nd, 3rd and 4th
+    assert live.latch.closed and live.latch.error == "no router socket" and hardware.calls == 5
+    assert live.latch.headline == "not_answering"
     assert store.hours(date(2026, 11, 1))[0].counts["great_tit"] == 1
 
 

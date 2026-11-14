@@ -49,7 +49,7 @@ def test_a_single_pest_detection_does_not_close():
     c = LatchController(latch, "router")
     for frame in (SQ, CLEAR, SQ, CLEAR):
         assert c.update(frame).closed is False
-    assert latch.calls == []
+    assert latch.calls == [False]  # only the open command sent at start-up
 
 
 def test_close_is_resent_at_every_detection_while_closed():
@@ -57,23 +57,24 @@ def test_close_is_resent_at_every_detection_while_closed():
     c = LatchController(latch, "router")
     for frame in (SQ, SQ, SQ, CLEAR, CLEAR, CLEAR, CLEAR, CLEAR, CLEAR, CLEAR):
         c.update(frame)
-    # closed at the 2nd detection, still closed through the 3rd to the 7th (4 clear), opened at the 8th
-    assert latch.calls == [True] * 6 + [False]
+    # open at start-up; closed at the 2nd detection, still closed through the 3rd to the 7th (4 clear),
+    # opened at the 8th
+    assert latch.calls == [False] + [True] * 6 + [False]
 
 
 def test_hardware_error_is_reported_and_the_rule_carries_on():
-    latch = FakeLatch(fail=["no socket", None])
+    latch = FakeLatch(fail=[None, "no socket", None])
     c = LatchController(latch, "router")
     c.update(SQ)
     state = c.update(SQ)
     assert state.closed is True and state.error == "no socket" and state.mode == "router"
     state = c.update(SQ)
     assert state.closed is True and state.error is None
-    assert latch.calls == [True, True]
+    assert latch.calls == [False, True, True]
 
 
 def test_a_failed_open_is_tried_again_at_the_next_detection():
-    latch = FakeLatch(fail=[None, "timed out", None])
+    latch = FakeLatch(fail=[None, None, "timed out", None])
     c = LatchController(latch, "router", close_frames=1, open_frames=1)
     c.update(SQ)
     state = c.update(CLEAR)
@@ -81,7 +82,7 @@ def test_a_failed_open_is_tried_again_at_the_next_detection():
     state = c.update(CLEAR)
     assert state.error is None
     c.update(CLEAR)
-    assert latch.calls == [True, False, False]
+    assert latch.calls == [False, True, False, False]
 
 
 def test_any_exception_from_the_latch_is_caught():
@@ -90,6 +91,7 @@ def test_any_exception_from_the_latch_is_caught():
             raise RuntimeError
 
     c = LatchController(Broken(), "router", close_frames=1)
+    assert c.state.error == "RuntimeError"  # the start-up open command already failed
     state = c.update(SQ)
     assert state.closed is True and state.error == "RuntimeError"
 
@@ -255,3 +257,32 @@ def test_command_line_exits_1_on_a_latch_error(tmp_path, capsys):
 
     assert module.main(["close", "--socket", str(tmp_path / "missing.sock")]) == 1
     assert "no router socket" in capsys.readouterr().err
+
+
+def test_router_mode_confirms_the_open_latch_at_start_up():
+    latch = FakeLatch()
+    c = LatchController(latch, "router")
+    assert latch.calls == [False] and c.state.error is None and c.state.headline == "open"
+    unplugged = LatchController(FakeLatch(fail=["no router socket"]), "router")
+    assert unplugged.state.error == "no router socket" and unplugged.state.headline == "not_answering"
+    assert LatchController(FakeLatch(), "sim").state.headline == "open"  # sim never talks to hardware
+
+
+def test_headline_never_claims_a_state_the_hardware_did_not_confirm():
+    from feeder_census.latch import LatchState
+
+    assert LatchState("sim", False, None, None).headline == "open"
+    assert LatchState("sim", True, "red_squirrel", None).headline == "closed"
+    assert LatchState("router", False, None, None).headline == "open"
+    assert LatchState("router", True, "red_squirrel", None).headline == "closed"
+    assert LatchState("router", True, "red_squirrel", "timed out").headline == "not_answering"
+    assert LatchState("router", False, None, "timed out").headline == "not_answering"
+    assert LatchState("off", False, None, None).headline == "off"
+
+
+def test_a_failed_open_after_a_close_is_not_shown_as_open():
+    latch = FakeLatch(fail=[None, None, "timed out"])
+    c = LatchController(latch, "router", close_frames=1, open_frames=1)
+    assert c.update(SQ).headline == "closed"
+    state = c.update(CLEAR)
+    assert (state.closed, state.error, state.headline) == (False, "timed out", "not_answering")

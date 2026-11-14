@@ -36,13 +36,24 @@ class LatchState:
     reason: str | None  # pest key that closed it, None when open
     error: str | None  # last hardware error text, None when the last command went through
 
+    @property
+    def headline(self) -> str:
+        """What the page may say: "off", "open", "closed", or "not_answering" when the board did not confirm
+        the last command (router mode). The page never calls the latch open or closed unconfirmed."""
+        if self.mode == "off":
+            return "off"
+        if self.mode == "router" and self.error is not None:
+            return "not_answering"
+        return "closed" if self.closed else "open"
+
 
 class LatchController:
     """Closes after `close_frames` detections in a row with a pest in frame, opens after `open_frames` without.
 
-    While closed the close command is sent again at every detection: the sketch reopens by itself
-    when it stops hearing it. A command that fails is reported in `state.error` and tried again at
-    the next detection; it never stops the caller.
+    In router mode an open command goes out when the controller is made, so the page's "open" is
+    confirmed from the start. While closed the close command is sent again at every detection: the
+    sketch reopens by itself when it stops hearing it. A command that fails is reported in
+    `state.error` and tried again at the next detection; it never stops the caller.
     """
 
     def __init__(
@@ -64,6 +75,8 @@ class LatchController:
         self._clear = 0  # detections in a row without one
         self._resend = False  # the last command failed; send the state again
         self._state = LatchState(mode, False, None, None)
+        if self._latch is not None:  # confirm the open latch now, or show at once that the board is not answering
+            self._state = LatchState(mode, False, None, self._send(False))
 
     @property
     def state(self) -> LatchState:

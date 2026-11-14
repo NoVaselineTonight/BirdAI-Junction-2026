@@ -211,13 +211,14 @@ SQ = {"species": "red_squirrel", "confidence": 0.9, "box": [100, 100, 200, 200]}
 
 def test_live_state_carries_the_latch(tmp_path, make_video, client):
     j = client.get("/api/live").json()
-    assert j["latch"] == {"mode": "off", "closed": False, "reason": None, "error": None, "reason_name": None}
+    assert j["latch"] == {"mode": "off", "closed": False, "reason": None, "error": None, "reason_name": None,
+                          "headline": "off"}
     assert j["pests"] == {"red_squirrel": 0, "brown_rat": 0}
     app, _, _ = scripted_app(tmp_path / "squirrel", make_video, ["great_tit"], [[GT, SQ]], 3, latch="sim")
     with TestClient(app) as c:
         j = c.get("/api/live").json()
         assert j["latch"] == {"mode": "sim", "closed": True, "reason": "red_squirrel", "error": None,
-                              "reason_name": {"english": "Red squirrel", "finnish": "Orava"}}
+                              "reason_name": {"english": "Red squirrel", "finnish": "Orava"}, "headline": "closed"}
         assert j["pests"] == {"red_squirrel": 1, "brown_rat": 0}
         assert j["unidentified"] == 0 and "red_squirrel" not in j["now"]
         tables = c.get("/api/tables").json()
@@ -231,3 +232,58 @@ def test_page_says_what_the_latch_does(client):
     assert "Latch not connected: showing what it would do." in html
     assert "Latch not answering:" in html
     assert 'id="latch" hidden' in html
+
+
+def router_app(tmp_path, make_video, frames, detections, fail):
+    """A web app over a scripted pipeline whose latch answers or raises as `fail` says, call by call."""
+    from feeder_census.latch import LatchError
+
+    class Board:
+        def __init__(self):
+            self.answers = list(fail)
+
+        def set(self, closed):
+            message = self.answers.pop(0) if self.answers else None
+            if message is not None:
+                raise LatchError(message)
+
+    detector = ScriptedDetector({"species": ["great_tit"], "frames": frames})
+    store = Store(tmp_path / "census.db", detector.species)
+    camera = SimulatedCamera([make_video(seconds=2.0, fps=10)], realtime=False)
+    settings = Settings(evidence_dir=tmp_path / "evidence", latch="router", latch_close_frames=1,
+                        latch_open_frames=1)
+    pipeline = Pipeline(camera, detector, store, settings, NAMES, inline=True, latch=Board())
+    n = 0
+    original = detector.detect
+
+    def counting(frame):
+        nonlocal n
+        n += 1
+        return original(frame)
+
+    detector.detect = counting
+    while n < detections:
+        pipeline.step()
+    return create_app(pipeline, store, SPECIES, settings, model_card=None)
+
+
+@pytest.mark.parametrize("frames, detections, fail, headline, closed, error", [
+    ([[GT]], 1, [], "open", False, None),                                   # router, answering, open
+    ([[GT, SQ]], 1, [], "closed", True, None),                              # router, answering, closed
+    ([[GT, SQ]], 1, [None, "timed out"], "not_answering", True, "timed out"),  # closed, close not confirmed
+    ([[GT, SQ], [GT]], 2, [None, None, "timed out"], "not_answering", False, "timed out"),  # open not confirmed
+    ([[GT]], 0, ["no router socket"], "not_answering", False, "no router socket"),  # nothing at start-up
+])
+def test_live_latch_headline_follows_what_the_board_confirmed(
+        tmp_path, make_video, frames, detections, fail, headline, closed, error):
+    app = router_app(tmp_path, make_video, frames, detections, fail)
+    with TestClient(app) as c:
+        latch = c.get("/api/live").json()["latch"]
+    assert (latch["headline"], latch["closed"], latch["error"]) == (headline, closed, error)
+
+
+def test_page_draws_the_latch_from_the_headline_key(client):
+    js = client.get("/static/app.js").text
+    for key in ("off", "open", "closed", "not_answering"):
+        assert f"{key}:" in js or f'"{key}"' in js
+    assert "Latch: not answering" in js

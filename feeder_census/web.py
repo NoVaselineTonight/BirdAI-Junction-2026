@@ -63,7 +63,8 @@ def create_app(
             "time_scale": settings.time_scale, "recorded": True, "footage_note": settings.footage_note,
             "error": None if error is None else (str(error) or type(error).__name__),
             "latch": {"mode": s.latch.mode, "closed": s.latch.closed, "reason": s.latch.reason,
-                      "error": s.latch.error, "reason_name": pest_names.get(s.latch.reason)},
+                      "error": s.latch.error, "reason_name": pest_names.get(s.latch.reason),
+                      "headline": s.latch.headline},  # the page words only what the board confirmed
             "pests": s.pests,  # unwanted animals in frame now; never birds, never in the census
         }
 

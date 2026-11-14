@@ -97,20 +97,21 @@ function renderLive() {
 }
 
 // Hidden when the program runs without a latch. In sim mode no hardware moves, and the page says so.
-// While the board does not answer, the page cannot say the latch closed: the band names the animal only,
-// and the error line under it says the latch is not answering. Open needs no such care: the sketch opens
-// the latch by itself when it hears nothing.
+// `headline` is decided by the server: the page never calls the latch open or closed when the board did
+// not confirm the last command ("not_answering", in neutral ink, never the green open or the red band).
+const LATCH_HEADLINES = { off: "", open: "Latch: open", closed: "Latch: closed", not_answering: "Latch: not answering" };
+
 function renderLatch(latch) {
   const block = $("latch");
-  block.hidden = latch.mode === "off";
+  const headline = latch.headline in LATCH_HEADLINES ? latch.headline : "off";
+  block.hidden = headline === "off";
   block.parentElement.classList.toggle("with-latch", !block.hidden);
   if (block.hidden) return;
-  const who = latch.reason_name ? `${latch.reason_name.english} · ${latch.reason_name.finnish} at the feeder` : "";
-  let state = "Latch: open";
-  if (latch.closed && latch.error) state = who || "Latch: not answering";
-  else if (latch.closed) state = who ? `Latch: closed · ${who}` : "Latch: closed";
-  $("latch-state").textContent = state;
-  block.classList.toggle("closed", latch.closed);
+  const who = latch.reason_name ? ` · ${latch.reason_name.english} · ${latch.reason_name.finnish} at the feeder` : "";
+  $("latch-state").textContent = LATCH_HEADLINES[headline];
+  $("latch-who").textContent = headline === "open" ? "" : who;
+  block.classList.toggle("closed", headline === "closed");
+  block.classList.toggle("not-answering", headline === "not_answering");
   $("latch-sim").hidden = latch.mode !== "sim";
   $("latch-error-msg").textContent = latch.error || "";
   $("latch-error").hidden = !latch.error;
@@ -152,7 +153,7 @@ async function pollLive() {
     j.day_max = j.day_max || {};
     j.visits_today = j.visits_today || {};
     j.footage_note = j.footage_note || null;
-    j.latch = j.latch || { mode: "off", closed: false, reason: null, error: null, reason_name: null };
+    j.latch = j.latch || { mode: "off", closed: false, reason: null, error: null, reason_name: null, headline: "off" };
     live = j;
     delete $("stopped").dataset.lost;
     renderLive();
