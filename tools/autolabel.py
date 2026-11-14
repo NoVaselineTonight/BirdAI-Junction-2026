@@ -24,6 +24,7 @@ from feeder_census.types import UNIDENTIFIED  # noqa: E402
 
 COCO_BIRD = 14
 FALLBACK_BOX_MODEL = "yolo11x.pt"
+BIOCLIP_MODEL = "hf-hub:imageomics/bioclip-2"  # BioCLIP 2; pybioclip 2.1.6 also defaults to it, v1 is "hf-hub:imageomics/bioclip"
 INAT_MODEL = Path("models/pretrained/inat_bird.tflite")
 INAT_LABELS = Path("models/pretrained/inat_bird_labels.txt")
 
@@ -103,35 +104,54 @@ def _load_boxes_fn(model_name: str, imgsz: int, conf: float):
         if model_name == FALLBACK_BOX_MODEL:
             raise
         print(f"cannot load {model_name} ({err}); using {FALLBACK_BOX_MODEL}", file=sys.stderr)
-        model = YOLO(FALLBACK_BOX_MODEL)
+        model_name = FALLBACK_BOX_MODEL
+        model = YOLO(model_name)
 
     def boxes_fn(frame):
         result = model.predict(frame, classes=[COCO_BIRD], imgsz=imgsz, conf=conf, verbose=False)[0]
         return list(zip(result.boxes.xyxy.cpu().numpy().tolist(), result.boxes.conf.cpu().numpy().tolist()))
 
-    return boxes_fn
+    return boxes_fn, model_name
+
+
+def _bioclip_results(preds: list[dict], n_crops: int, key_of: dict[str, str]) -> list[tuple[str, float, float]]:
+    """(species_key, score, margin) per crop from pybioclip's flat prediction list.
+
+    `CustomLabelsClassifier.predict` (pybioclip 2.1.6) returns one run of
+    {"file_name": str(image index), "classification": label, "score": prob} per image, best first.
+    """
+    per_crop: list[list[float]] = [[] for _ in range(n_crops)]
+    top: list[str | None] = [None] * n_crops
+    for p in preds:
+        i = int(p["file_name"])
+        if not per_crop[i]:
+            top[i] = key_of[p["classification"]]
+        per_crop[i].append(float(p["score"]))
+    if len(preds) == 0 or any(not scores for scores in per_crop):
+        raise ValueError(f"BioCLIP returned predictions for {sum(bool(s) for s in per_crop)} of {n_crops} crops")
+    return [(species, scores[0], scores[0] - scores[1] if len(scores) > 1 else scores[0])
+            for species, scores in zip(top, per_crop)]
 
 
 def _load_bioclip_fn(species: Sequence[Species]):
+    import torch
     from bioclip import CustomLabelsClassifier
     from PIL import Image
 
+    if torch.cuda.is_available():
+        device = "cuda"
+    else:
+        device = "cpu"
+        print("warning: no CUDA GPU found, BioCLIP runs on the CPU and labelling will be slow", file=sys.stderr)
     key_of = {f"{s.scientific} with common name {s.english}": s.key for s in species}
-    classifier = CustomLabelsClassifier(list(key_of))
+    classifier = CustomLabelsClassifier(list(key_of), model_str=BIOCLIP_MODEL, device=device)
 
     def bioclip_fn(crops):
-        out = []
-        for crop in crops:
-            image = Image.fromarray(np.ascontiguousarray(crop[:, :, ::-1]))  # BGR to RGB
-            preds = classifier.predict([image])
-            if preds and isinstance(preds[0], list):  # one list of label scores per image
-                preds = preds[0]
-            scores = sorted((float(p["score"]) for p in preds), reverse=True)
-            top = max(preds, key=lambda p: p["score"])
-            out.append((key_of[top["classification"]], scores[0], scores[0] - scores[1] if len(scores) > 1 else scores[0]))
-        return out
+        images = [Image.fromarray(np.ascontiguousarray(crop[:, :, ::-1])) for crop in crops]  # BGR to RGB
+        preds = classifier.predict(images, k=len(key_of), batch_size=len(images), callback=lambda done, total: None)
+        return _bioclip_results(preds, len(images), key_of)
 
-    return bioclip_fn
+    return bioclip_fn, f"{classifier.model_str} on {device}"
 
 
 def _load_inat_fn(species: Sequence[Species]):
@@ -161,9 +181,10 @@ def main(argv: list[str] | None = None) -> None:
     args = ap.parse_args(argv)
 
     species = load_species()
-    boxes_fn = _load_boxes_fn(args.box_model, args.imgsz, args.box_conf)
-    bioclip_fn = _load_bioclip_fn(species)
+    boxes_fn, box_model = _load_boxes_fn(args.box_model, args.imgsz, args.box_conf)
+    bioclip_fn, bioclip_info = _load_bioclip_fn(species)
     inat_fn = _load_inat_fn(species)
+    print(f"teachers: boxes {box_model} (imgsz {args.imgsz}); BioCLIP {bioclip_info}; iNaturalist {INAT_MODEL.name}")
 
     frames = sorted(args.frames.rglob("*.jpg"))
     args.out.parent.mkdir(parents=True, exist_ok=True)

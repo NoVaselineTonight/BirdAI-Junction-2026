@@ -37,10 +37,12 @@ case "$1" in
     ;;
   run)
     [ $# -eq 2 ] || usage
-    # uv is installed on first use; the quoted command runs through the remote login shell
+    # The whole command (chains with && included) must run inside `uv run`, so it goes to
+    # `bash -c` as ONE argument. printf %q quotes it for the remote shell; uv is installed on first use.
+    quoted=$(printf '%q' "$2")
     "${SSH[@]}" "$VERDA_HOST" "export PATH=\"\$HOME/.local/bin:\$PATH\"; \
       command -v uv >/dev/null || curl -LsSf https://astral.sh/uv/install.sh | sh; \
-      cd $REMOTE_DIR && uv run --group train $2"
+      cd $REMOTE_DIR && uv run --group train bash -c $quoted"
     ;;
   pull)
     mkdir -p data/labels data/review data/dataset models/student

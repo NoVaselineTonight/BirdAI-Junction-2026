@@ -8,6 +8,7 @@
 
 import argparse
 import sys
+from collections import defaultdict
 from pathlib import Path
 
 import cv2
@@ -41,6 +42,22 @@ def extract_video(video: Path, out_dir: Path, every: float, max_frames: int) -> 
     return written
 
 
+def check_unique_stems(found: dict[str, list[Path]], root: Path) -> None:
+    """Exits with code 2 if two videos share a stem: frame names and folders carry only the stem."""
+    by_stem: dict[str, list[Path]] = defaultdict(list)
+    for files in found.values():
+        for video in files:
+            by_stem[video.stem].append(video)
+    clashes = {stem: files for stem, files in by_stem.items() if len(files) > 1}
+    if clashes:
+        lines = [f"  {stem}: " + ", ".join(v.relative_to(root).as_posix() for v in files)
+                 for stem, files in sorted(clashes.items())]
+        print("error: videos share a file name stem, so their frames would overwrite each other. "
+              "Rename them so every stem is unique (train and demo included):\n" + "\n".join(lines),
+              file=sys.stderr)
+        raise SystemExit(2)
+
+
 def main(argv: list[str] | None = None) -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--videos", type=Path, required=True)
@@ -49,9 +66,12 @@ def main(argv: list[str] | None = None) -> None:
     ap.add_argument("--max-per-video", type=int, default=1500)
     args = ap.parse_args(argv)
 
+    found = {split: sorted(p for p in (args.videos / split).rglob("*") if p.suffix.lower() in VIDEO_SUFFIXES)
+             for split in SPLITS}
+    check_unique_stems(found, args.videos)
+
     total = 0
-    for split in SPLITS:
-        files = sorted(p for p in (args.videos / split).rglob("*") if p.suffix.lower() in VIDEO_SUFFIXES)
+    for split, files in found.items():
         for video in files:
             n = extract_video(video, args.out / split / video.stem, args.every, args.max_per_video)
             print(f"{split}/{video.name}: {n} frames")

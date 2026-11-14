@@ -1,5 +1,9 @@
 import csv
 import json
+import os
+import subprocess
+import sys
+from pathlib import Path
 
 import cv2
 import numpy as np
@@ -7,6 +11,7 @@ import pytest
 
 import extract_frames
 import review_sheets
+import autolabel
 from autolabel import decide_label, label_frame
 from feeder_census.species import load_species
 
@@ -42,6 +47,30 @@ def test_extract_frames_stops_at_max_per_video(make_video, tmp_path):
     extract_frames.main(["--videos", str(tmp_path / "videos"), "--out", str(out),
                          "--every", "1.0", "--max-per-video", "4"])
     assert len(list((out / "train" / "a").iterdir())) == 4
+
+
+def _collision_run(tmp_path, capsys):
+    out = tmp_path / "frames"
+    with pytest.raises(SystemExit) as exit_info:
+        extract_frames.main(["--videos", str(tmp_path / "videos"), "--out", str(out)])
+    assert exit_info.value.code == 2
+    assert not out.exists() or not list(out.rglob("*.jpg"))
+    return capsys.readouterr().err
+
+
+def test_extract_frames_refuses_two_videos_with_one_stem(make_video, tmp_path, capsys):
+    make_video("videos/train/x/a.mp4")
+    make_video("videos/train/y/a.mp4")
+    make_video("videos/train/b.mp4")
+    err = _collision_run(tmp_path, capsys)
+    assert "train/x/a.mp4" in err and "train/y/a.mp4" in err and "b.mp4" not in err
+
+
+def test_extract_frames_refuses_a_stem_shared_by_train_and_demo(make_video, tmp_path, capsys):
+    make_video("videos/train/a.mp4")
+    make_video("videos/demo/a.mkv")
+    err = _collision_run(tmp_path, capsys)
+    assert "train/a.mp4" in err and "demo/a.mkv" in err
 
 
 FRAME = np.zeros((240, 320, 3), dtype=np.uint8)
@@ -158,3 +187,42 @@ def test_review_sheets_keep_existing_corrections(tmp_path):
     _write_labels(labels, 1)
     review_sheets.main(["--labels", str(labels), "--frames", str(frames), "--out", str(out)])
     assert (out / "corrections.csv").read_text() == "id,label\nv_00000000#0,drop\n"
+
+
+def _preds(scores):
+    """What pybioclip 2.1.6 returns for a list of PIL images: a flat list, one run of
+    {file_name, classification, score} per image (file_name is the image's index), best first."""
+    return [{"file_name": str(i), "classification": c, "score": v}
+            for i, per_image in enumerate(scores) for c, v in per_image]
+
+
+def test_bioclip_predictions_are_split_per_crop_into_species_score_and_margin():
+    key_of = {"Parus major with common name Great tit": "great_tit",
+              "Passer montanus with common name Tree sparrow": "tree_sparrow"}
+    gt, ts = list(key_of)
+    flat = _preds([[(gt, 0.75), (ts, 0.25)], [(ts, 0.5), (gt, 0.25), ("x", 0.25)]])
+    got = autolabel._bioclip_results(flat, 2, {**key_of, "x": "x"})
+    assert [(k, round(s, 2), round(m, 2)) for k, s, m in got] == [("great_tit", 0.75, 0.5), ("tree_sparrow", 0.5, 0.25)]
+
+
+def test_bioclip_predictions_for_the_wrong_number_of_crops_are_an_error():
+    with pytest.raises(ValueError):
+        autolabel._bioclip_results(_preds([[("a", 0.9)]]), 2, {"a": "a"})
+
+
+def test_remote_run_executes_a_chained_command_wholly_inside_uv(tmp_path):
+    """Stub ssh runs the remote command line locally; stub uv marks what runs inside `uv run`."""
+    bin_dir, home = tmp_path / "bin", tmp_path / "home"
+    (home / "birdai").mkdir(parents=True)
+    bin_dir.mkdir()
+    (bin_dir / "ssh").write_text('#!/bin/bash\nfor last; do :; done\necho "$last" > "$SSH_LOG"\nexec bash -c "$last"\n')
+    (bin_dir / "uv").write_text('#!/bin/bash\n[ "$1 $2 $3" = "run --group train" ] || exit 9\nshift 3\nINSIDE_UV=yes exec "$@"\n')
+    for f in bin_dir.iterdir():
+        f.chmod(0o755)
+    script = Path(__file__).resolve().parent.parent / "tools" / "remote.sh"
+    command = "echo one:$INSIDE_UV && echo \"two words:$INSIDE_UV\" && echo 'three:'$INSIDE_UV"
+    env = {**os.environ, "PATH": f"{bin_dir}:{os.environ['PATH']}", "HOME": str(home),
+           "VERDA_HOST": "root@h", "SSH_LOG": str(tmp_path / "ssh.log")}
+    done = subprocess.run([str(script), "run", command], env=env, capture_output=True, text=True)
+    assert done.returncode == 0, done.stderr
+    assert done.stdout.splitlines() == ["one:yes", "two words:yes", "three:yes"]
