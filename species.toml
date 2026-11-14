@@ -1,0 +1,183 @@
+[[species]]
+key = "great_tit"
+scientific = "Parus major"
+english = "Great tit"
+finnish = "Talitiainen"
+habitat = "generalist"
+core = true
+
+[[species]]
+key = "yellowhammer"
+scientific = "Emberiza citrinella"
+english = "Yellowhammer"
+finnish = "Keltasirkku"
+habitat = "farmland"
+core = true
+
+[[species]]
+key = "blue_tit"
+scientific = "Cyanistes caeruleus"
+english = "Blue tit"
+finnish = "Sinitiainen"
+habitat = "generalist"
+core = true
+aliases = ["Parus caeruleus"]
+
+[[species]]
+key = "tree_sparrow"
+scientific = "Passer montanus"
+english = "Tree sparrow"
+finnish = "Pikkuvarpunen"
+habitat = "farmland"
+core = true
+
+[[species]]
+key = "bullfinch"
+scientific = "Pyrrhula pyrrhula"
+english = "Bullfinch"
+finnish = "Punatulkku"
+habitat = "forest"
+core = true
+
+[[species]]
+key = "blackbird"
+scientific = "Turdus merula"
+english = "Blackbird"
+finnish = "Mustarastas"
+habitat = "generalist"
+core = true
+
+[[species]]
+key = "greenfinch"
+scientific = "Chloris chloris"
+english = "Greenfinch"
+finnish = "Viherpeippo"
+habitat = "generalist"
+core = true
+aliases = ["Carduelis chloris"]
+
+[[species]]
+key = "house_sparrow"
+scientific = "Passer domesticus"
+english = "House sparrow"
+finnish = "Varpunen"
+habitat = "town"
+core = true
+
+[[species]]
+key = "willow_tit"
+scientific = "Poecile montanus"
+english = "Willow tit"
+finnish = "Hömötiainen"
+habitat = "forest"
+core = false
+aliases = ["Parus montanus"]
+
+[[species]]
+key = "coal_tit"
+scientific = "Periparus ater"
+english = "Coal tit"
+finnish = "Kuusitiainen"
+habitat = "forest"
+core = false
+aliases = ["Parus ater"]
+
+[[species]]
+key = "crested_tit"
+scientific = "Lophophanes cristatus"
+english = "Crested tit"
+finnish = "Töyhtötiainen"
+habitat = "forest"
+core = false
+aliases = ["Parus cristatus"]
+
+[[species]]
+key = "nuthatch"
+scientific = "Sitta europaea"
+english = "Nuthatch"
+finnish = "Pähkinänakkeli"
+habitat = "forest"
+core = false
+
+[[species]]
+key = "great_spotted_woodpecker"
+scientific = "Dendrocopos major"
+english = "Great spotted woodpecker"
+finnish = "Käpytikka"
+habitat = "forest"
+core = false
+
+[[species]]
+key = "magpie"
+scientific = "Pica pica"
+english = "Magpie"
+finnish = "Harakka"
+habitat = "town"
+core = false
+
+[[species]]
+key = "jay"
+scientific = "Garrulus glandarius"
+english = "Jay"
+finnish = "Närhi"
+habitat = "forest"
+core = false
+
+[[species]]
+key = "siskin"
+scientific = "Spinus spinus"
+english = "Siskin"
+finnish = "Vihervarpunen"
+habitat = "forest"
+core = false
+aliases = ["Carduelis spinus"]
+
+[[species]]
+key = "redpoll"
+scientific = "Acanthis flammea"
+english = "Redpoll"
+finnish = "Urpiainen"
+habitat = "forest"
+core = false
+aliases = ["Carduelis flammea"]
+
+[[species]]
+key = "chaffinch"
+scientific = "Fringilla coelebs"
+english = "Chaffinch"
+finnish = "Peippo"
+habitat = "generalist"
+core = false
+
+[[species]]
+key = "robin"
+scientific = "Erithacus rubecula"
+english = "Robin"
+finnish = "Punarinta"
+habitat = "generalist"
+core = false
+
+[[species]]
+key = "fieldfare"
+scientific = "Turdus pilaris"
+english = "Fieldfare"
+finnish = "Räkättirastas"
+habitat = "generalist"
+core = false
+
+[[species]]
+key = "jackdaw"
+scientific = "Coloeus monedula"
+english = "Jackdaw"
+finnish = "Naakka"
+habitat = "town"
+core = false
+aliases = ["Corvus monedula"]
+
+[[species]]
+key = "feral_pigeon"
+scientific = "Columba livia"
+english = "Feral pigeon"
+finnish = "Kesykyyhky"
+habitat = "town"
+core = false

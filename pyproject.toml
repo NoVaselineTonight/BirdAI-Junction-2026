@@ -1,0 +1,25 @@
+[project]
+name = "feeder-census"
+version = "0.1.0"
+description = "Counts birds at a winter feeder with the Finnish monitoring rule"
+requires-python = ">=3.12"
+dependencies = [
+    "numpy",
+    "opencv-python-headless",
+    "onnxruntime",
+    "ai-edge-litert",
+    "fastapi",
+    "uvicorn",
+]
+
+[dependency-groups]
+dev = ["pytest", "httpx"]
+train = ["ultralytics", "pybioclip", "pillow", "onnx", "onnxslim"]
+
+[tool.uv]
+default-groups = ["dev"]
+
+[tool.pytest.ini_options]
+pythonpath = [".", "tools"]
+testpaths = ["tests"]
+markers = ["models: needs downloaded model files"]
