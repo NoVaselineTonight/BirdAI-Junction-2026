@@ -10,6 +10,18 @@
 
 **Spec:** `feeder-census-sketch.md` (what the device does, demo plan, honesty rules), `arduino-uno-q-spec-sheet.md` (board limits) and `compute-plan-verda-modal.md` (where labelling and training run). Read all three. The repo is `NoVaselineTonight/BirdAI-Junction-2026` (formerly `challenge-3`); every path below is relative to its root.
 
+## Deviations from this plan (14 November 2026)
+
+What was built differs from the task text below in these ways. Where they disagree, this list wins.
+
+- The student's cut-off is chosen on pooled precision (all judged species together on validation footage, species with fewer than 20 validation boxes left out), not per species.
+- A student that misses the accuracy bar can still ship, marked below the bar (`qualified: false`), when it counts exactly right in more frames than the pretrained two-stage detector.
+- The student sizes are 960 and 640, not 640 and 416.
+- The test footage is the same feeder camera on a held-out day (12 November 2026), not a different feeder.
+- The truth labels are machine-made (teacher models, cleaned automatically); a person spot-checked samples, not every frame.
+- The latch uses one servo, not two.
+- Photo mode (`--photo-every-s`) analyses one photo every N seconds and shows only those photos, as the board's camera would.
+
 ## Current state (14 November 2026, 13:30)
 
 Read this first if you are picking the work up without the conversation that produced it. It replaces "Starting state" below, which is kept only as history. The full record, including every ruling, review result, deferred minor finding and worker id, is the ledger `.superpowers/sdd/2026-11-14-feeder-census-demo/progress.md` in this worktree (git-ignored); briefs, reports and review diffs for each task sit beside it. Execution method: `superpowers:subagent-driven-development` — one implementer and one reviewer per task, fix rounds until the review is clean.

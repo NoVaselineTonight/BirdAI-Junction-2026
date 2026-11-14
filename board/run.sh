@@ -8,7 +8,7 @@
 # --photo-every-s N (seconds of footage, e.g. 5 or 2.5) shows one analysed photo every N s, held until the next,
 # as the board's camera would take them, instead of video.
 # --latch (default off) closes the feeder latch when a squirrel or rat is seen: sim only shows it on the page,
-# router moves the servos through board/latch/latch.ino (upload that sketch to the board first).
+# router moves the servo through board/latch/latch.ino (upload that sketch to the board first).
 # --dry-run only reads from the board: it says which detector would run and what would be deleted.
 # --fresh deletes the board's data/census.db and data/evidence first, so the counts and the clock start over.
 # Safe to run twice: an earlier run is stopped first (SIGTERM, up to 10 s) and the forward is replaced.

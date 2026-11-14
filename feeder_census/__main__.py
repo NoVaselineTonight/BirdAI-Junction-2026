@@ -58,7 +58,7 @@ def _parser() -> argparse.ArgumentParser:
                    help="a line shown under the feed (default: says so when a clip has a .segments.csv beside it)")
     p.add_argument("--latch", choices=LATCH_MODES, default=Settings.latch,
                    help="close the feeder latch when a squirrel or rat is seen: off, sim (no hardware, the page shows "
-                        "what it would do) or router (the servos on the UNO Q) (default: %(default)s)")
+                        "what it would do) or router (the servo on the UNO Q) (default: %(default)s)")
     p.add_argument("--latch-socket", type=Path, default=ROUTER_SOCKET,
                    help="arduino-router socket for --latch router (default: %(default)s)")
     return p

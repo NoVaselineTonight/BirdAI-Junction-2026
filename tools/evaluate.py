@@ -36,7 +36,7 @@ MAX_BOARD_MS = 1500.0
 MIN_QUALIFYING_SPECIES = 3
 QUALIFY_PRECISION = 0.90
 QUALIFY_RECALL = 0.50
-LABELS = "teacher models, checked by a person"
+LABELS = "teacher models, cleaned automatically; a person spot-checked samples"
 
 Frame = tuple[list[Detection], list[Detection]]  # (everything the detector saw, the truth)
 

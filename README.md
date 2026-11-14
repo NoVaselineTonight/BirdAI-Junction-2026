@@ -71,49 +71,90 @@ The link between the program and the sketch follows Arduino's documentation for 
 
 ## Measured speed
 
-Milliseconds per frame for the pretrained two-stage detector (`python -m feeder_census.bench --detector two_stage --frames 30`), measured on 14 November 2026. Both rows use the same 60 s, 1280x720, 15 fps test clip. **That clip is a stand-in, not feeder footage: it is made of three still photos of a great tit, a blue tit and a bullfinch, panned and zoomed.** Real footage with several birds and more background will give different numbers.
+Milliseconds per frame on the Arduino UNO Q (4-core Kryo-V2), measured on 14 November 2026 with `python -m feeder_census.bench --frames 30`. The clip is **real feeder footage**: 120 s of the held-out day (12 November 2026), 1280x720, prepared with `tools/prepare_video.py`. The budget is 1500 ms per frame.
+
+| Detector | median | p90 | inside the 1500 ms budget |
+|---|---|---|---|
+| two_stage (pretrained) | 169.8 ms | 171.8 ms | yes |
+| student 640 px | 506.6 ms | 520.4 ms | yes |
+| student 960 px (shipped) | 1108.5 ms | 1127.9 ms | yes |
+
+Both student sizes stay inside the 1.5 s budget. The demo analyses one photo every 5 s (photo mode, above), which leaves time to spare even for the 960 px student.
+
+Earlier stand-in measurement, for the pretrained two-stage detector only (`python -m feeder_census.bench --detector two_stage --frames 30`). Both rows use the same 60 s, 1280x720, 15 fps test clip. **That clip is a stand-in, not feeder footage: it is made of three still photos of a great tit, a blue tit and a bullfinch, panned and zoomed.**
 
 | Where | median | p90 | birds per frame |
 |---|---|---|---|
 | Arduino UNO Q (4-core Kryo-V2) | 264 ms | 287 ms | 1.3 |
 | Laptop (Intel Core Ultra 5 228V) | 28 ms | 42 ms | 1.2 |
 
-The board keeps well inside the 1.5 s budget, so the demo detects every 2 s of footage, the default. While running, the board had about 1.2 GB of memory available.
+While that stand-in clip ran, the board had about 1.2 GB of memory available.
 
 ## How the shipped model is chosen
 
-Two detectors exist: the pretrained two-stage detector and a student model trained on our footage. `tools/evaluate.py` measures them on held-out footage and decides which one ships:
+Two kinds of detector exist: the pretrained two-stage detector and a student model trained on our footage, in two sizes (960 px and 640 px). `tools/evaluate.py` measures them on held-out footage and decides which one ships:
 
 ```
-uv run python tools/evaluate.py --dataset data/dataset --candidates two_stage student:640 student:416 \
-    --board-ms two_stage=<ms>,640=<ms>,416=<ms> --promote
+uv run python tools/evaluate.py --dataset data/dataset --candidates two_stage student:960 student:640 \
+    --board-ms two_stage=<ms>,960=<ms>,640=<ms> --promote
 ```
 
-- A candidate is eligible when its median time on the board is at most 1500 ms (`--board-ms` takes the medians from `python -m feeder_census.bench` on the board).
-- A student qualifies when at least three species reach precision of at least 0.90 and recall of at least 0.50 on the held-out footage.
-- The qualifying student with the highest share of exactly-right frames ships, but only if that share is at least the pretrained detector's. Otherwise the pretrained detector ships, and the card says why.
+- **The cut-off.** A detector gives each box a confidence. A box counts only above a cut-off. For a student, the cut-off is picked on validation footage (the last 15 % of each training video): the lowest value from 0.50 to 0.90 (in steps of 0.05) where at least 9 in 10 of the birds it named were named right. All species are judged together, and a species with fewer than 20 validation boxes is left out, so one rare species cannot hold the cut-off up. If no value reaches 9 in 10, the cut-off is 0.90, and the card says it is a fallback. The two-stage detector keeps its fixed cut-off and never sees validation footage.
+- **The board-time bar.** A student is eligible only when its median time on the board is at most 1500 ms (`--board-ms` takes the medians from `python -m feeder_census.bench` on the board). `--promote` needs a timing for every candidate.
+- **Qualifying.** A student qualifies when at least three species reach precision of at least 0.90 and recall of at least 0.50 on the held-out footage. Precision means: of the birds it named, the share named right. Recall means: of the birds in the truth labels, the share it found. A rate that could not be computed does not count.
+- **Who ships.** The qualifying student that counts exactly right in the most frames ships, but only if that share is at least the pretrained detector's. When no eligible student qualifies, the eligible student that counts best still ships if it beats the pretrained detector, and the card says `qualified: false`; the page then says "Below our accuracy bar; it ships because it counts better than the alternative." Otherwise the pretrained detector ships, and the card says why.
 - The numbers land in `models/eval.json` (every run) and in `models/model_card.json` (only with `--promote`), which the program and `board/deploy.sh` follow.
 
 ## What the accuracy numbers mean
 
-- They are measured on footage from a feeder the model never trained on.
-- The counting threshold is chosen on a held-back part of the training footage, never on the held-out footage.
-- The held-out frames are picked for having birds, plus a share of empty frames. They are harder than a random minute at a feeder, so the share of frames counted exactly right would be higher on raw footage.
-- The truth labels come from teacher models plus a person's check. The pretrained two-stage detector shares one of those teachers, which favours it.
-- The qualifying rule has no minimum number of boxes per species, so a species with very few held-out boxes can pass on luck. Read the box counts (`val_boxes`) next to every precision and recall.
+- They are measured on one day of footage, 12 November 2026, from the same feeder camera as most of the training footage. No frame of that day was used for training, for choosing the cut-off, or for training the teacher models (see "What the student was trained on"). The numbers say how the model does on this camera on a new day. They say nothing about another feeder, another camera or another season.
+- The cut-off is chosen on validation footage, the last 15 % of each training video, never on the held-out day.
+- The 899 held-out frames are picked for having birds, plus some empty frames. They are harder than a random minute at a feeder, so the share of frames counted exactly right would be higher on raw footage.
+- **The truth labels are machine-made.** Boxes come from a large teacher detector and two teachers trained on this camera. Names come from two bird classifiers (BioCLIP 2 and an iNaturalist classifier). Small classifiers trained on this camera's clear cases then removed non-birds (fat balls, snow) and fixed names. A person looked at sample sheets of each group (tens of crops each), not at every frame. So the numbers measure agreement with these labels. A bird the labels missed counts against the model when the model finds it. A mistake the model learned from the labels counts in its favour. In one by-eye check of 64 "false alarms" (an earlier round), about 60 were real, correctly named birds the labels had missed.
+- The qualifying rule has no minimum number of boxes per species, so a species with very few held-out boxes can pass on luck. Read the box counts next to every precision and recall.
 - Nothing here claims the model names species better than a skilled volunteer.
 
-Accuracy results (placeholder: nothing has been measured yet; after `--promote`, paste the numbers from `models/eval.json` here and do not round them up):
+Held-out day, 12 November 2026, 899 frames. "Named birds right" is the share of the birds the model named that were named right (precision). "Birds found" is the share of the labelled birds the model found (recall). Both are pooled over all species at the cut-off; those two columns come from a separate run of the same model on the same frames. The other columns are from `models/eval.json`.
 
-| Detector | board median | frames counted exactly right | species passing (precision >= 0.90, recall >= 0.50) | held-out frames |
-|---|---|---|---|---|
-| two_stage | _paste_ | _paste_ | _paste_ | _paste_ |
-| student:640 | _paste_ | _paste_ | _paste_ | _paste_ |
-| student:416 | _paste_ | _paste_ | _paste_ | _paste_ |
+| Detector | board median | cut-off | named birds right | birds found | frames counted exactly right | held-out frames |
+|---|---|---|---|---|---|---|
+| two_stage (pretrained) | 169.8 ms | 0.60 (fixed) | 0.00 | 0.00 | 0.208 | 899 |
+| student 640 px | 506.6 ms | 0.50 | 0.90 | 0.69 | 0.563 | 899 |
+| student 960 px (shipped) | 1108.5 ms | 0.50 | 0.93 | 0.72 | 0.582 | 899 |
+
+The pretrained two-stage detector finds no birds at all on this camera (recall 0.00). Its 0.208 can only come from frames with no bird in them. The 960 px student "qualifies" under the rule above (three species at precision 0.90 or more and recall 0.50 or more) only because the third species is house sparrow with a single held-out box; great tit and blue tit are the other two. The 640 px student does not qualify.
+
+The shipped student, species with at least 20 held-out boxes (every other species has fewer than 20, or none):
+
+| Species | named birds right (precision) | birds found (recall) | held-out boxes |
+|---|---|---|---|
+| great tit | 0.94 | 0.75 | 1466 |
+| blue tit | 0.93 | 0.69 | 308 |
+| magpie | 0.79 | 0.63 | 103 |
+| bullfinch | 0.83 | 0.45 | 22 |
+
+The held-out day has no squirrel, so squirrel accuracy is only known from validation footage (training days), where the 960 px student reached precision 0.95 and recall 0.85. On the held-out day the same student named some birds as red squirrel (precision 0.00 for that species, from `models/eval.json`), so a false squirrel alarm is possible.
+
+## What the student was trained on
+
+- **Feeder footage.** One public feeder camera stream, "Talvilintulive" (Haukipudas, Finland), recorded. It belongs to its uploader and is not in this repository. The shipped model was trained on 16 days of that stream: other days from October and November 2026 and two days from earlier winters. It also saw two videos of other (forest) feeders.
+- **Squirrels.** 400 Creative Commons photos by 273 iNaturalist observers (the attribution list is kept with the photos, outside this repository), frames of one squirrel documentary video, and squirrel cut-outs pasted into feeder frames. A real red squirrel visits this feeder. The minutes of its first visit on 22 October 2026 were kept out of training and are in the demo reel.
+- **Training only, never shown.** The documentary and the two forest-feeder videos are used for training only and are never shown in the demo.
+- **A worse camera.** One in four training frames also has a degraded copy (smaller, blurred, noisy, re-compressed), so the model copes with a worse camera.
+- **Held out.** The test day, 12 November 2026, was not used for training (see above).
 
 ## What the demo shows
 
-This is footage from a feeder, standing in for our camera. The demo clip may be an edited "busy parts" cut of a longer recording (made with `tools/mine_frames.py --highlights`). Say so aloud in the demo.
+The demo reel is recorded, not live. It is 12 November 2026 from one feeder camera ("Talvilintulive"), with the red squirrel's visit of 22 October 2026 in the middle. The clock in the picture is the stream's own; the clock on the page is the demo's. The demo clip may be an edited "busy parts" cut of a longer recording (made with `tools/mine_frames.py --highlights`). Say so aloud in the demo.
+
+## Next steps
+
+Not built yet:
+
+- A camera closer to the feeder: most misses are birds only 20-30 pixels wide.
+- Accepting a less sure name when several photos in a row agree.
+- Comparing each photo with the median of the last 5-10 minutes, to catch what changed.
+- A microphone as a second witness for species by their calls.
 
 ## Licences
 

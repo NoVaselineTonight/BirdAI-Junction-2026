@@ -195,6 +195,12 @@ def test_page_has_a_place_for_the_photo_note_and_the_script_words_it(client):
     assert "One photo every ${" in js and "s, as the board's camera would take them." in js
 
 
+def test_script_says_when_the_model_card_is_below_the_accuracy_bar_and_only_for_an_exact_false(client):
+    js = client.get("/static/app.js").text
+    assert "Below our accuracy bar; it ships because it counts better than the alternative." in js
+    assert "m.qualified === false" in js
+
+
 def test_page_has_a_place_for_the_footage_note_after_the_recorded_line(client):
     html = client.get("/").text
     assert html.index("Recorded feeder footage, standing in for the camera.") < html.index('id="footage-note"')

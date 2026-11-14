@@ -19,7 +19,7 @@ class Settings:
     preview_width: int = 960
     port: int = 8088
     footage_note: str | None = None  # said under the feed, e.g. that the clip is an edited cut
-    latch: str = "off"  # "off" | "sim" (no hardware, shows what it would do) | "router" (the servos on the board)
+    latch: str = "off"  # "off" | "sim" (no hardware, shows what it would do) | "router" (the servo on the board)
     latch_close_frames: int = 2  # detections in a row with a pest before the latch closes
     latch_open_frames: int = 5  # detections in a row without one before it opens again
     pest_threshold: float = 0.5  # minimum confidence for a pest box to count
