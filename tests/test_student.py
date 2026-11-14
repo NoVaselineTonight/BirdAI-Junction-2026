@@ -1,5 +1,6 @@
 import json
 from pathlib import Path
+from types import SimpleNamespace
 
 import cv2
 import numpy as np
@@ -154,15 +155,78 @@ def test_yolo26_exports_end_to_end_and_yolo11_exports_with_nms():
 
 
 def test_output_shape_must_be_one_by_n_by_six():
-    train_student.check_output_shape([1, 300, 6])
-    for bad in ([1, 84, 8400], [1, 300, 7], [300, 6], ["batch", 300, 6], [1, "n", 6]):
-        with pytest.raises(ValueError, match=r"\[1, N, 6\]"):
+    for good in ([1, 300, 6], [1, "N", 6], [1, None, 6], ["batch", 300, 6]):
+        train_student.check_output_shape(good)
+    for bad in ([1, 84, 8400], [1, 300, 7], [300, 6], [2, 300, 6], [1, 300, 6, 1]):
+        with pytest.raises(ValueError, match=r"expected \[1, N, 6\]") as err:
             train_student.check_output_shape(bad)
+        assert str(bad) in str(err.value)
+
+
+def test_best_weights_come_from_the_trainer_and_must_exist(tmp_path):
+    best = tmp_path / "weights" / "best.pt"
+    best.parent.mkdir()
+    best.write_bytes(b"")
+    trainer = SimpleNamespace(save_dir=tmp_path, best=best)
+    assert train_student.resolve_best(trainer) == best
+    with pytest.raises(RuntimeError, match="best.pt"):
+        train_student.resolve_best(SimpleNamespace(save_dir=tmp_path, best=tmp_path / "weights" / "nope" / "best.pt"))
+
+
+def test_exported_model_is_found_from_the_return_value_or_beside_best_pt(tmp_path):
+    best = tmp_path / "best.pt"
+    onnx = tmp_path / "best.onnx"
+    onnx.write_bytes(b"")
+    assert train_student.resolve_exported(str(onnx), best) == onnx
+    assert train_student.resolve_exported(str(tmp_path / "other.onnx"), best) == onnx  # missing: fall back
+    assert train_student.resolve_exported(str(best), best) == onnx  # not an .onnx: fall back
+    onnx.unlink()
+    with pytest.raises(RuntimeError, match="best.onnx"):
+        train_student.resolve_exported(str(tmp_path / "other.onnx"), best)
+
+
+def test_metrics_lines_say_which_split_they_are():
+    assert train_student.format_metrics(640, "val", 0.8123, 0.5, "used to pick the checkpoint") == \
+        "imgsz 640: val mAP50 0.812 / mAP50-95 0.500 (used to pick the checkpoint)"
+    assert train_student.format_metrics(416, "test", 0.7, 0.4, "held-out footage") == \
+        "imgsz 416: test mAP50 0.700 / mAP50-95 0.400 (held-out footage)"
+
+
+def test_a_failing_size_does_not_stop_the_others(capsys):
+    done = []
+
+    def train(size):
+        if size == 640:
+            raise RuntimeError("out of memory")
+        done.append(size)
+
+    assert train_student.run_sizes([640, 416], train) == [640]
+    assert done == [416]
+    assert "640" in capsys.readouterr().err
+
+
+def test_main_exits_non_zero_when_a_size_failed_but_still_trains_the_rest(tmp_path, monkeypatch):
+    root = make_dataset(tmp_path)
+    (root / "classes.json").write_text(json.dumps(["great_tit", "blue_tit", "unidentified"]))
+    (root / "split.json").write_text(json.dumps({"val_fraction": 0.15}))
+    seen = []
+
+    def fake_train_one(data, base, imgsz, epochs, out):
+        seen.append(imgsz)
+        if imgsz == 640:
+            raise RuntimeError("boom")
+
+    monkeypatch.setattr(train_student, "train_one", fake_train_one)
+    with pytest.raises(SystemExit) as exit_info:
+        train_student.main(["--data", str(root / "data.yaml"), "--imgsz", "640", "416", "--out", str(tmp_path / "m")])
+    assert exit_info.value.code == 1
+    assert seen == [640, 416]
 
 
 def make_dataset(tmp_path):
     root = tmp_path / "dataset"
-    for split, stems in {"train": ["a_00000000", "a_00001000", "b_00000000"], "val": ["d_00000000", "d_00001000", "c_00002000"]}.items():
+    for split, stems in {"train": ["a_00000000", "a_00001000", "b_00000000"], "val": ["a_00002000"],
+                                  "test": ["d_00000000", "d_00001000", "c_00002000"]}.items():
         (root / "images" / split).mkdir(parents=True)
         (root / "labels" / split).mkdir(parents=True)
         for stem in stems:
@@ -171,7 +235,8 @@ def make_dataset(tmp_path):
     (labels / "a_00000000.txt").write_text("0 0.5 0.5 0.1 0.1\n0 0.2 0.2 0.1 0.1\n2 0.8 0.8 0.1 0.1\n")
     (labels / "a_00001000.txt").write_text("1 0.5 0.5 0.1 0.1\n")
     (labels / "b_00000000.txt").write_text("")
-    (root / "labels" / "val" / "d_00000000.txt").write_text("0 0.5 0.5 0.1 0.1\n")
+    (root / "labels" / "val" / "a_00002000.txt").write_text("1 0.5 0.5 0.1 0.1\n")
+    (root / "labels" / "test" / "d_00000000.txt").write_text("0 0.5 0.5 0.1 0.1\n")
     return root
 
 
@@ -181,18 +246,19 @@ def test_train_boxes_count_class_ids_in_the_training_labels_only(tmp_path):
     assert train_student.count_train_boxes(root, classes) == {"great_tit": 2, "blue_tit": 1, "unidentified": 1}
 
 
-def test_held_out_footage_is_the_sorted_video_stems_of_the_val_images(tmp_path):
+def test_held_out_footage_is_the_sorted_video_stems_of_the_test_images(tmp_path):
     assert train_student.held_out_footage(make_dataset(tmp_path)) == ["c", "d"]
 
 
 def test_card_has_the_fields_the_detector_reads():
     card = train_student.build_card(
         base="yolo26n.pt", imgsz=640, classes=["great_tit", "unidentified"], train_boxes={"great_tit": 70, "unidentified": 0},
-        held_out=["d"], trained_at="2026-11-14T10:00:00Z")
+        held_out=["d"], val_fraction=0.15, trained_at="2026-11-14T10:00:00Z")
     assert card == {
         "name": "Feeder student 640", "kind": "student", "base": "yolo26n", "imgsz": 640,
         "classes": ["great_tit", "unidentified"], "count_threshold": 0.60, "trained_at": "2026-11-14T10:00:00Z",
-        "train_boxes": {"great_tit": 70, "unidentified": 0}, "held_out_footage": ["d"], "metrics": None}
+        "train_boxes": {"great_tit": 70, "unidentified": 0}, "held_out_footage": ["d"],
+        "val_footage": "last 15% of each training video", "metrics": None}
 
 
 def test_train_student_imports_without_ultralytics():

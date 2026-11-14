@@ -6,7 +6,7 @@ from pathlib import Path
 import cv2
 import numpy as np
 
-from build_dataset import apply_corrections, choose_classes
+from build_dataset import apply_corrections, carve_validation, choose_classes
 
 ROOT = Path(__file__).resolve().parent.parent
 BOX = [100.0, 100.0, 300.0, 300.0]  # the centre quarter of a 400x400 frame
@@ -74,13 +74,48 @@ def test_dataset_split_follows_the_footage_and_rare_species_become_unidentified(
     assert done.returncode == 0, done.stderr
     out = tmp_path / "dataset"
     assert json.loads((out / "classes.json").read_text()) == ["great_tit", "blue_tit", "unidentified"]
-    assert not any("demo" in p.name for p in (out / "images" / "train").iterdir())
-    assert len(list((out / "images" / "val").iterdir())) == 10
-    assert len(list((out / "images" / "train").iterdir())) == 140
-    assert (out / "labels" / "val" / "d_00000000.txt").read_text().splitlines()[0] == "0 0.500000 0.500000 0.500000 0.500000"
+    for split in ("train", "val"):
+        assert not any("demo" in p.name or p.name.startswith("d_") for p in (out / "images" / split).iterdir())
+    assert len(list((out / "images" / "test").iterdir())) == 10
+    # 70 and 65 frames lose their last ceil(15%) = 11 and 10 to val; the 5-frame video stays whole
+    assert len(list((out / "images" / "val").iterdir())) == 21
+    assert len(list((out / "images" / "train").iterdir())) == 59 + 55 + 5
+    assert (out / "labels" / "test" / "d_00000000.txt").read_text().splitlines()[0] == "0 0.500000 0.500000 0.500000 0.500000"
     bullfinch_frame_label = (out / "labels" / "train" / "bf_00000000.txt").read_text()
     assert bullfinch_frame_label.startswith("2 ")
-    assert (out / "images" / "val" / "d_00000000.jpg").is_file()
+    assert (out / "images" / "test" / "d_00000000.jpg").is_file()
+
+
+def test_validation_is_the_tail_of_each_long_training_video(tmp_path):
+    rows = make_rows(tmp_path, [("train", "g", "great_tit", 20), ("train", "h", "great_tit", 50),
+                                ("train", "b", "blue_tit", 65), ("train", "s", "blue_tit", 9),
+                                ("demo", "d", "great_tit", 1)])
+    done = run_build(tmp_path, rows)
+    assert done.returncode == 0, done.stderr
+    out = tmp_path / "dataset" / "images"
+    val = sorted(p.stem for p in (out / "val").iterdir())
+    assert [s for s in val if s.startswith("g_")] == ["g_00017000", "g_00018000", "g_00019000"]
+    assert not any(s.startswith("s_") for s in val)  # 9 frames: too short to hold any back
+    assert (out / "train" / "g_00016000.jpg").is_file() and not (out / "train" / "g_00017000.jpg").is_file()
+    assert len([s for s in val if s.startswith("h_")]) == 8  # ceil(7.5)
+
+
+def test_val_fraction_option_changes_the_tail(tmp_path):
+    rows = make_rows(tmp_path, [("train", "g", "great_tit", 70), ("train", "b", "blue_tit", 65),
+                                ("demo", "d", "great_tit", 1)])
+    done = run_build(tmp_path, rows, extra=["--val-fraction", "0.5"])
+    assert done.returncode == 0, done.stderr
+    assert len([p for p in (tmp_path / "dataset" / "images" / "val").iterdir() if p.name.startswith("g_")]) == 35
+
+
+def test_carve_validation_leaves_short_videos_and_demo_alone():
+    frames = {f"train/v/v_{i * 500:08d}.jpg": "train" for i in range(10)}
+    frames.update({f"train/w/w_{i * 500:08d}.jpg": "train" for i in range(9)})
+    frames["demo/d/d_00000000.jpg"] = "demo"
+    where = carve_validation(frames, 0.15)
+    assert sorted(f for f, w in where.items() if w == "val") == ["train/v/v_00004000.jpg", "train/v/v_00004500.jpg"]
+    assert where["demo/d/d_00000000.jpg"] == "test"
+    assert all(w == "train" for f, w in where.items() if "/w/" in f)
 
 
 def test_data_yaml_and_class_table(tmp_path):
@@ -90,11 +125,12 @@ def test_data_yaml_and_class_table(tmp_path):
     assert done.returncode == 0, done.stderr
     out = tmp_path / "dataset"
     assert (out / "data.yaml").read_text().splitlines() == [
-        f"path: {out.resolve()}", "train: images/train", "val: images/val", "names:",
+        f"path: {out.resolve()}", "train: images/train", "val: images/val", "test: images/test", "names:",
         "  0: great_tit", "  1: blue_tit", "  2: unidentified"]
     table = done.stdout.splitlines()
-    assert any(line.split() == ["great_tit", "70", "3"] for line in table)
-    assert any(line.split() == ["unidentified", "0", "0"] for line in table)
+    assert any(line.split() == ["great_tit", "59", "11", "3"] for line in table)
+    assert any(line.split() == ["blue_tit", "55", "10", "0"] for line in table)
+    assert any(line.split() == ["unidentified", "0", "0", "0"] for line in table)
 
 
 def test_corrections_change_the_dataset_and_empty_frames_get_an_empty_label(tmp_path):
@@ -109,7 +145,7 @@ def test_corrections_change_the_dataset_and_empty_frames_get_an_empty_label(tmp_
     assert "nope#1" in done.stderr
     out = tmp_path / "dataset" / "labels" / "train"
     assert (out / "x_00000000.txt").read_text().startswith("1 ")
-    assert not (out / "x_00001000.txt").exists()
+    assert (out / "x_00001000.txt").read_text() == ""  # every box dropped: the frame stays as a negative
     assert (out / "e_00000000.txt").read_text() == ""
 
 
@@ -125,6 +161,14 @@ def test_build_refuses_without_held_out_footage(tmp_path):
     done = run_build(tmp_path, rows)
     assert done.returncode == 2
     assert "no held-out footage: put the demo video in data/videos/demo" in done.stderr
+
+
+def test_build_refuses_when_training_videos_are_too_short_to_hold_frames_back(tmp_path):
+    groups = [("train", f"g{i}", "great_tit", 9) for i in range(8)] + [("train", f"b{i}", "blue_tit", 9) for i in range(8)]
+    rows = make_rows(tmp_path, groups + [("demo", "d", "great_tit", 1)])
+    done = run_build(tmp_path, rows)
+    assert done.returncode == 2
+    assert "no validation frames: training videos are too short to hold some back" in done.stderr
 
 
 def test_build_refuses_with_fewer_than_two_species_classes(tmp_path):
