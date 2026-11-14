@@ -311,6 +311,24 @@ def test_choose_below_the_bar_only_considers_students_fast_enough():
     assert name == "student:416" and "below the bar" in reason and qualified is False
 
 
+def test_choose_below_the_bar_says_fast_enough_when_a_qualifying_student_is_too_slow():
+    results = {"two_stage": result("two_stage", 0.242, board_ms=2000.0),
+               "student:640": result("student", 0.90, board_ms=1600.0),                      # qualifies, too slow
+               "student:416": result("student", 0.570, board_ms=900.0, qualifying=False)}
+    name, reason, qualified = choose(results)
+    assert name == "student:416" and qualified is False
+    assert "no student fast enough for the board reaches the bar (" in reason and "below the bar" in reason
+
+
+def test_choose_two_stage_says_fast_enough_when_a_qualifying_student_is_too_slow():
+    results = {"two_stage": result("two_stage", 0.242, board_ms=2000.0),
+               "student:640": result("student", 0.90, board_ms=1600.0),                      # qualifies, too slow
+               "student:416": result("student", 0.20, board_ms=900.0, qualifying=False)}
+    name, reason, qualified = choose(results)
+    assert name == "two_stage" and qualified is False
+    assert "no student fast enough for the board qualifies (" in reason and "two-stage detector ships" in reason
+
+
 def test_choose_skips_a_student_slower_than_1500_ms():
     results = {"two_stage": result("two_stage", 0.50, board_ms=2000.0),
                "student:640": result("student", 0.99, board_ms=1501.0),

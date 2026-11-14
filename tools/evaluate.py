@@ -286,12 +286,13 @@ def choose(results: Mapping[str, Mapping]) -> tuple[str, str, bool]:
     if not good:
         bar = (f"at least {MIN_QUALIFYING_SPECIES} species with precision "
                f"{QUALIFY_PRECISION:.2f} and recall {QUALIFY_RECALL:.2f} on unseen footage")
+        scope = "student fast enough for the board" if len(fast) < len(students) else "student"
         top = max(fast, key=lambda n: fast[n]["count_exact"])
         if fast[top]["count_exact"] > two:
-            return top, (f"no student reaches the bar ({bar}); {top} still counts exactly in "
+            return top, (f"no {scope} reaches the bar ({bar}); {top} still counts exactly in "
                          f"{fast[top]['count_exact']:.3f} of unseen frames against the two-stage detector's "
                          f"{two:.3f}, so it ships, marked as below the bar."), False
-        return "two_stage", f"no student qualifies ({bar}), so the two-stage detector ships.", False
+        return "two_stage", f"no {scope} qualifies ({bar}), so the two-stage detector ships.", False
     best = max(good, key=lambda n: good[n]["count_exact"])
     if good[best]["count_exact"] < two:
         return "two_stage", (f"the best qualifying student ({best}) counts exactly in {good[best]['count_exact']:.3f} "
