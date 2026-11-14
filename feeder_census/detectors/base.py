@@ -32,8 +32,13 @@ def letterbox(
     return canvas, ratio, (dx, dy)
 
 
-def nms(boxes: np.ndarray, scores: np.ndarray, iou: float) -> list[int]:
-    """Class-agnostic non-maximum suppression. Returns kept indices, best score first."""
+def nms(boxes: np.ndarray, scores: np.ndarray, iou: float, contain: float | None = None) -> list[int]:
+    """Class-agnostic non-maximum suppression. Returns kept indices, best score first.
+
+    With `contain` set, a box is also dropped when at least that fraction of the
+    smaller of the two boxes lies inside a higher-scoring kept box (a head box
+    inside a body box is one bird).
+    """
     order = list(np.argsort(-scores, kind="stable"))
     areas = (boxes[:, 2] - boxes[:, 0]) * (boxes[:, 3] - boxes[:, 1])
     keep: list[int] = []
@@ -47,5 +52,8 @@ def nms(boxes: np.ndarray, scores: np.ndarray, iou: float) -> list[int]:
         h = np.minimum(boxes[i, 3], boxes[rest, 3]) - np.maximum(boxes[i, 1], boxes[rest, 1])
         inter = np.clip(w, 0, None) * np.clip(h, 0, None)
         overlap = inter / (areas[i] + areas[rest] - inter + 1e-9)
-        order = [int(j) for j, o in zip(rest, overlap) if o <= iou]
+        drop = overlap > iou
+        if contain is not None:
+            drop |= inter / (np.minimum(areas[i], areas[rest]) + 1e-9) >= contain
+        order = [int(j) for j, d in zip(rest, drop) if not d]
     return keep

@@ -38,6 +38,13 @@ def test_nms_keeps_one_box_per_bird():
     boxes = np.array([[0, 0, 100, 100], [5, 5, 105, 105], [200, 200, 260, 260]], np.float32)
     assert nms(boxes, np.array([0.9, 0.8, 0.7]), iou=0.45) == [0, 2]
 
+def test_nms_drops_a_box_nested_inside_another():
+    boxes = np.array([[0, 0, 100, 100], [30, 5, 70, 40], [90, 90, 190, 190]], np.float32)
+    scores = np.array([0.9, 0.8, 0.7])
+    assert nms(boxes, scores, iou=0.45) == [0, 1, 2]
+    assert nms(boxes, scores, iou=0.45, contain=0.8) == [0, 2]
+    assert nms(boxes, np.array([0.8, 0.9, 0.7]), iou=0.45, contain=0.8) == [1, 2]
+
 def test_letterbox_round_trip():
     img = np.zeros((1080, 1920, 3), np.uint8)
     out, ratio, (dx, dy) = letterbox(img, 416, center=False)
@@ -67,6 +74,10 @@ def test_build_detector_rejects_unknown_kind_and_missing_files(species, tmp_path
     with pytest.raises(FileNotFoundError, match="fetch_models.py"):
         build_detector("two_stage", tmp_path, species)
     with pytest.raises(FileNotFoundError, match="feeder.onnx"):
+        build_detector("student", tmp_path, species)
+    (tmp_path / "student").mkdir()
+    (tmp_path / "student" / "feeder.onnx").write_bytes(b"x")
+    with pytest.raises(FileNotFoundError, match="feeder.json"):
         build_detector("student", tmp_path, species)
 
 @pytest.mark.models

@@ -39,10 +39,12 @@ def build_detector(
         return TwoStageDetector(YoloxBoxes(yolox), classifier, in_labels)
     if kind == "student":
         student_dir = Path(student_dir) if student_dir else models_dir / "student"
-        _require(student_dir / "feeder.onnx", "train the student model first")
+        hint = "train the student model first"
+        model = _require(student_dir / "feeder.onnx", hint)
+        card = _require(student_dir / "feeder.json", hint)
         from feeder_census.detectors.student import StudentDetector
 
-        return StudentDetector(student_dir, species)
+        return StudentDetector(model, card)
     if kind == "scripted":
         if script is None:
             raise ValueError("the scripted detector needs a script file")

@@ -29,7 +29,12 @@ class YoloxBoxes:
     """YOLOX-nano ONNX bird finder: boxes in source-frame pixels with a score."""
 
     def __init__(
-        self, model: Path, score_threshold: float = 0.30, nms_iou: float = 0.45, class_id: int = 14
+        self,
+        model: Path,
+        score_threshold: float = 0.30,
+        nms_iou: float = 0.45,
+        class_id: int = 14,
+        nms_contain: float = 0.8,
     ):
         self._session = ort.InferenceSession(str(model), providers=["CPUExecutionProvider"])
         model_input = self._session.get_inputs()[0]
@@ -38,6 +43,7 @@ class YoloxBoxes:
         self._score_threshold = score_threshold
         self._nms_iou = nms_iou
         self._class_id = class_id
+        self._nms_contain = nms_contain
 
     def boxes(self, frame_bgr: np.ndarray) -> list[tuple[tuple[float, float, float, float], float]]:
         h, w = frame_bgr.shape[:2]
@@ -48,7 +54,7 @@ class YoloxBoxes:
         keep = scores >= self._score_threshold
         boxes, scores = boxes[keep] / ratio, scores[keep]
         found = []
-        for i in nms(boxes, scores, self._nms_iou):
+        for i in nms(boxes, scores, self._nms_iou, self._nms_contain):
             x1, y1, x2, y2 = boxes[i]
             box = (
                 float(np.clip(x1, 0, w)), float(np.clip(y1, 0, h)),
