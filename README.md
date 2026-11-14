@@ -12,6 +12,8 @@ uv run python -m feeder_census --videos data/videos/demo
 
 Then open http://localhost:8088. `--fast` plays the footage unpaced, `--no-web` prints a line per detection instead.
 
+`--photo-every-s SECONDS` makes the demo behave like the board's camera: it analyses one photo every SECONDS of footage and the page shows only those photos, each drawn with its own boxes and held until the next one, instead of video. For example `uv run python -m feeder_census --videos data/videos/demo --photo-every-s 5`. It replaces `--detect-every-s`, and giving both is an error. A bird is counted when it is seen in two photos in a row, so with 10 s between photos a bird must stay at the feeder for about 10 s to be counted. `board/run.sh --photo-every-s 5` passes it on to the board.
+
 `--detector` is `auto` by default: the program runs the detector named in `models/model_card.json` (see below), or the pretrained `two_stage` detector when there is no card. `--detector two_stage|student` forces one; the page shows the model card only when the card was measured for the detector that runs. The first output line says which detector runs, why (`model card`, `no model card`, `asked for`) and the counting threshold in force; a `count_threshold` in the card replaces the detector's own.
 
 ## Deploy and run on the Arduino UNO Q

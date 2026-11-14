@@ -1,9 +1,12 @@
 #!/usr/bin/env bash
 # Start the demo on the Arduino UNO Q and forward its page to http://localhost:8088.
-# Usage: board/run.sh [--detector auto|two_stage|student] [--latch off|sim|router] [--fast] [--fresh] [--dry-run]
+# Usage: board/run.sh [--detector auto|two_stage|student] [--latch off|sim|router] [--photo-every-s N] [--fast]
+#                     [--fresh] [--dry-run]
 #        board/run.sh --stop
 # --detector auto (the default) lets the program on the board pick: the kind in the board's models/model_card.json,
 # or two_stage when it has none. deploy.sh keeps that card in step with the model it ships.
+# --photo-every-s N (seconds of footage, e.g. 5 or 2.5) shows one analysed photo every N s, held until the next,
+# as the board's camera would take them, instead of video.
 # --latch (default off) closes the feeder latch when a squirrel or rat is seen: sim only shows it on the page,
 # router moves the servos through board/latch/latch.ino (upload that sketch to the board first).
 # --dry-run only reads from the board: it says which detector would run and what would be deleted.
@@ -15,6 +18,8 @@ source "$(dirname "$0")/common.sh"
 DETECTOR=auto
 LATCH=off
 EXTRA=""
+FAST=""
+PHOTO=""
 STOP=0
 FRESH=0
 DRY_RUN=0
@@ -22,11 +27,12 @@ while [ $# -gt 0 ]; do
     case "$1" in
         --detector) DETECTOR=${2:?--detector needs a value}; shift 2 ;;
         --latch) LATCH=${2:?--latch needs a value}; shift 2 ;;
-        --fast) EXTRA="--fast"; shift ;;
+        --photo-every-s) PHOTO=${2:?--photo-every-s needs a value}; shift 2 ;;
+        --fast) FAST="--fast"; shift ;;
         --fresh) FRESH=1; shift ;;
         --stop) STOP=1; shift ;;
         --dry-run) DRY_RUN=1; shift ;;
-        *) echo "usage: board/run.sh [--detector auto|two_stage|student] [--latch off|sim|router] [--fast] [--fresh] [--dry-run] | --stop" >&2; exit 2 ;;
+        *) echo "usage: board/run.sh [--detector auto|two_stage|student] [--latch off|sim|router] [--photo-every-s N] [--fast] [--fresh] [--dry-run] | --stop" >&2; exit 2 ;;
     esac
 done
 case "$DETECTOR" in
@@ -37,6 +43,14 @@ case "$LATCH" in
     off|sim|router) ;;
     *) echo "error: unknown latch mode '$LATCH' (off, sim or router)" >&2; exit 2 ;;
 esac
+
+if [ -n "$PHOTO" ]; then
+    if ! [[ "$PHOTO" =~ ^([0-9]+\.?[0-9]*|\.[0-9]+)$ ]] || [[ "$PHOTO" =~ ^0*\.?0*$ ]]; then
+        echo "error: --photo-every-s needs a number of seconds above 0, got '$PHOTO'" >&2; exit 2
+    fi
+    EXTRA="--photo-every-s $PHOTO"
+fi
+EXTRA="$EXTRA $FAST"
 
 require_one_board
 

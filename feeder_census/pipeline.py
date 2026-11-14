@@ -86,6 +86,7 @@ class Pipeline:
         self._detect_ms = 0.0
         self._jpeg = b""
         self._last_preview: float | None = None
+        self._first_shown = False  # photo mode: the first frame has been shown
         self._last_start_t: float | None = None  # footage time the last detection started
         self._day: date | None = None  # worker side only
         # worker side only: confirmed counts of the last `visit_gap_frames` detections; arrivals are rises over
@@ -114,6 +115,10 @@ class Pipeline:
         if self.error is not None:
             raise self.error
         frame, t = self.camera.read()
+        if self.settings.photo_mode and not self._first_shown:
+            # not blank while the first photo is analysed; before the worker starts, so it cannot overwrite the photo
+            self._first_shown = True
+            self._show(frame, [])
         every = self.settings.detect_every_s
         due = self._last_start_t is None or t - self._last_start_t >= every - _EPS
         if due and not self._busy.is_set():
@@ -126,7 +131,8 @@ class Pipeline:
                     self._executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="detector")
                 self._busy.set()
                 self._executor.submit(self._job, frame, gap)
-        self._update_preview(frame)
+        if not self.settings.photo_mode:
+            self._update_preview(frame)
 
     def run(self, stop: threading.Event) -> None:
         try:
@@ -148,6 +154,9 @@ class Pipeline:
         self._last_preview = now
         with self._lock:
             detections = list(self.last_detections)
+        self._show(frame, detections)
+
+    def _show(self, frame: np.ndarray, detections: list[Detection]) -> None:
         img = annotate(frame, detections, self.names, self._threshold, self._pest_thresholds)
         width = self.settings.preview_width
         if img.shape[1] > width:
@@ -219,6 +228,8 @@ class Pipeline:
             self._pests_now, self._latch_state = pests, latch
             self._detect_ms = detect_ms
             self._visits, self._day_max = visits, day_max
+        if s.photo_mode:  # the photo that was analysed, with its own boxes, until the next one replaces it
+            self._show(frame, detections)
         if self._on_result is not None:
             self._on_result(self.live())
 

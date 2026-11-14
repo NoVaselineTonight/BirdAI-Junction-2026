@@ -14,6 +14,7 @@ class Settings:
     roi: tuple[float, float, float, float] | None = None  # x, y, w, h as fractions of the frame
     sim_start: date = date(2026, 11, 1)
     evidence_dir: Path = Path("data/evidence")
+    photo_mode: bool = False  # the feed shows only the analysed photos, each held until the next one
     preview_fps: float = 5.0
     preview_width: int = 960
     port: int = 8088

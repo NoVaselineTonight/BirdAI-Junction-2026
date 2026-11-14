@@ -281,3 +281,94 @@ def test_a_pest_box_is_drawn_by_its_own_threshold():
     assert tuple(grey) == (150, 150, 150) and tuple(drawn) != (150, 150, 150) and drawn.any()
     weak = [Detection("red_squirrel", 0.3, (100, 100, 200, 200))]
     assert tuple(annotate(frame, weak, {}, 0.6, pests={"red_squirrel": 0.5})[150, 100]) == (150, 150, 150)
+
+
+# --- photo mode: the feed shows only the analysed photos, each held until the next ---
+
+
+class VaryingCamera:
+    """Every read is a different grey frame, 0.5 s of footage after the last."""
+
+    def __init__(self):
+        self.reads = 0
+
+    def read(self):
+        self.reads += 1
+        return np.full((240, 320, 3), 20 + 10 * self.reads, np.uint8), (self.reads - 1) * 0.5
+
+    def close(self):
+        pass
+
+
+def photo_pipeline(tmp_path, frames, inline=True):
+    tmp_path.mkdir(parents=True, exist_ok=True)
+    return build(tmp_path, None, frames, camera=VaryingCamera(), inline=inline, photo_mode=True, detect_every_s=2.0)[0]
+
+
+def test_photo_mode_shows_the_analysed_frame_with_its_boxes_and_holds_it(tmp_path):
+    p = photo_pipeline(tmp_path, [[GT]])
+    p.step()  # detection due at once
+    shown = p.live().jpeg
+    assert shown.startswith(b"\xff\xd8") and p.detector.calls == 1
+    for _ in range(3):  # footage 0.5, 1.0, 1.5 s: no detection due, the camera frames differ
+        p.step()
+    assert p.detector.calls == 1 and p.live().jpeg == shown
+    p.step()  # footage 2.0 s: the next photo replaces it
+    assert p.detector.calls == 2 and p.live().jpeg != shown
+
+
+def test_photo_mode_boxes_are_the_detections_of_the_shown_frame(tmp_path):
+    with_birds = photo_pipeline(tmp_path / "a", [[GT]])
+    without = photo_pipeline(tmp_path / "b", [[]])
+    with_birds.step()
+    without.step()
+    assert with_birds.live().jpeg != without.live().jpeg  # same frame, one drawn with a box
+
+
+def test_photo_mode_shows_the_first_frame_before_any_detection_has_finished(tmp_path):
+    release = threading.Event()
+
+    p = photo_pipeline(tmp_path, [[GT]], inline=False)
+    detect = p.detector.detect
+    p.detector.detect = lambda frame: (release.wait(2), detect(frame))[1]
+    try:
+        p.step()
+        assert p.detector.calls == 0 and p.live().jpeg.startswith(b"\xff\xd8")
+        first = p.live().jpeg
+        release.set()
+        wait_idle(p)
+        assert p.live().jpeg != first  # replaced by the analysed photo, now with its box
+    finally:
+        release.set()
+        p.close()
+
+
+def wait_idle(p):
+    deadline = time.monotonic() + 2.0
+    while p._busy.is_set() and time.monotonic() < deadline:
+        time.sleep(0.005)
+    assert not p._busy.is_set()
+
+
+def test_photo_mode_on_the_worker_shows_the_analysed_frame_with_its_boxes(tmp_path):
+    inline = photo_pipeline(tmp_path / "inline", [[GT]])
+    inline.step()
+    p = photo_pipeline(tmp_path / "worker", [[GT]], inline=False)
+    try:
+        p.step()
+        wait_idle(p)
+        assert p.live().jpeg == inline.live().jpeg
+        shown = p.live().jpeg
+        p.step()  # footage 0.5 s: nothing due; the camera frame must not replace the photo
+        assert p.live().jpeg == shown
+    finally:
+        p.close()
+
+
+def test_without_photo_mode_every_camera_frame_refreshes_the_preview(tmp_path):
+    p = build(tmp_path, None, [[GT]], camera=VaryingCamera(), preview_fps=1000.0)[0]
+    p.step()
+    first = p.live().jpeg
+    time.sleep(0.01)  # past the preview interval
+    p.step()  # no detection due, but the preview follows the camera
+    assert p.detector.calls == 1 and p.live().jpeg != first

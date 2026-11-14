@@ -45,8 +45,11 @@ def _parser() -> argparse.ArgumentParser:
     p.add_argument("--port", type=int, default=Settings.port)
     p.add_argument("--fast", action="store_true", help="play unpaced, to fill the table before a demo")
     p.add_argument("--no-web", action="store_true", help="print a line per detection instead of serving the page")
-    p.add_argument("--detect-every-s", type=_positive, default=Settings.detect_every_s,
-                   help="footage seconds between detections (default: %(default)s)")
+    p.add_argument("--detect-every-s", type=_positive, default=None,
+                   help=f"footage seconds between detections (default: {Settings.detect_every_s:g})")
+    p.add_argument("--photo-every-s", type=_positive, default=None,
+                   help="photo mode: analyse one photo every SECONDS of footage and show only those photos, each "
+                        "held until the next, as the board's camera would; use instead of --detect-every-s")
     p.add_argument("--roi", type=_roi, default=None, help="x,y,w,h as fractions of the frame")
     p.add_argument("--script", type=Path, default=None, help="script file for --detector scripted")
     p.add_argument("--models-dir", type=Path, default=Path("models"))
@@ -136,7 +139,14 @@ def _serve(app, port: int, stop: threading.Event) -> None:
 
 
 def main(argv: list[str] | None = None) -> int:
-    args = _parser().parse_args(argv)
+    parser = _parser()
+    args = parser.parse_args(argv)
+    if args.photo_every_s is not None and args.detect_every_s is not None:
+        parser.error("give one of --photo-every-s and --detect-every-s, not both")
+    photo = args.photo_every_s is not None
+    detect_every_s = args.photo_every_s if photo else args.detect_every_s
+    if detect_every_s is None:
+        detect_every_s = Settings.detect_every_s
     kind, card = resolve_detector(args.detector, args.models_dir)
     resolved_card = card
     if kind == "student" and args.student_dir:
@@ -167,7 +177,8 @@ def main(argv: list[str] | None = None) -> int:
     pest_keys = {p.key for p in pests}
     store = Store(args.db, [sp for sp in detector.species if sp not in pest_keys])  # pests are never census columns
     settings = Settings(
-        detect_every_s=args.detect_every_s, roi=args.roi, port=args.port,
+        detect_every_s=detect_every_s, photo_mode=photo,
+        max_gap_s=max(Settings.max_gap_s, 2 * detect_every_s) if photo else Settings.max_gap_s, roi=args.roi, port=args.port,
         evidence_dir=args.db.parent / "evidence", count_threshold=threshold,
         footage_note=args.footage_note if args.footage_note is not None else _footage_note(args.videos),
         latch=args.latch,

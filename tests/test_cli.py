@@ -42,6 +42,39 @@ def test_detect_every_s_must_be_positive():
         cli._parser().parse_args(["--videos", "x.mp4", "--detect-every-s", "0"])
 
 
+# --- photo mode ---
+
+
+def test_photo_every_s_sets_photo_mode_and_the_interval(monkeypatch, tmp_path, make_video):
+    settings = run_cli(monkeypatch, tmp_path, make_video, "--photo-every-s", "5")
+    assert settings.photo_mode is True and settings.detect_every_s == 5.0 and settings.max_gap_s == 10.0
+
+
+def test_photo_every_s_lets_a_whole_interval_count(monkeypatch, tmp_path, make_video):
+    assert run_cli(monkeypatch, tmp_path, make_video, "--photo-every-s", "10").max_gap_s == 20.0
+    assert run_cli(monkeypatch, tmp_path, make_video, "--photo-every-s", "2.5").max_gap_s == Settings.max_gap_s
+
+
+def test_without_photo_every_s_nothing_changes(monkeypatch, tmp_path, make_video):
+    settings = run_cli(monkeypatch, tmp_path, make_video)
+    assert settings.photo_mode is False and settings.max_gap_s == Settings.max_gap_s
+
+
+def test_photo_every_s_with_detect_every_s_is_a_usage_error(tmp_path, make_video, capsys):
+    argv = ["--videos", str(make_video()), "--detector", "scripted", "--db", str(tmp_path / "c.db"),
+            "--photo-every-s", "5", "--detect-every-s", "2"]
+    with pytest.raises(SystemExit) as stop:
+        cli.main(argv)
+    assert stop.value.code == 2
+    err = capsys.readouterr().err
+    assert "--photo-every-s" in err and "--detect-every-s" in err and "one of" in err
+
+
+def test_photo_every_s_must_be_positive():
+    with pytest.raises(SystemExit):
+        cli._parser().parse_args(["--videos", "x.mp4", "--photo-every-s", "0"])
+
+
 # --- model card and --detector auto ---
 
 import json  # noqa: E402

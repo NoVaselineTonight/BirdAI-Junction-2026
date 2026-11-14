@@ -182,6 +182,19 @@ def test_live_state_carries_the_footage_note(tmp_path, make_video, client):
         assert c.get("/api/live").json()["footage_note"] == "Edited to the busy parts of a longer recording."
 
 
+def test_live_state_says_the_photo_interval_in_photo_mode_and_null_otherwise(tmp_path, make_video, client):
+    assert client.get("/api/live").json()["photo_every_s"] is None
+    app, _, _ = scripted_app(tmp_path / "photo", make_video, ["great_tit"], [[GT]], 1, photo_mode=True, detect_every_s=5.0)
+    with TestClient(app) as c:
+        assert c.get("/api/live").json()["photo_every_s"] == 5
+
+
+def test_page_has_a_place_for_the_photo_note_and_the_script_words_it(client):
+    assert 'id="photo-note"' in client.get("/").text
+    js = client.get("/static/app.js").text
+    assert "One photo every ${" in js and "s, as the board's camera would take them." in js
+
+
 def test_page_has_a_place_for_the_footage_note_after_the_recorded_line(client):
     html = client.get("/").text
     assert html.index("Recorded feeder footage, standing in for the camera.") < html.index('id="footage-note"')

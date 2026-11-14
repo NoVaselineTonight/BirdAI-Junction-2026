@@ -81,6 +81,9 @@ function renderLive() {
   $("unidentified").hidden = !live.unidentified;
   $("footage-note").textContent = live.footage_note || "";
   $("footage-note").hidden = !live.footage_note;
+  const photo = typeof live.photo_every_s === "number";
+  $("photo-note").textContent = photo ? `One photo every ${live.photo_every_s} s, as the board's camera would take them.` : "";
+  $("photo-note").hidden = !photo;
 
   renderLatch(live.latch);
 
@@ -153,6 +156,7 @@ async function pollLive() {
     j.day_max = j.day_max || {};
     j.visits_today = j.visits_today || {};
     j.footage_note = j.footage_note || null;
+    j.photo_every_s = j.photo_every_s || null;
     j.latch = j.latch || { mode: "off", closed: false, reason: null, error: null, reason_name: null, headline: "off" };
     live = j;
     delete $("stopped").dataset.lost;

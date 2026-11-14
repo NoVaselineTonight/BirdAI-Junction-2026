@@ -61,6 +61,7 @@ def create_app(
             "now": s.now, "confirmed": s.confirmed, "unidentified": s.unidentified,
             "day_max": s.day_max, "visits_today": s.visits_today,  # visits are arrivals, not birds
             "time_scale": settings.time_scale, "recorded": True, "footage_note": settings.footage_note,
+            "photo_every_s": settings.detect_every_s if settings.photo_mode else None,
             "error": None if error is None else (str(error) or type(error).__name__),
             "latch": {"mode": s.latch.mode, "closed": s.latch.closed, "reason": s.latch.reason,
                       "error": s.latch.error, "reason_name": pest_names.get(s.latch.reason),
