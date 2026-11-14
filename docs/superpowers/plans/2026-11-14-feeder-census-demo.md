@@ -10,6 +10,17 @@
 
 **Spec:** `feeder-census-sketch.md` (what the device does, demo plan, honesty rules), `arduino-uno-q-spec-sheet.md` (board limits) and `compute-plan-verda-modal.md` (where labelling and training run). Read all three. The repo is `NoVaselineTonight/BirdAI-Junction-2026` (formerly `challenge-3`); every path below is relative to its root.
 
+## Starting state (14 November 2026, 12:05)
+
+Read this first if you are picking the plan up without the conversation that produced it.
+
+- **Nothing is built yet.** The branch holds only documents: the spec files, this plan and `docs/feeder-census-demo-plan.html` (the team's summary; republish it to `https://claude.ai/artifact/7weUsArcg8yocJJPQbbAQC` if you change it).
+- **Working copy:** `/home/eemil/AIKANSIO/birdAI/.claude/worktrees/feeder-census-demo`, branch `birdai-plan/feeder-census-demo`, pushed and in sync with `origin`. If that folder is gone, recreate it from `/home/eemil/AIKANSIO/birdAI` with `git fetch origin && git worktree add .claude/worktrees/feeder-census-demo birdai-plan/feeder-census-demo`, then run `python3 .agents/agentchat.py setup --name birdai-plan` inside it. The parent folder `birdAI/` is a detached checkout of `main` with the team's original documents untracked; leave it alone.
+- **Agent identity:** `birdai-plan`, already registered in this worktree. Claims held: the root documents and `docs/`. Task 1 Step 1 claims the rest.
+- **Waiting on the team:** (1) "go" and the execution method: one session implementing every task (recommended), or a fresh agent and reviewer per task; (2) the Verda address as `VERDA_HOST`, wanted by 13:30; (3) footage in `data/videos/train/` and `data/videos/demo/`, wanted by 14:00. Do not start Task 1 before (1). Tasks 1–6 need neither (2) nor (3).
+- **Board:** connected over USB, `adb devices` shows it, `adb shell` is root. Laptop tools: `uv`, `adb`, `arduino-cli`, `gh` (account TTaika, push rights, not admin). The laptop has no `ffmpeg` and no NVIDIA GPU.
+- **Already verified, do not redo:** the three model download links in Task 3 and their byte sizes; that the classifier's label file contains all eight core species; aarch64 CPython 3.13 wheels for the runtime dependencies; the Ultralytics export layout in Task 8. Not verified by anyone: accuracy of any model on feeder video, speed of any model on this board, and whether `pybioclip` runs on the Verda image without extra setup.
+
 ## Global Constraints
 
 From the spec, verbatim where it gives a value:
