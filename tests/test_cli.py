@@ -40,3 +40,125 @@ def test_detect_every_s_flag_sets_the_detection_interval(monkeypatch, tmp_path, 
 def test_detect_every_s_must_be_positive():
     with pytest.raises(SystemExit):
         cli._parser().parse_args(["--videos", "x.mp4", "--detect-every-s", "0"])
+
+
+# --- model card and --detector auto ---
+
+import json  # noqa: E402
+
+
+def write_card(models_dir, **fields):
+    models_dir.mkdir(parents=True, exist_ok=True)
+    card = {"name": "m", "kind": "student", "species": ["great_tit"], "count_threshold": 0.7, **fields}
+    (models_dir / "model_card.json").write_text(json.dumps(card))
+    return card
+
+
+def test_auto_follows_the_card(tmp_path):
+    card = write_card(tmp_path, kind="student")
+    assert cli.resolve_detector("auto", tmp_path) == ("student", card)
+    card = write_card(tmp_path, kind="two_stage")
+    assert cli.resolve_detector("auto", tmp_path) == ("two_stage", card)
+
+
+def test_auto_without_a_card_is_two_stage(tmp_path):
+    assert cli.resolve_detector("auto", tmp_path) == ("two_stage", None)
+    assert cli.resolve_detector("auto", tmp_path / "missing") == ("two_stage", None)
+
+
+def test_explicit_kind_keeps_a_matching_card(tmp_path):
+    card = write_card(tmp_path, kind="student")
+    assert cli.resolve_detector("student", tmp_path) == ("student", card)
+
+
+def test_explicit_kind_drops_a_card_measured_for_another_detector(tmp_path):
+    write_card(tmp_path, kind="student")
+    assert cli.resolve_detector("two_stage", tmp_path) == ("two_stage", None)
+    assert cli.resolve_detector("scripted", tmp_path) == ("scripted", None)
+
+
+def test_explicit_kind_without_a_card(tmp_path):
+    assert cli.resolve_detector("student", tmp_path) == ("student", None)
+
+
+def test_a_card_that_is_not_json_exits_2_naming_the_file(tmp_path, capsys):
+    tmp_path.joinpath("model_card.json").write_text("{not json")
+    with pytest.raises(SystemExit) as stop:
+        cli.resolve_detector("auto", tmp_path)
+    assert stop.value.code == 2
+    assert str(tmp_path / "model_card.json") in capsys.readouterr().err
+
+
+@pytest.mark.parametrize("body", ['{"kind": "scripted"}', '{"name": "x"}', '[1, 2]', '"student"'])
+def test_a_card_with_an_unknown_kind_exits_2_naming_the_file(tmp_path, capsys, body):
+    tmp_path.joinpath("model_card.json").write_text(body)
+    with pytest.raises(SystemExit) as stop:
+        cli.resolve_detector("auto", tmp_path)
+    assert stop.value.code == 2
+    assert str(tmp_path / "model_card.json") in capsys.readouterr().err
+
+
+class StubDetector:
+    name = "stub model"
+    species = ("great_tit",)
+    count_threshold = 0.60
+
+
+def run_auto(monkeypatch, tmp_path, make_video, card, *extra, detector=StubDetector):
+    """Runs main() with --detector auto over a models dir holding `card`; returns (settings, card given to the page)."""
+    seen = {}
+
+    class StubPipeline:
+        error = None
+
+        def __init__(self, camera, detector, store, settings, *args, **kwargs):
+            seen["settings"] = settings
+
+        def run(self, stop):
+            pass
+
+    def fake_app(pipeline, store, species, settings, model_card):
+        seen["card"] = model_card
+
+    models = tmp_path / "models"
+    if card is not None:
+        write_card(models, **card)
+    built = {}
+    monkeypatch.setattr(cli, "Pipeline", StubPipeline)
+    monkeypatch.setattr(cli, "create_app", fake_app)
+    monkeypatch.setattr(cli, "_serve", lambda *a, **k: None)
+    monkeypatch.setattr(cli, "build_detector", lambda kind, *a, **k: built.setdefault("kind", kind) and detector())
+    argv = ["--videos", str(make_video()), "--models-dir", str(models), "--db", str(tmp_path / "data" / "c.db"), *extra]
+    assert cli.main(argv) == 0
+    return seen["settings"], seen.get("card"), built["kind"]
+
+
+def test_the_cards_count_threshold_reaches_the_settings(monkeypatch, tmp_path, make_video, capsys):
+    settings, card, kind = run_auto(
+        monkeypatch, tmp_path, make_video, {"kind": "two_stage", "name": "stub model", "count_threshold": 0.75})
+    assert kind == "two_stage"
+    assert settings.count_threshold == 0.75
+    assert card["name"] == "stub model"
+    out = capsys.readouterr().out
+    assert "two_stage" in out and "model card" in out and "0.75" in out
+
+
+def test_without_a_card_the_detectors_own_threshold_stays(monkeypatch, tmp_path, make_video, capsys):
+    settings, card, kind = run_auto(monkeypatch, tmp_path, make_video, None)
+    assert (kind, settings.count_threshold, card) == ("two_stage", None, None)
+    out = capsys.readouterr().out
+    assert "no model card" in out and "0.6" in out
+
+
+def test_a_card_for_a_different_model_is_not_shown_or_used(monkeypatch, tmp_path, make_video, capsys):
+    # stale files: the card names another model than the one that loaded
+    settings, card, _ = run_auto(
+        monkeypatch, tmp_path, make_video, {"kind": "student", "name": "older student", "count_threshold": 0.9})
+    assert card is None and settings.count_threshold is None
+    assert "older student" in capsys.readouterr().err
+
+
+def test_a_custom_student_dir_never_shows_the_card(monkeypatch, tmp_path, make_video):
+    settings, card, _ = run_auto(
+        monkeypatch, tmp_path, make_video, {"kind": "student", "name": "stub model"}, "--student-dir", str(tmp_path))
+    assert card is None and settings.count_threshold is None

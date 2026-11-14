@@ -1,13 +1,17 @@
 #!/usr/bin/env bash
 # Build build/board/ and push it to the Arduino UNO Q, then set up its Python environment.
-# Usage: board/deploy.sh [--detector two_stage|student] [--videos DIR] [--dry-run]
+# Usage: board/deploy.sh [--detector auto|two_stage|student] [--videos DIR] [--dry-run]
+# --detector auto (the default) ships what models/model_card.json names, or two_stage when there is no card.
+# The card goes to the board only when it names the kind being shipped. Otherwise a stale card and stale
+# student files are removed from the board, so the board never shows a card for a model it is not running.
 # Safe to run twice: code, videos and models are replaced, .venv and data/ are kept. A running demo is stopped first.
-# --dry-run builds build/board/ and checks the board's free space, then stops (nothing is pushed or installed).
+# --dry-run says which detector kind was resolved and which files would be copied or removed, builds build/board/
+# and checks the board's free space (it only reads from the board), then stops (nothing is pushed or installed).
 # The space check keeps FEEDER_MARGIN_KB (default 1000000, about 1 GB) free after the push.
 set -euo pipefail
 source "$(dirname "$0")/common.sh"
 
-DETECTOR=two_stage
+DETECTOR=auto
 VIDEOS=data/videos/demo
 DRY_RUN=0
 while [ $# -gt 0 ]; do
@@ -15,20 +19,41 @@ while [ $# -gt 0 ]; do
         --detector) DETECTOR=${2:?--detector needs a value}; shift 2 ;;
         --videos) VIDEOS=${2:?--videos needs a directory}; shift 2 ;;
         --dry-run) DRY_RUN=1; shift ;;
-        *) echo "usage: board/deploy.sh [--detector two_stage|student] [--videos DIR] [--dry-run]" >&2; exit 2 ;;
+        *) echo "usage: board/deploy.sh [--detector auto|two_stage|student] [--videos DIR] [--dry-run]" >&2; exit 2 ;;
     esac
 done
+
+CARD=models/model_card.json
+CARD_KIND=$(card_kind "$CARD") || exit 2  # empty when there is no card
+case "$DETECTOR" in
+    auto) KIND=${CARD_KIND:-two_stage}; WHY=$([ -n "$CARD_KIND" ] && echo "model card" || echo "no model card") ;;
+    two_stage|student) KIND=$DETECTOR; WHY="asked for" ;;
+    *) echo "error: unknown detector '$DETECTOR' (auto, two_stage or student)" >&2; exit 2 ;;
+esac
 
 require_one_board
 
 # The model files each detector needs (see feeder_census/detectors/__init__.py).
-case "$DETECTOR" in
+case "$KIND" in
     two_stage) MODELS=(models/pretrained/yolox_nano.onnx models/pretrained/inat_bird.tflite models/pretrained/inat_bird_labels.txt) ;;
     student) MODELS=(models/student/feeder.onnx models/student/feeder.json) ;;
-    *) echo "error: unknown detector '$DETECTOR' (two_stage or student)" >&2; exit 2 ;;
 esac
+# A card measured for another detector never goes to the board, and the files of the other detector's card go away.
+REMOVE=()
+if [ "$CARD_KIND" = "$KIND" ]; then
+    MODELS+=("$CARD")
+else
+    REMOVE+=("models/model_card.json")
+fi
+if [ "$KIND" != student ]; then
+    REMOVE+=(models/student/feeder.onnx models/student/feeder.json)
+fi
+echo "detector: $KIND ($WHY)"
+VERB=$([ "$DRY_RUN" -eq 1 ] && echo "would" || echo "will")
+echo "$VERB copy to the board: ${MODELS[*]}"
+echo "$VERB remove from the board: ${REMOVE[*]-nothing}"
 for model in "${MODELS[@]}"; do
-    [ -f "$model" ] || { echo "error: missing $model (two_stage: uv run python tools/fetch_models.py)" >&2; exit 1; }
+    [ -f "$model" ] || { echo "error: missing $model (two_stage: uv run python tools/fetch_models.py; student: tools/evaluate.py --promote)" >&2; exit 1; }
 done
 
 shopt -s nullglob nocaseglob
@@ -55,12 +80,13 @@ done
 echo "== checking space on the board"
 # The push replaces videos/, so the old clips' space counts as free.
 BUILD_KB=$(du -sk build/board | cut -f1)
-FREE_KB=$(adb shell "df -k /home/arduino | awk 'NR == 2 {print \$4}'" | tr -d '\r')
-OLD_VIDEOS_KB=$(adb shell "du -sk $BOARD_DIR/videos 2>/dev/null | cut -f1" | tr -d '\r')
-OLD_VIDEOS_KB=${OLD_VIDEOS_KB:-0}
-case "$FREE_KB$OLD_VIDEOS_KB" in
-    ''|*[!0-9]*) echo "error: could not read the board's disk space (got '$FREE_KB' and '$OLD_VIDEOS_KB')" >&2; exit 1 ;;
-esac
+FREE_KB=$(adb shell "df -k /home/arduino | awk 'NR == 2 {print \$4}'" | tr -d '\r') || FREE_KB=
+OLD_VIDEOS_KB=$(adb shell "du -sk $BOARD_DIR/videos 2>/dev/null | cut -f1" | tr -d '\r') || OLD_VIDEOS_KB=
+OLD_VIDEOS_KB=${OLD_VIDEOS_KB:-0}  # no videos/ on the board yet: nothing to credit
+# every number is tested on its own: a join of two values would pass when one of them is empty
+for kb in "$BUILD_KB" "$FREE_KB" "$OLD_VIDEOS_KB"; do
+    is_uint "$kb" || { echo "error: could not read the board's disk space (build '$BUILD_KB', free '$FREE_KB', old videos '$OLD_VIDEOS_KB'); nothing was pushed" >&2; exit 1; }
+done
 MARGIN_KB=${FEEDER_MARGIN_KB:-1000000}
 REQUIRED_KB=$((BUILD_KB + MARGIN_KB - OLD_VIDEOS_KB))
 echo "build/board: $BUILD_KB kB; board free: $FREE_KB kB; current videos/ on board: $OLD_VIDEOS_KB kB; margin: $MARGIN_KB kB; required free: $REQUIRED_KB kB"
@@ -76,7 +102,7 @@ fi
 
 echo "== pushing to $BOARD_DIR"
 stop_on_board  # the running demo would lose its clips
-adb shell "mkdir -p $BOARD_DIR && cd $BOARD_DIR && rm -rf feeder_census videos"
+adb shell "mkdir -p $BOARD_DIR && cd $BOARD_DIR && rm -rf feeder_census videos ${REMOVE[*]-}"
 adb push build/board/. "$BOARD_DIR/"
 
 echo "== installing on the board"
@@ -96,4 +122,4 @@ fi
 .venv/bin/python -c "import cv2, onnxruntime, ai_edge_litert, fastapi, uvicorn; print('board python ok:', cv2.__version__, onnxruntime.__version__)"
 mkdir -p data
 REMOTE
-echo "== deployed ($DETECTOR). Run it with: board/run.sh --detector $DETECTOR"
+echo "== deployed ($KIND). Run it with: board/run.sh"

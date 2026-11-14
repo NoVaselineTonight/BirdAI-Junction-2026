@@ -1,5 +1,6 @@
-"""Run the feeder census: python -m feeder_census --videos clip.mp4 --detector two_stage"""
+"""Run the feeder census: python -m feeder_census --videos clip.mp4 --detector auto"""
 import argparse
+import json
 import signal
 import sys
 import threading
@@ -36,7 +37,8 @@ def _positive(text: str) -> float:
 def _parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="python -m feeder_census", description=__doc__)
     p.add_argument("--videos", nargs="+", required=True, type=Path, help="video files or folders")
-    p.add_argument("--detector", choices=KINDS, default="two_stage")
+    p.add_argument("--detector", choices=("auto", *KINDS), default="auto",
+                   help="auto: the kind named by models/model_card.json, else two_stage (default: %(default)s)")
     p.add_argument("--db", type=Path, default=Path("data/census.db"))
     p.add_argument("--port", type=int, default=Settings.port)
     p.add_argument("--fast", action="store_true", help="play unpaced, to fill the table before a demo")
@@ -48,6 +50,32 @@ def _parser() -> argparse.ArgumentParser:
     p.add_argument("--models-dir", type=Path, default=Path("models"))
     p.add_argument("--student-dir", type=Path, default=None)
     return p
+
+
+CARD_KINDS = ("student", "two_stage")
+
+
+def resolve_detector(requested: str, models_dir: Path) -> tuple[str, dict | None]:
+    """The detector kind to build and the model card to show with it.
+
+    A card is only returned with the kind it was measured for: a card for another detector is dropped.
+    A card that cannot be read, or names another kind, stops the run (exit 2).
+    """
+    path = Path(models_dir) / "model_card.json"
+    card = None
+    if path.is_file():
+        try:
+            card = json.loads(path.read_text())
+        except (OSError, ValueError) as exc:
+            print(f"error: cannot read {path}: {exc}", file=sys.stderr)
+            sys.exit(2)
+        if not isinstance(card, dict) or card.get("kind") not in CARD_KINDS:
+            kind = card.get("kind") if isinstance(card, dict) else card
+            print(f"error: {path}: kind must be one of {', '.join(CARD_KINDS)}, got {kind!r}", file=sys.stderr)
+            sys.exit(2)
+    if requested == "auto":
+        return (card["kind"], card) if card else ("two_stage", None)
+    return requested, card if card and card["kind"] == requested else None
 
 
 def _print_line(state: LiveState) -> None:
@@ -72,19 +100,36 @@ def _serve(app, port: int, stop: threading.Event) -> None:
 
 def main(argv: list[str] | None = None) -> int:
     args = _parser().parse_args(argv)
+    kind, card = resolve_detector(args.detector, args.models_dir)
+    if kind == "student" and args.student_dir:
+        card = None  # the card describes models/student, not another folder
+    why = "asked for" if args.detector != "auto" else "model card" if card else "no model card"
     species = load_species()
     names = {s.key: s.english for s in species}
     try:
         detector = build_detector(
-            args.detector, args.models_dir, species, script=args.script, student_dir=args.student_dir
+            kind, args.models_dir, species, script=args.script, student_dir=args.student_dir
         )
         camera = SimulatedCamera(args.videos, realtime=not args.fast)
     except (FileNotFoundError, ValueError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1
+    if card is not None and card.get("name") != detector.name:
+        # stale files: the card was measured for another model than the one that loaded
+        print(f"warning: model card is for {card.get('name')!r} but {detector.name!r} loaded; not showing the card",
+              file=sys.stderr)
+        card = None
+    threshold = card.get("count_threshold") if card else None
+    if isinstance(threshold, bool) or not isinstance(threshold, (int, float)):
+        threshold = None
     args.db.parent.mkdir(parents=True, exist_ok=True)
     store = Store(args.db, detector.species)
-    settings = Settings(detect_every_s=args.detect_every_s, roi=args.roi, port=args.port, evidence_dir=args.db.parent / "evidence")
+    settings = Settings(
+        detect_every_s=args.detect_every_s, roi=args.roi, port=args.port,
+        evidence_dir=args.db.parent / "evidence", count_threshold=threshold,
+    )
+    in_force = threshold if threshold is not None else detector.count_threshold
+    print(f"detector: {kind} ({why}); counting threshold {in_force:g}", flush=True)
     pipeline = Pipeline(
         camera, detector, store, settings, names, inline=args.fast, on_result=_print_line if args.no_web else None
     )
@@ -109,7 +154,7 @@ def main(argv: list[str] | None = None) -> int:
             while thread.is_alive():
                 thread.join(0.2)
         else:
-            _serve(create_app(pipeline, store, species, settings, model_card=None), settings.port, stop)
+            _serve(create_app(pipeline, store, species, settings, model_card=card), settings.port, stop)
     except KeyboardInterrupt:
         pass
     finally:  # also when uvicorn exits early, e.g. the port is taken
