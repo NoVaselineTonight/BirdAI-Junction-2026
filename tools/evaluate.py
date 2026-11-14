@@ -103,6 +103,11 @@ def _rates(t: Tally) -> tuple[float, float]:
     return (t.tp / (t.tp + t.fp) if t.tp + t.fp else 0.0, t.tp / (t.tp + t.fn) if t.tp + t.fn else 0.0)
 
 
+def _known_rates(t: Tally) -> tuple[float | None, float | None]:
+    """Precision and recall as reported: None when undefined (nothing predicted, or no truth to find)."""
+    return (t.tp / (t.tp + t.fp) if t.tp + t.fp else None, t.tp / (t.tp + t.fn) if t.tp + t.fn else None)
+
+
 def _tally_frames(frames: Sequence[Frame], threshold: float, species: Sequence[str]) -> dict[str, Tally]:
     total = {s: Tally(0, 0, 0) for s in species}
     for pred, truth in frames:
@@ -149,8 +154,11 @@ def score_frames(frames: Sequence[Frame], threshold: float, species: Sequence[st
     return {
         "frames": len(frames),
         "count_exact": exact / len(frames) if frames else 0.0,
+        # `val_boxes` keeps its name for the page; it is the number of truth boxes in the held-out `test` footage.
+        # precision / recall are None (JSON null) when undefined; the page must show them as unknown.
         "per_species": {
-            s: {"precision": _rates(tallies[s])[0], "recall": _rates(tallies[s])[1], "val_boxes": boxes[s]}
+            s: {"precision": _known_rates(tallies[s])[0], "recall": _known_rates(tallies[s])[1],
+                "val_boxes": boxes[s]}
             for s in species
         },
     }
@@ -184,27 +192,57 @@ def run_split(detector, dataset: Path, split: str, classes: Sequence[str]) -> tu
     return frames, sorted(footage)
 
 
+SOURCE_PICKED = "picked on validation footage"
+SOURCE_FALLBACK = "fallback 0.90: no threshold reached 0.90 precision on validation footage"
+SOURCE_DEFAULT = "default: too few validation boxes to pick"
+
+
+def student_threshold(curves: Mapping[str, Sequence[tuple[float, float, float]]], val_boxes: Mapping[str, int],
+                      default: float, min_val_boxes: int = 20) -> tuple[float, str]:
+    """The student's count threshold and where it came from.
+
+    Picked when species with at least `min_val_boxes` validation boxes exist and some grid threshold gives
+    them all precision 0.90; 0.90 as a labelled fallback when none does; `default` (the card's own
+    threshold) when no species has enough validation boxes, since then nothing was measured to pick by.
+    """
+    judged = [s for s in curves if val_boxes.get(s, 0) >= min_val_boxes]
+    if not judged:
+        return default, SOURCE_DEFAULT
+    threshold = pick_threshold(curves, val_boxes, min_val_boxes=min_val_boxes)
+    at = {s: {t: p for t, p, _ in curves[s]} for s in judged}
+    if all(by_t.get(threshold, 0.0) >= QUALIFY_PRECISION for by_t in at.values()):
+        return threshold, SOURCE_PICKED
+    return threshold, SOURCE_FALLBACK
+
+
 def evaluate_candidate(detector, dataset: Path, classes: Sequence[str], pick: bool,
                        min_val_boxes: int = 20) -> dict:
     """Measure one detector on `test`.
 
-    With `pick` the threshold is chosen on `val` first; otherwise the detector's own count_threshold is
-    used and `val` is never opened. Only the threshold depends on `val`; every other number is from `test`.
+    With `pick` the threshold is chosen on `val` first (see `student_threshold`; `threshold_source` says
+    how, `val_boxes` the validation truth boxes per species it was based on); otherwise the detector's own
+    count_threshold is used, source "fixed", and `val` is never opened. Only the threshold depends on
+    `val`; every other number is from `test`.
     """
     species = [c for c in classes if c != UNIDENTIFIED]
+    val_boxes = None
     if pick:
         val_frames, _ = run_split(detector, dataset, "val", classes)
-        threshold = pick_threshold(build_curves(val_frames, species), count_boxes(val_frames, species),
-                                   min_val_boxes=min_val_boxes)
+        val_boxes = count_boxes(val_frames, species)
+        threshold, source = student_threshold(build_curves(val_frames, species), val_boxes,
+                                              detector.count_threshold, min_val_boxes)
     else:
-        threshold = detector.count_threshold
+        threshold, source = detector.count_threshold, "fixed"
     test_frames, footage = run_split(detector, dataset, "test", classes)
-    return {"threshold": threshold, "footage": footage, **score_frames(test_frames, threshold, species)}
+    return {"threshold": threshold, "threshold_source": source, "val_boxes": val_boxes, "footage": footage,
+            **score_frames(test_frames, threshold, species)}
 
 
-def qualifies(per_species: Mapping[str, Mapping[str, float]]) -> bool:
+def qualifies(per_species: Mapping[str, Mapping[str, float | None]]) -> bool:
+    """At least three species with both rates known and at or above the bars (an unknown rate is not good)."""
     good = [s for s in per_species.values()
-            if s["precision"] >= QUALIFY_PRECISION and s["recall"] >= QUALIFY_RECALL]
+            if s["precision"] is not None and s["recall"] is not None
+            and s["precision"] >= QUALIFY_PRECISION and s["recall"] >= QUALIFY_RECALL]
     return len(good) >= MIN_QUALIFYING_SPECIES
 
 
@@ -277,13 +315,16 @@ def _build(candidate: str, models_dir: Path, classes: Sequence[str]):
 
 def _print_table(name: str, r: Mapping) -> None:
     board = f"{r['board_ms']:g} ms" if r["board_ms"] is not None else "not measured"
-    source = "picked on val" if r["threshold_source"] == "val" else "fixed"
-    print(f"\n{name}  ({r['detector']})  threshold {r['threshold']:.2f} ({source})  board: {board}")
+    print(f"\n{name}  ({r['detector']})  threshold {r['threshold']:.2f} ({r['threshold_source']})  board: {board}")
     print(f"  frames {r['frames']}, footage: {', '.join(r['footage'])}")
     print(f"  {'species':<28}{'precision':>10}{'recall':>8}{'boxes':>7}")
+    rate = lambda v: f"{v:.2f}" if v is not None else "-"  # noqa: E731
     for key, m in r["per_species"].items():
-        print(f"  {key:<28}{m['precision']:>10.2f}{m['recall']:>8.2f}{m['val_boxes']:>7}")
+        print(f"  {key:<28}{rate(m['precision']):>10}{rate(m['recall']):>8}{m['val_boxes']:>7}")
     print(f"  count_exact {r['count_exact']:.3f}")
+    if r["val_boxes"] is not None:
+        print("  validation boxes the threshold was based on: "
+              + ", ".join(f"{k} {n}" for k, n in r["val_boxes"].items()))
 
 
 def _promote(models_dir: Path, name: str, reason: str, r: Mapping, card: Mapping | None, detector) -> None:
@@ -294,10 +335,12 @@ def _promote(models_dir: Path, name: str, reason: str, r: Mapping, card: Mapping
     else:
         student_dir = models_dir / "student"
         shutil.copyfile(student_dir / name.split(":", 1)[1] / "feeder.onnx", student_dir / "feeder.onnx")
-        (student_dir / "feeder.json").write_text(
-            json.dumps({**card, "count_threshold": r["threshold"], "metrics": metrics}, indent=2) + "\n")
+        (student_dir / "feeder.json").write_text(json.dumps(
+            {**card, "count_threshold": r["threshold"], "threshold_source": r["threshold_source"],
+             "metrics": metrics}, indent=2) + "\n")
         shipped = {"name": card["name"], "kind": "student", "species": list(detector.species)}
-    model_card = {**shipped, "count_threshold": r["threshold"], "board_ms": r["board_ms"], "metrics": metrics,
+    model_card = {**shipped, "count_threshold": r["threshold"], "threshold_source": r["threshold_source"],
+                  "board_ms": r["board_ms"], "metrics": metrics,
                   "note": reason}
     (models_dir / "model_card.json").write_text(json.dumps(model_card, indent=2) + "\n")
 
@@ -345,7 +388,7 @@ def main(argv: list[str] | None = None) -> None:
         pick = candidate != "two_stage"
         results[candidate] = {
             "kind": "student" if pick else "two_stage", "detector": detector.name,
-            "board_ms": timings.get(_timing_key(candidate)), "threshold_source": "val" if pick else "fixed",
+            "board_ms": timings.get(_timing_key(candidate)),
             **evaluate_candidate(detector, args.dataset, classes, pick),
         }
         _print_table(candidate, results[candidate])

@@ -12,6 +12,7 @@ from evaluate import (
     parse_board_ms,
     pick_threshold,
     qualifies,
+    student_threshold,
     read_truth,
     score_frames,
 )
@@ -138,7 +139,68 @@ def test_score_frames_reports_per_species_numbers_at_one_threshold():
     # frame 1: one hit and one false alarm (not exact); frame 2: miss (not exact); frame 3: empty (exact)
     assert m["count_exact"] == pytest.approx(1 / 3)
     assert m["per_species"]["great_tit"] == {"precision": 0.5, "recall": 0.5, "val_boxes": 2}
-    assert m["per_species"]["blue_tit"] == {"precision": 0.0, "recall": 0.0, "val_boxes": 0}
+    # nothing predicted and nothing to find: both rates are unknown, not zero
+    assert m["per_species"]["blue_tit"] == {"precision": None, "recall": None, "val_boxes": 0}
+
+
+def test_an_absent_species_has_unknown_recall_and_does_not_qualify():
+    frames = [([det("great_tit", A)], [det("great_tit", A)])] * 3
+    per = score_frames(frames, 0.6, ["great_tit", "blue_tit"])["per_species"]
+    assert per["great_tit"] == {"precision": 1.0, "recall": 1.0, "val_boxes": 3}
+    assert per["blue_tit"]["recall"] is None
+    # a detector that names an absent species: precision is a real 0.0, recall is still unknown
+    per = score_frames([([det("blue_tit", A)], [])], 0.6, ["blue_tit"])["per_species"]
+    assert per["blue_tit"] == {"precision": 0.0, "recall": None, "val_boxes": 0}
+
+
+def test_a_species_never_predicted_has_unknown_precision_and_real_zero_recall():
+    per = score_frames([([], [det("great_tit", A)])], 0.6, ["great_tit"])["per_species"]
+    assert per["great_tit"] == {"precision": None, "recall": 0.0, "val_boxes": 1}
+
+
+def test_qualifies_counts_a_species_only_when_both_rates_are_known():
+    unknown = {"precision": None, "recall": 0.9, "val_boxes": 5}
+    no_truth = {"precision": 0.95, "recall": None, "val_boxes": 0}
+    assert not qualifies({"a": entry(0.95, 0.8), "b": entry(0.95, 0.8), "c": unknown, "d": no_truth})
+    assert qualifies({"a": entry(0.95, 0.8), "b": entry(0.95, 0.8), "c": entry(0.95, 0.8), "d": no_truth})
+
+
+def test_unknown_rates_reach_the_card_as_json_null(tmp_path):
+    import json
+    from evaluate import _promote
+    per = score_frames([([], [])], 0.6, ["great_tit"])["per_species"]
+    r = {"frames": 1, "footage": ["demo"], "count_exact": 1.0, "per_species": per, "threshold": 0.6,
+         "threshold_source": "fixed", "board_ms": None}
+    _promote(tmp_path, "two_stage", "because", r, None, CountingDetector())
+    card = json.loads((tmp_path / "model_card.json").read_text())
+    assert card["metrics"]["per_species"]["great_tit"] == {"precision": None, "recall": None, "val_boxes": 0}
+    assert card["threshold_source"] == "fixed"
+
+
+def ok_curves():
+    return {"great_tit": [(t, 0.95, 0.9) for t in (0.50, 0.55, 0.60, 0.65, 0.70, 0.75, 0.80, 0.85, 0.90)]}
+
+
+def test_student_threshold_picked_on_validation_footage():
+    curves = {"great_tit": [(0.50, 0.85, 0.9), (0.55, 0.91, 0.88)] + ok_curves()["great_tit"][2:]}
+    assert student_threshold(curves, {"great_tit": 80}, default=0.60) == (0.55, "picked on validation footage")
+
+
+def test_student_threshold_at_exactly_0_90_is_still_a_pick_when_it_reaches_the_bar():
+    curves = {"great_tit": [(t, 0.5, 0.9) for t in (0.5, 0.55, 0.6, 0.65, 0.7, 0.75, 0.8, 0.85)] + [(0.90, 0.95, 0.4)]}
+    assert student_threshold(curves, {"great_tit": 80}, default=0.60) == (0.90, "picked on validation footage")
+
+
+def test_student_threshold_fallback_when_no_threshold_reaches_the_bar():
+    curves = {"great_tit": [(0.50, 0.5, 0.9), (0.90, 0.6, 0.2)]}
+    assert student_threshold(curves, {"great_tit": 80}, default=0.60) == (
+        0.90, "fallback 0.90: no threshold reached 0.90 precision on validation footage")
+
+
+def test_student_threshold_keeps_the_default_when_val_has_too_few_boxes():
+    assert student_threshold(ok_curves(), {"great_tit": 19}, default=0.60) == (
+        0.60, "default: too few validation boxes to pick")
+    assert student_threshold({}, {}, default=0.60) == (0.60, "default: too few validation boxes to pick")
 
 
 def entry(precision, recall):
@@ -248,6 +310,7 @@ def test_evaluate_candidate_with_a_fixed_threshold_never_looks_at_val(tmp_path):
     out = evaluate_candidate(detector, dataset, classes, pick=False)
     assert detector.calls == 2  # the two test frames only
     assert out["threshold"] == 0.6 and out["frames"] == 2
+    assert out["threshold_source"] == "fixed" and out["val_boxes"] is None
     assert out["footage"] == ["demo"]
     assert out["count_exact"] == 0.5  # exact on the first frame, a false alarm on the empty one
     assert out["per_species"]["great_tit"] == {"precision": 0.5, "recall": 1.0, "val_boxes": 1}
@@ -260,7 +323,17 @@ def test_evaluate_candidate_picks_the_threshold_on_val_and_reports_test(tmp_path
     assert detector.calls == 3  # val once, test twice
     # on val the single bird is found at every threshold, so the lowest one is picked
     assert out["threshold"] == 0.50
+    assert out["threshold_source"] == "picked on validation footage"
+    assert out["val_boxes"] == {"great_tit": 1}
     assert out["frames"] == 2
+
+
+def test_evaluate_candidate_keeps_the_card_threshold_when_val_is_too_thin(tmp_path):
+    dataset, classes = make_dataset(tmp_path)
+    out = evaluate_candidate(CountingDetector(), dataset, classes, pick=True)  # 1 val box, 20 needed
+    assert out["threshold"] == 0.6
+    assert out["threshold_source"] == "default: too few validation boxes to pick"
+    assert out["val_boxes"] == {"great_tit": 1}
 
 
 class FakeStudent(CountingDetector):
@@ -290,6 +363,8 @@ def fake_evaluate(detector, dataset, classes, pick):
     """Canned numbers: the student qualifies and beats the two-stage detector."""
     good = {k: {"precision": 0.95, "recall": 0.8, "val_boxes": 30} for k in ("a", "b", "c")}
     return {"threshold": 0.65 if pick else 0.6, "footage": ["demo"], "frames": 2,
+            "threshold_source": "picked on validation footage" if pick else "fixed",
+            "val_boxes": {"a": 30} if pick else None,
             "count_exact": 0.9 if pick else 0.7, "per_species": good}
 
 
@@ -316,10 +391,13 @@ def test_main_promotes_the_winning_student(tmp_path, monkeypatch, capsys):
     assert last.startswith("SHIP: student:640 (count_exact=") and "not promoted" not in last
     card = json.loads((models / "model_card.json").read_text())
     assert card["kind"] == "student" and card["board_ms"] == 700.0 and card["note"]
+    assert card["threshold_source"] == "picked on validation footage"
     assert card["metrics"]["labels"] == "teacher models, checked by a person"
     assert card["metrics"]["footage"] == ["demo"] and card["count_threshold"] == 0.65
     assert (models / "student" / "feeder.onnx").read_bytes() == b"onnx"
-    assert json.loads((models / "student" / "feeder.json").read_text())["count_threshold"] == card["count_threshold"]
+    student = json.loads((models / "student" / "feeder.json").read_text())
+    assert student["count_threshold"] == card["count_threshold"]
+    assert student["threshold_source"] == "picked on validation footage"
     assert json.loads((models / "eval.json").read_text())["decision"]["ship"] == "student:640"
 
 
