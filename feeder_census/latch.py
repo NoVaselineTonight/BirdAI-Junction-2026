@@ -2,7 +2,7 @@
 
 `LatchController` holds the rule; `RouterLatch` sends the command to the UNO Q's microcontroller
 through the arduino-router service (MessagePack-RPC on a Unix socket), where board/latch/latch.ino
-moves the two servos. Bring the hardware up by hand with:
+moves the servo. Bring the hardware up by hand with:
 
     python -m feeder_census.latch close|open|cycle [--socket PATH]
 """
