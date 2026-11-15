@@ -72,7 +72,8 @@ def create_app(
             "error": None if error is None else (str(error) or type(error).__name__),
             "latch": {"mode": s.latch.mode, "closed": s.latch.closed, "reason": s.latch.reason,
                       "error": s.latch.error, "reason_name": pest_names.get(s.latch.reason),
-                      "headline": s.latch.headline},  # the page words only what the board confirmed
+                      "headline": s.latch.headline, "pest_threshold": settings.pest_threshold,
+                      "close_frames": settings.latch_close_frames, "open_frames": settings.latch_open_frames},  # the page words only what the board confirmed
             "pests": s.pests,  # unwanted animals in frame now; never birds, never in the census
         }
 

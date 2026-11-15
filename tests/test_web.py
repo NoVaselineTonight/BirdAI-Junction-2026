@@ -229,16 +229,25 @@ def test_evidence_photo_does_not_follow_a_symlinked_day_out_of_the_evidence_dir(
 SQ = {"species": "red_squirrel", "confidence": 0.9, "box": [100, 100, 200, 200]}
 
 
+def test_live_latch_carries_the_rule_in_force(tmp_path, make_video):
+    app, _, _ = scripted_app(tmp_path, make_video, ["great_tit"], [[GT]], 1, pest_threshold=0.7,
+                             latch_close_frames=3, latch_open_frames=8)
+    with TestClient(app) as c:
+        latch = c.get("/api/live").json()["latch"]
+    assert (latch["pest_threshold"], latch["close_frames"], latch["open_frames"]) == (0.7, 3, 8)
+
+
 def test_live_state_carries_the_latch(tmp_path, make_video, client):
     j = client.get("/api/live").json()
     assert j["latch"] == {"mode": "off", "closed": False, "reason": None, "error": None, "reason_name": None,
-                          "headline": "off"}
+                          "headline": "off", "pest_threshold": 0.5, "close_frames": 2, "open_frames": 5}
     assert j["pests"] == {"red_squirrel": 0, "brown_rat": 0}
     app, _, _ = scripted_app(tmp_path / "squirrel", make_video, ["great_tit"], [[GT, SQ]], 3, latch="sim")
     with TestClient(app) as c:
         j = c.get("/api/live").json()
         assert j["latch"] == {"mode": "sim", "closed": True, "reason": "red_squirrel", "error": None,
-                              "reason_name": {"english": "Red squirrel", "finnish": "Orava"}, "headline": "closed"}
+                              "reason_name": {"english": "Red squirrel", "finnish": "Orava"}, "headline": "closed",
+                              "pest_threshold": 0.5, "close_frames": 2, "open_frames": 5}
         assert j["pests"] == {"red_squirrel": 1, "brown_rat": 0}
         assert j["unidentified"] == 0 and "red_squirrel" not in j["now"]
         tables = c.get("/api/tables").json()

@@ -36,6 +36,26 @@ def _positive(text: str) -> float:
     return value
 
 
+def _unit_interval(text: str) -> float:
+    try:
+        value = float(text)
+    except ValueError:
+        raise argparse.ArgumentTypeError(f"{text!r} is not a number")
+    if not 0 <= value <= 1:  # also false for nan
+        raise argparse.ArgumentTypeError("must be a number from 0 to 1")
+    return value
+
+
+def _whole_number_from_1(text: str) -> int:
+    try:
+        value = int(text)
+    except ValueError:
+        raise argparse.ArgumentTypeError(f"{text!r} is not a whole number")
+    if value < 1:
+        raise argparse.ArgumentTypeError("must be at least 1")
+    return value
+
+
 def _parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="python -m feeder_census", description=__doc__)
     source = p.add_mutually_exclusive_group(required=True)
@@ -74,6 +94,14 @@ def _parser() -> argparse.ArgumentParser:
                         "(default: latch_angles.json next to --db)")
     p.add_argument("--latch-socket", type=Path, default=ROUTER_SOCKET,
                    help="arduino-router socket for --latch router (default: %(default)s)")
+    p.add_argument("--pest-threshold", type=_unit_interval, default=Settings.pest_threshold, metavar="X",
+                   help="the confidence, from 0 to 1, a squirrel or rat box needs before it counts for the latch; "
+                        "raise it when the latch closes on things that are not squirrels (default: %(default)s)")
+    p.add_argument("--latch-close-frames", type=_whole_number_from_1, default=Settings.latch_close_frames, metavar="N",
+                   help="how many detections in a row must show a pest before the latch closes (default: %(default)s)")
+    p.add_argument("--latch-open-frames", type=_whole_number_from_1, default=Settings.latch_open_frames, metavar="N",
+                   help="how many detections in a row must be free of pests before the latch opens again "
+                        "(default: %(default)s)")
     return p
 
 
@@ -209,7 +237,8 @@ def main(argv: list[str] | None = None) -> int:
         max_gap_s=max(Settings.max_gap_s, 2 * detect_every_s) if photo else Settings.max_gap_s, roi=args.roi, port=args.port,
         evidence_dir=args.db.parent / "evidence", count_threshold=threshold,
         footage_note=args.footage_note if args.footage_note is not None or args.camera else _footage_note(args.videos),
-        latch=args.latch, source="camera" if args.camera is not None else "recorded",
+        latch=args.latch, pest_threshold=args.pest_threshold, latch_close_frames=args.latch_close_frames,
+        latch_open_frames=args.latch_open_frames, source="camera" if args.camera is not None else "recorded",
     )
     in_force = threshold if threshold is not None else detector.count_threshold
     print(f"detector: {kind} ({why}); counting threshold {in_force:g}", flush=True)

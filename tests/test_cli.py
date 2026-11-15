@@ -559,3 +559,38 @@ def test_host_flag_is_passed_to_the_server(monkeypatch, tmp_path, make_video, ca
 def test_a_specific_host_address_is_the_url_printed(monkeypatch, tmp_path, make_video, capsys):
     assert run_served(monkeypatch, tmp_path, make_video, "--host", "192.168.1.20")["host"] == "192.168.1.20"
     assert "Feeder Census: http://192.168.1.20:0" in capsys.readouterr().out
+
+
+# --- the latch rule's three numbers ---
+
+
+def test_latch_rule_defaults_reach_settings_unchanged(monkeypatch, tmp_path, make_video):
+    settings = run_cli(monkeypatch, tmp_path, make_video)
+    assert (settings.pest_threshold, settings.latch_close_frames, settings.latch_open_frames) == (
+        Settings.pest_threshold, Settings.latch_close_frames, Settings.latch_open_frames)
+
+
+def test_latch_rule_options_reach_settings(monkeypatch, tmp_path, make_video):
+    settings = run_cli(monkeypatch, tmp_path, make_video, "--pest-threshold", "0.8",
+                       "--latch-close-frames", "4", "--latch-open-frames", "9")
+    assert (settings.pest_threshold, settings.latch_close_frames, settings.latch_open_frames) == (0.8, 4, 9)
+
+
+@pytest.mark.parametrize("value", ["0", "1"])
+def test_pest_threshold_accepts_both_ends(monkeypatch, tmp_path, make_video, value):
+    assert run_cli(monkeypatch, tmp_path, make_video, "--pest-threshold", value).pest_threshold == float(value)
+
+
+@pytest.mark.parametrize("option, value", [
+    ("--pest-threshold", "1.5"), ("--pest-threshold", "-0.1"), ("--pest-threshold", "abc"),
+    ("--pest-threshold", "nan"),
+    ("--latch-close-frames", "0"), ("--latch-close-frames", "-1"), ("--latch-close-frames", "2.5"),
+    ("--latch-open-frames", "0"), ("--latch-open-frames", "-1"), ("--latch-open-frames", "2.5"),
+    ("--latch-open-frames", "abc"),
+])
+def test_bad_latch_rule_values_exit_2_naming_the_option(capsys, option, value):
+    with pytest.raises(SystemExit) as stop:
+        cli._parser().parse_args(["--videos", "x.mp4", option, value])
+    assert stop.value.code == 2
+    err = capsys.readouterr().err
+    assert option in err and "unrecognized" not in err

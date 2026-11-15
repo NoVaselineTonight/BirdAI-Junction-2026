@@ -442,3 +442,25 @@ def test_without_photo_mode_there_is_no_raw_preview(tmp_path):
     for _ in range(3):
         step_past_throttle(p)
     assert p.live().jpeg.startswith(b"\xff\xd8") and p.live().raw_jpeg == b""
+
+
+def test_pest_threshold_decides_the_count_the_latch_and_the_drawing(tmp_path, make_video):
+    weak, strong = dict(SQ, confidence=0.6), dict(SQ, confidence=0.85)
+    p, _ = build(tmp_path, make_video, [[weak]] * 4, latch="sim", pest_threshold=0.8)
+    run_detections(p, 4)
+    live = p.live()
+    assert live.pests["red_squirrel"] == 0 and not live.latch.closed  # 0.6 never closes the latch
+    assert p._pest_thresholds["red_squirrel"] == 0.8  # and is drawn by the same number
+    (tmp_path / "strong").mkdir()
+    p, _ = build(tmp_path / "strong", make_video, [[strong]] * 4, latch="sim", pest_threshold=0.8)
+    run_detections(p, 4)
+    assert p.live().pests["red_squirrel"] == 1 and p.live().latch.closed
+
+
+def test_latch_close_frames_sets_how_many_detections_in_a_row_close_the_latch(tmp_path, make_video):
+    p, _ = build(tmp_path, make_video, [[SQ]] * 6, latch="sim", latch_close_frames=3)
+    for n in (1, 2):
+        run_detections(p, n)
+        assert not p.live().latch.closed
+    run_detections(p, 3)
+    assert p.live().latch.closed
