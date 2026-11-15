@@ -3,6 +3,7 @@ import numpy as np
 import pytest
 
 from evaluate import (
+    THRESHOLDS,
     Tally,
     build_curves,
     build_tallies,
@@ -17,6 +18,7 @@ from evaluate import (
     read_truth,
     score_frames,
 )
+from feeder_census.detectors.student import MIN_SCORE
 from feeder_census.types import UNIDENTIFIED, Detection
 
 A, B = (0, 0, 100, 100), (200, 200, 300, 300)
@@ -35,6 +37,11 @@ def test_predictions_on_unidentified_truth_are_not_errors():
 def pooled(**per_threshold):
     """Tallies by threshold: `pooled(t60={"great_tit": (500, 20)})` is {0.60: {"great_tit": Tally(500, 20, 0)}}."""
     return {float(k[1:]) / 100: {s: Tally(tp, fp, 0) for s, (tp, fp) in v.items()} for k, v in per_threshold.items()}
+
+
+def test_pick_threshold_can_go_below_0_50_down_to_the_detectors_floor():
+    tallies = pooled(t25={"great_tit": (60, 40)}, t30={"great_tit": (92, 8)}, t50={"great_tit": (95, 5)})
+    assert pick_threshold(tallies, {"great_tit": 80}) == 0.30
 
 
 def test_pick_threshold_takes_the_lowest_threshold_that_reaches_the_pooled_bar():
@@ -144,10 +151,19 @@ def frames_for_curves():
     ]
 
 
+def test_the_grid_runs_from_the_detectors_own_floor_to_0_90_in_steps_of_0_05():
+    assert THRESHOLDS[0] == MIN_SCORE == 0.25
+    assert THRESHOLDS[-1] == 0.90
+    assert len(THRESHOLDS) == 14
+    assert THRESHOLDS == tuple(round(0.25 + 0.05 * i, 2) for i in range(14))
+    assert all(round(b - a, 2) == 0.05 for a, b in zip(THRESHOLDS, THRESHOLDS[1:]))
+
+
 def test_build_curves_gives_precision_and_recall_per_threshold():
     curves = build_curves(frames_for_curves(), ["great_tit"])["great_tit"]
-    assert [t for t, _, _ in curves] == [0.50, 0.55, 0.60, 0.65, 0.70, 0.75, 0.80, 0.85, 0.90]
+    assert [t for t, _, _ in curves] == list(THRESHOLDS)
     at = {t: (p, r) for t, p, r in curves}
+    assert at[0.25] == (pytest.approx(2 / 3), 1.0)   # below every detection: the same as at 0.50
     assert at[0.50] == (pytest.approx(2 / 3), 1.0)   # tp 2, fp 1
     assert at[0.60] == (pytest.approx(1 / 2), 0.5)   # tp 1, fp 1, fn 1
     assert at[0.75] == (1.0, 0.5)                    # the false alarm is gone
@@ -162,7 +178,7 @@ def test_build_curves_with_no_detections_has_zero_precision_and_recall():
 def test_pick_threshold_on_tallies_built_from_detections():
     frames = frames_for_curves()
     tallies = build_tallies(frames, ["great_tit"])
-    assert list(tallies) == [0.50, 0.55, 0.60, 0.65, 0.70, 0.75, 0.80, 0.85, 0.90]
+    assert list(tallies) == list(THRESHOLDS)
     assert tallies[0.50]["great_tit"] == Tally(tp=2, fp=1, fn=0) and tallies[0.60]["great_tit"] == Tally(1, 1, 1)
     assert pick_threshold(tallies, {"great_tit": 20}) == 0.75
 
@@ -214,7 +230,7 @@ def test_unknown_rates_reach_the_card_as_json_null(tmp_path):
 
 
 def ok_tallies():
-    return pooled(**{f"t{round(t * 100)}": {"great_tit": (95, 5)} for t in (0.50, 0.55, 0.60, 0.65, 0.70, 0.75, 0.80, 0.85, 0.90)})
+    return pooled(**{f"t{round(t * 100)}": {"great_tit": (95, 5)} for t in THRESHOLDS})
 
 
 PICKED = ("picked on validation footage: the lowest threshold where at least 90% of named birds were right, "
@@ -224,8 +240,14 @@ FALLBACK = ("fallback 0.90: no threshold reached 0.90 precision on validation fo
 
 
 def test_student_threshold_picked_on_validation_footage():
-    tallies = {**ok_tallies(), 0.50: {"great_tit": Tally(85, 15, 0)}, 0.55: {"great_tit": Tally(91, 9, 0)}}
+    below = {t: {"great_tit": Tally(85, 15, 0)} for t in THRESHOLDS if t <= 0.50}
+    tallies = {**ok_tallies(), **below, 0.55: {"great_tit": Tally(91, 9, 0)}}
     assert student_threshold(tallies, {"great_tit": 80}, default=0.60) == (0.55, PICKED)
+
+
+def test_student_threshold_picks_0_30_when_precision_first_reaches_the_bar_there():
+    tallies = {**ok_tallies(), 0.25: {"great_tit": Tally(80, 20, 0)}, 0.30: {"great_tit": Tally(91, 9, 0)}}
+    assert student_threshold(tallies, {"great_tit": 80}, default=0.60) == (0.30, PICKED)
 
 
 def test_student_threshold_at_exactly_0_90_is_still_a_pick_when_it_reaches_the_bar():
@@ -414,8 +436,8 @@ def test_evaluate_candidate_picks_the_threshold_on_val_and_reports_test(tmp_path
     detector = CountingDetector()
     out = evaluate_candidate(detector, dataset, classes, pick=True, min_val_boxes=1)
     assert detector.calls == 3  # val once, test twice
-    # on val the single bird is found at every threshold, so the lowest one is picked
-    assert out["threshold"] == 0.50
+    # on val the single bird is found at every threshold, so the lowest one, the detector's floor, is picked
+    assert out["threshold"] == MIN_SCORE
     assert out["threshold_source"] == PICKED
     assert out["val_boxes"] == {"great_tit": 1}
     assert out["frames"] == 2

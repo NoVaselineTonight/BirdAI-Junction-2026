@@ -27,10 +27,11 @@ import cv2
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))  # `python tools/evaluate.py` has no repo root on the path
 
 from feeder_census.census import frame_counts  # noqa: E402
+from feeder_census.detectors.student import MIN_SCORE  # noqa: E402
 from feeder_census.species import load_species  # noqa: E402
 from feeder_census.types import UNIDENTIFIED, Detection  # noqa: E402
 
-THRESHOLDS = tuple(round(0.50 + 0.05 * i, 2) for i in range(9))  # 0.50 .. 0.90
+THRESHOLDS = tuple(round(MIN_SCORE + 0.05 * i, 2) for i in range(14))  # 0.25 .. 0.90, from the detector's own floor
 FALLBACK_THRESHOLD = 0.90
 MAX_BOARD_MS = 1500.0
 MIN_QUALIFYING_SPECIES = 3

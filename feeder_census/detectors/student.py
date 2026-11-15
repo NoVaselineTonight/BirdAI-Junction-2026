@@ -8,6 +8,7 @@ import onnxruntime as ort
 from feeder_census.detectors.base import letterbox, nms
 from feeder_census.types import UNIDENTIFIED, Detection
 
+MIN_SCORE = 0.25  # the student drops boxes scoring under this, so no cut-off below it means anything
 NMS_CONTAIN = 0.8  # a head box inside a body box is one bird, as in the two-stage detector
 
 
@@ -16,7 +17,7 @@ def decode_student(
     ratio: float,
     pad: tuple[int, int],
     classes: Sequence[str],
-    min_score: float = 0.25,
+    min_score: float = MIN_SCORE,
     nms_iou: float = 0.5,
 ) -> list[Detection]:
     """Turn the student's `[1, N, 6]` output (x1, y1, x2, y2, score, class_index in letterboxed
