@@ -24,13 +24,14 @@
     0 to 180).
   - On our feeder the hatch is a small board hinged along its top edge. Lifted (the slot under it
     exposed) is open: the high angle, 180. Hanging down over the slot is closed: 0. Closed is by
-    gravity only, nothing holds the board shut. A camera check on 15 November 2026 (with the library's
-    default pulse range, 544-2400 us) saw the wires slack up to about 25 degrees, the board starting to
+    gravity only, nothing holds the board shut. An earlier camera check on 15 November 2026 (with the
+    library's default pulse range, 544-2400 us; it gave open 180 / closed 25) saw the wires slack up to about 25 degrees, the board starting to
     lift at about 28 to 30 degrees and still rising at 180, so "open" is at the end of the servo's range.
   - The defaults open = 180 and closed = 0 are the team's own calibration on the feeder, saved on the
     calibration page on 15 November 2026. The sketch attaches with the pulse range from the servo's data
-    sheet, SERVO_MIN_US = 500 to SERVO_MAX_US = 2500 us, so that 180 turns the servo its full 180
-    degrees. At the end of its range a hobby servo may buzz or get warm. If it does, the fix is a lower
+    sheet, SERVO_MIN_US = 500 to SERVO_MAX_US = 2500 us, so that 180 should turn the servo its full 180
+    degrees. The team saved these angles while the board ran the sketch with the 500-2500 us range.
+    Nobody measured that range on its own. At the end of its range a hobby servo may buzz or get warm. If it does, the fix is a lower
     open angle or a smaller SERVO_MAX_US.
   - The servo never jumps to a new angle. Every move after setup() is walked in steps of at most
     STEP_DEGREES (10) degrees, one step every STEP_INTERVAL_MS (100 ms); the last step may be shorter so
