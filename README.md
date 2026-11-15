@@ -52,7 +52,11 @@ The servo is a DFRobot SER0006 (9 g, 180° position servo, 4.8–6 V). It turns 
 - Fallback we use (no separate supply): servo power from the board's 5V and GND pins. Keep the flap light; a jammed servo can reset the board.
 - Never put 5 V on D3 or A0–A5.
 
-The open and closed angles are two constants at the top of the sketch (10 open, 100 closed). The sketch opens the latch by itself 30 seconds after the last close command, so the feeder does not stay shut when the program on the Linux side stops. The program repeats the close command at every detection while the latch should stay closed.
+The hatch is a small board hinged along its top edge. Lifted, with the slot under it exposed, is open. Hanging down over the slot is closed. So the open angle is the high one: open is 180 and closed is 25. We measured this with a camera on 15 November 2026. The wires are slack up to about 25 degrees, the board starts to lift at about 28 to 30 degrees and is still rising at 180. Closed is by gravity only: nothing holds the board shut. The two angles are the start values at the top of the sketch.
+
+The servo is at the end of its range at "open". To get more lift, change the hardware: hook the wires closer to the hinge line, shorten the wires so they are just taut when the board hangs, or use a longer horn arm or a bigger spool. The sketch also attaches the servo with the pulse range from its data sheet, 500 to 2500 microseconds, instead of the library's default 544 to 2400, so that 180 turns the servo its full 180 degrees. The angles above were measured with the default range. The wider range is in the sketch but not yet measured on the feeder. At the end of its range a servo may buzz or get warm. If it does, use a lower open angle or a smaller `SERVO_MAX_US`.
+
+The sketch opens the latch by itself 30 seconds after the last close command, so the feeder does not stay shut when the program on the Linux side stops. The program repeats the close command at every detection while the latch should stay closed.
 
 `--latch` (on `python -m feeder_census` and `board/run.sh`) picks the mode:
 

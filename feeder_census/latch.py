@@ -23,7 +23,7 @@ from typing import Protocol
 
 MODES = ("off", "sim", "router")
 ROUTER_SOCKET = Path("/var/run/arduino-router.sock")
-DEFAULT_OPEN, DEFAULT_CLOSED = 10, 100  # the sketch's own start values (board/latch/latch.ino)
+DEFAULT_OPEN, DEFAULT_CLOSED = 180, 25  # the sketch's own start values (board/latch/latch.ino)
 MAX_DEGREES = 180
 
 
@@ -228,7 +228,7 @@ def load_angles(path: Path) -> tuple[int, int] | None:
     except ValueError as exc:
         raise LatchError(f"{path} is not valid JSON ({exc}); delete it or save the angles again")
     if not (isinstance(data, dict) and _is_degrees(data.get("open")) and _is_degrees(data.get("closed"))):
-        raise LatchError(f'{path} must look like {{"open": 10, "closed": 100}} with angles from 0 to {MAX_DEGREES}, '
+        raise LatchError(f'{path} must look like {{"open": 180, "closed": 25}} with angles from 0 to {MAX_DEGREES}, '
                          f"got {text.strip()[:80]!r}")
     return data["open"], data["closed"]
 

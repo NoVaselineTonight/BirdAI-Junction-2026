@@ -74,7 +74,7 @@ def test_the_page_is_one_plain_html_document(served):
 
 def test_state_before_anything_is_set_shows_the_defaults(served):
     base, _, _ = served
-    assert call(base, "/state") == (200, {"angle": None, "open": 10, "closed": 100, "saved": False, "error": None})
+    assert call(base, "/state") == (200, {"angle": None, "open": 180, "closed": 25, "saved": False, "error": None})
 
 
 def test_state_shows_the_saved_angles(tmp_path):
@@ -123,16 +123,16 @@ def test_save_before_any_angle_is_refused(served):
 
 def test_save_writes_the_file_and_sends_the_limits(served):
     base, board, angles = served
-    call(base, "/angle", {"degrees": 25})
+    call(base, "/angle", {"degrees": 150})
     status, reply = call(base, "/save", {"which": "open"})
-    assert status == 200 and reply == {"open": 25, "closed": 100, "saved": True}
-    assert json.loads(angles.read_text()) == {"open": 25, "closed": 100}
-    call(base, "/angle", {"degrees": 140})
-    assert call(base, "/save", {"which": "closed"})[1]["closed"] == 140
-    assert json.loads(angles.read_text()) == {"open": 25, "closed": 140}
-    assert board.calls[-1] == ("set_limits", 25, 140)
+    assert status == 200 and reply == {"open": 150, "closed": 25, "saved": True}
+    assert json.loads(angles.read_text()) == {"open": 150, "closed": 25}
+    call(base, "/angle", {"degrees": 40})
+    assert call(base, "/save", {"which": "closed"})[1]["closed"] == 40
+    assert json.loads(angles.read_text()) == {"open": 150, "closed": 40}
+    assert board.calls[-1] == ("set_limits", 150, 40)
     state = call(base, "/state")[1]
-    assert (state["open"], state["closed"], state["saved"]) == (25, 140, True)
+    assert (state["open"], state["closed"], state["saved"]) == (150, 40, True)
 
 
 @pytest.mark.parametrize("which", ["both", "OPEN", None, 1])

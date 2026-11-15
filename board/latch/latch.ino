@@ -19,15 +19,27 @@
   Mechanics:
   - The servo is a 180 degree position servo. It turns at most half a turn and does not spin round.
   - Both pull wires go on the same axis (spool or horn), wound the same way, so they rise together.
-  - A spool or horn of radius r pulls about 3.1 x r of wire in half a turn, and about 1.6 x r over
-    the default 10 to 100 degrees (r = 1 cm: about 1.6 cm of wire, up to about 3 cm at 0 to 180).
+  - A spool or horn of radius r pulls about 3.1 x r of wire in half a turn, and about 2.6 x r over
+    the default travel of about 28 to 180 degrees (r = 1 cm: about 2.6 cm of wire, up to about 3 cm at
+    0 to 180).
+  - On our feeder the hatch is a small board hinged along its top edge. Lifted (the slot under it
+    exposed) is open: the high angle, 180. Hanging down over the slot is closed: 25. Closed is by
+    gravity only, nothing holds the board shut. The wires are slack up to about 25 degrees, the board
+    starts to lift at about 28 to 30 degrees and is still rising at 180, so "open" is at the end of the
+    servo's range.
+  - The angles were measured with a camera on 15 November 2026 with the library's default pulse range
+    (544-2400 us). The sketch now attaches with the wider range from the servo's data sheet,
+    SERVO_MIN_US = 500 to SERVO_MAX_US = 2500 us, so that 180 turns the servo its full 180 degrees. The
+    wider range is NOT YET MEASURED on our feeder: the hatch should open a little further, but nobody
+    has watched it yet. At the end of its range a hobby servo may buzz or get warm. If it does, the fix
+    is a lower open angle or a smaller SERVO_MAX_US.
   - Rated torque is about 1.6 kg.cm at 4.8 V, so r = 1 cm gives about 1.6 kg at stall. Plan for well
     under half of that for both wires together (about 0.5 kg at r = 1 cm, 0.25 kg at r = 2 cm).
     A servo held stalled gets hot and can reset the board.
 
   Bring-up from the board's Linux shell: python -m feeder_census.latch close | open | cycle | angle N
 
-  Angles: start with 10 (open) and 100 (closed). Three more calls let the Linux side find the right angles
+  Angles: start with 180 (open, hatch lifted) and 25 (closed, hatch hanging down). Three more calls let the Linux side find the right angles
   without editing this file (the page python -m feeder_census.calibrate uses them):
   - set_angle(degrees): clamps to 0..180, turns the servo there at once and returns the angle used. The servo
     is then in a "hand-set" position: the 30 s fail-safe does not reopen it (calibration needs it to stay),
@@ -39,7 +51,7 @@
   - set_limits(open_degrees, closed_degrees): clamps both to 0..180 and stores them as the open and closed
     angles. Unless the servo is in a hand-set position it moves to the new angle of its current state.
   The limits set this way live in memory only: they are lost at a restart of the microcontroller, which
-  goes back to 10 and 100. The Linux side sends them again at its start (data/latch_angles.json). To make
+  goes back to 180 and 25. The Linux side sends them again at its start (data/latch_angles.json). To make
   other angles the sketch's own, change the two start values below.
 */
 
@@ -47,9 +59,11 @@
 #include "Arduino_RouterBridge.h"
 
 const int SERVO_PIN = 9;  // D9
+const int SERVO_MIN_US = 500;   // pulse width for 0 degrees (servo data sheet; the library default is 544)
+const int SERVO_MAX_US = 2500;  // pulse width for 180 degrees (servo data sheet; the library default is 2400)
 
-int servoOpen = 10;
-int servoClosed = 100;
+int servoOpen = 180;   // hatch lifted
+int servoClosed = 25;  // hatch hanging down
 
 const unsigned long REOPEN_AFTER_MS = 30000;  // fail-safe: open when no close command came for 30 s
 const unsigned long HAND_SET_TIMEOUT_MS = 600000;  // a hand-set angle goes back to open 10 minutes after the last set_angle
@@ -60,7 +74,7 @@ volatile bool latchClosed = false;
 volatile bool handSet = false;  // the servo was turned by set_angle and has not been moved by set_latch since
 volatile unsigned long lastCloseMs = 0;
 volatile unsigned long handSetMs = 0;  // when set_angle was last called
-int lastAngle = 10;
+int lastAngle = 180;
 
 int clampAngle(int degrees) {
   return degrees < 0 ? 0 : (degrees > 180 ? 180 : degrees);
@@ -119,7 +133,7 @@ bool set_limits(int open_degrees, int closed_degrees) {
 
 void setup() {
   // a restart always leaves the feeder open
-  servo.attach(SERVO_PIN);
+  servo.attach(SERVO_PIN, SERVO_MIN_US, SERVO_MAX_US);
   writeAngle(servoOpen);
 
   Bridge.begin();
