@@ -1,34 +1,29 @@
-# Feeder Census web demo
+# BirdAI web demo
 
-A static, illustrative demo of Feeder Census. No build step and no server code: open `index.html` through any static file server.
+A single static page that presents BirdAI: what it is, why it matters, how it works, the model running on the Arduino UNO Q, and what a network of feeders could be used for.
+
+## Run it
+
+Serve this folder with any static file server and open the page:
 
 ```
-cd web-demo
-python -m http.server 8000
+python -m http.server 8000 --directory web-demo
 ```
 
-Then open http://localhost:8000.
-
-## What it shows
-
-- **Explore the AI**: a simulation of the loop the Arduino UNO Q runs every 5 seconds (photo, detect, filter, confirm, record, latch), the team's measured numbers, and two 3D animations of the build.
-- **Explore the implications**: a map of 40 feeder stations across Finland with the half-month counts each would report, a station's monitoring form as a heat table, its habitat mix, and a network-wide winter curve.
+Then open http://localhost:8000. Opening `index.html` straight from disk also works, but some browsers block autoplaying video from `file://`.
 
 ## What is real and what is not
 
-- The measured numbers (`FC.facts` in `data.js`) come from the project's own tests on 14 November 2026.
-- The tray in "Explore the AI" is a scripted simulation, not video or detections from the device.
-- The 40 stations and all their counts are **simulated** (`data.js` generates them from a fixed seed). One prototype feeder exists today.
-- The outline of Finland is hand-drawn and stylised.
-- The clips in `clips/` are 3D animations of the build, not footage from the device.
+- Real: the photo of the prototype, the squirrel detection footage (`clips/feeder-ai.mp4`), and the speed and accuracy figures, which come from the project README.
+- 3D animation: `hero.mp4`, `xray.mp4`, `birds.mp4`, `squirrel.mp4`, `forest.mp4` and the background image.
+- Illustration: the Espoo network map (`clips/network.png`, map data © OpenStreetMap contributors). No such network exists yet.
+- The bird statistics in the Why section are cited on the page (Eurostat 2026, Fraixedas et al. 2020, Luomus).
+
+The feeder footage comes from a third-party feeder stream. Check with its owner before publishing this page outside the team.
 
 ## Files
 
-| File | What it is |
-|---|---|
-| `index.html` | Page shell, theme and routing between the three views |
-| `data.js` | Species, periods, simulated stations, map projection, measured facts |
-| `ai.js`, `ai.css` | The loop simulation and the edge-compute view |
-| `map.js`, `map.css` | The Finland map, species picker and period slider |
-| `charts.js`, `charts.css` | The station heat table, habitat mix and network charts |
-| `clips/` | Three short 3D animations (MP4) |
+- `index.html`: the whole page, with its styles and a small script for scroll effects.
+- `clips/`: the videos and images the page uses.
+
+Fonts load from Google Fonts. Nothing else is fetched from the network.

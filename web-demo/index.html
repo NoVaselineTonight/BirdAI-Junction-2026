@@ -2,210 +2,481 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<style>body{margin:0}img{max-width:100%}[hidden]{display:none!important}</style>
-</head>
-<body>
-<title>Feeder Census Demo</title>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400..700;1,9..144,400..600&family=Public+Sans:wght@400;500;600&display=swap">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>body { margin: 0; } img { max-width: 100%; } [hidden] { display: none !important; }</style>
+<title>BirdAI</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,600;12..96,700&family=Instrument+Sans:wght@400;500;600;700&display=swap">
 <style>
-/* Layout: a winter field guide. Lichen-pale paper, spruce-green ink, rowan-red for alarms, lake-blue for the machine.
-   One light look on purpose. A spruce treeline closes the home screen and the page. */
+/* Layout: one page on a winter-night forest. Night-blue ground, snow type, bullfinch red accent.
+   The pitch deck as one page. Header, Basics (what, why, how), The AI, Implications.
+   Each block is a yellow label, a big Alegreya headline, one picture, a few words. */
 :root {
-  color-scheme: light;
-  --bg: #ECEFE3;        /* lichen */
-  --surface: #F8F9F1;   /* birch bark */
-  --surface2: #DDE5D0;  /* moss shade */
-  --line: #C3CDB4;
-  --fg: #16291C;        /* spruce at dusk */
-  --muted: #4A5D4E; --faint: #68796A;
-  --sci: #2E6B3A;       /* moss green: the science view */
-  --sci-ink: #F8F9F1;
-  --tech: #1E5F74;      /* lake blue: the machine view */
-  --alert: #B23A2B;     /* rowan berry */
-  --bark: #6B5238; --sun: #C99700;
-  --display: "Fraunces", Georgia, "Times New Roman", serif;
-  --body: "Public Sans", "Segoe UI", system-ui, sans-serif;
-  --radius: 6px;
+  color-scheme: dark;
+  --bg: #0A1420;        /* winter night */
+  --surface: #101D2C; --surface2: #172839; --line: #24384A;
+  --fg: #F4F7FA;        /* snow */
+  --muted: #B9C7D6; --faint: #8496A8;
+  --sun: #FF6B4A;       /* bullfinch red: the accent */
+  --sci: #FF6B4A; --sci-ink: #0A1420; --tech: #8FD3E8; --alert: #FF6B4A;
+  --display: "Bricolage Grotesque", "Segoe UI", system-ui, sans-serif;
+  --body: "Instrument Sans", "Segoe UI", system-ui, sans-serif;
+  --mono: "Instrument Sans", "Segoe UI", system-ui, sans-serif;
+  --radius: 4px;
 }
+html { scroll-behavior: smooth; scroll-padding-top: 64px; }
 html, body { background: var(--bg); color: var(--fg); }
-body { font-family: var(--body); font-size: 16px; line-height: 1.55; }
+body { font-family: var(--body); font-size: 19px; line-height: 1.45; }
 * { box-sizing: border-box; }
-h1, h2, h3 { font-family: var(--display); font-weight: 600; line-height: 1.1; margin: 0; text-wrap: balance; letter-spacing: -0.01em; }
+h1, h2, h3 { font-family: var(--display); font-weight: 600; line-height: 1.02; letter-spacing: -.02em; margin: 0; text-wrap: balance; }
 p { margin: 0; }
 a { color: inherit; }
-button { font: inherit; color: inherit; }
-:focus-visible { outline: 2px solid var(--alert); outline-offset: 2px; }
+button, select, input { font: inherit; color: inherit; }
+:focus-visible { outline: 2px solid var(--sun); outline-offset: 2px; }
+.wrap { max-width: 1200px; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
 
-.wrap { max-width: 1240px; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+.top { background: var(--bg); position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; border-bottom: 1px solid var(--line); }
+body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--bg); }
+.top .wrap { display: flex; align-items: center; gap: 16px; padding-block: 10px; }
+.brand { font-family: var(--display); font-size: 28px; line-height: 1; text-decoration: none; }
+.nav { display: flex; gap: 4px; margin-left: auto; }
+.nav a { text-decoration: none; padding: 6px 12px; color: var(--muted); font-weight: 500; }
+.nav a:hover { color: var(--sun); }
 
-.top { background: var(--fg); color: var(--surface); }
-.top .wrap { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; padding-block: 12px; }
-.brand { font-family: var(--display); font-weight: 600; font-size: 20px; text-decoration: none; display: flex; align-items: center; gap: 10px; }
-.brand svg { width: 26px; height: 26px; flex: none; }
-.nav { display: flex; gap: 4px; margin-left: auto; flex-wrap: wrap; }
-.nav a { text-decoration: none; padding: 8px 14px; border-radius: var(--radius); color: #C9D6C6; font-weight: 500; font-size: 14px; border-bottom: 2px solid transparent; }
-.nav a:hover { color: #FFFFFF; }
-.nav a[aria-current="page"] { color: #FFFFFF; border-bottom-color: #E0B93A; border-radius: 0; }
+.label { font-size: 16px; font-weight: 700; letter-spacing: .16em; text-transform: uppercase; color: var(--sun); }
+.media { width: 100%; max-width: 100%; display: block; border-radius: var(--radius); background: #05090A; object-fit: cover; }
+figure { margin: 0; }
+.credit { font-size: 14px; color: var(--faint); }
 
-.sim-banner { background: var(--surface2); border-bottom: 1px solid var(--line); color: var(--muted); font-size: 13px; }
-.sim-banner .wrap { padding-block: 8px; }
+/* header / cover */
+.cover { position: relative; overflow: hidden; }
+.cover video { position: absolute; inset: 0 0 0 auto; width: 62%; height: 100%; object-fit: cover; object-position: 60% 50%; }
+.cover::after { content: ""; position: absolute; inset: 0; background: linear-gradient(90deg, var(--bg) 38%, #0A142000 72%); }
+.cover .wrap { position: relative; z-index: 1; padding-block: 120px; display: flex; flex-direction: column; gap: 22px; }
+.cover h1 { font-size: clamp(72px, 12vw, 150px); }
+.cover p.line { font-size: 28px; max-width: 22ch; }
 
-/* home */
-.home { padding-block: 44px 0; display: flex; flex-direction: column; gap: 36px; }
-.hero { display: grid; grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr); gap: 36px; align-items: center; }
-.hero h1 { font-size: clamp(36px, 5.2vw, 64px); font-weight: 500; }
-.hero h1 em { font-style: italic; color: var(--sci); }
-.hero p.lead { font-size: 18px; color: var(--muted); max-width: 52ch; margin-top: 18px; }
-.hero figure { margin: 0; }
-.hero video { width: 100%; max-width: 100%; aspect-ratio: 16 / 9; border-radius: var(--radius); background: var(--fg); object-fit: cover; display: block; box-shadow: 10px 10px 0 var(--surface2); }
-.eyebrow { font-family: var(--display); font-style: italic; font-size: 16px; color: var(--bark); margin-bottom: 10px; }
-.doors { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px; }
-.door { display: grid; grid-template-columns: 72px minmax(0, 1fr); gap: 20px; padding: 26px; border-radius: var(--radius); background: var(--surface); border: 1px solid var(--line); border-left: 6px solid var(--sci); text-decoration: none; transition: background .15s; }
-.door.tech { border-left-color: var(--tech); }
-.door:hover { background: #FFFFFF; }
-.door svg { width: 72px; height: 72px; }
-.door-body { display: flex; flex-direction: column; gap: 10px; }
-.door h2 { font-size: 28px; }
-.door p { color: var(--muted); }
-.door .go { margin-top: 6px; font-weight: 600; color: var(--sci); }
-.door.tech .go { color: var(--tech); }
-.caption { font-size: 13px; color: var(--faint); margin-top: 16px; }
+/* chapters and blocks */
+.chapter { border-top: 1px solid var(--line); padding-block: 88px; display: flex; flex-direction: column; gap: 80px; }
+.chapter > .label { font-size: 18px; margin-bottom: -48px; }
+.block { display: flex; flex-direction: column; gap: 26px; }
+.block h2 { font-size: clamp(38px, 5vw, 64px); max-width: 18ch; }
+.kicker { font-family: var(--display); font-size: 30px; color: var(--sun); }
+.line { font-size: 24px; color: var(--muted); max-width: 40ch; }
+.split { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr); gap: 44px; align-items: center; }
+.split .block { gap: 18px; }
 
-.treeline { display: block; width: 100%; height: 84px; margin-top: 8px; }
+.cols { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 28px; }
+.cols.four { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.col { display: flex; flex-direction: column; gap: 10px; }
+.col img { aspect-ratio: 4 / 3; }
+.col h3 { font-size: 34px; color: var(--sun); }
+.col p { color: var(--muted); }
+.num b { display: block; font-family: var(--display); font-weight: 700; letter-spacing: -.03em; font-size: clamp(60px, 8vw, 112px); line-height: .95; color: var(--sun); }
+.num span { display: block; margin-top: 10px; font-size: 22px; color: var(--muted); max-width: 17ch; }
 
-.view { padding-block: 30px 56px; }
-.view-head { display: flex; flex-direction: column; gap: 10px; margin-bottom: 26px; padding-bottom: 20px; border-bottom: 1px solid var(--line); }
-.view-head h1 { font-size: clamp(30px, 4.2vw, 48px); font-weight: 500; }
-.view-head p { color: var(--muted); max-width: 70ch; font-size: 17px; }
-.view-head .eyebrow { margin-bottom: 0; }
+.marked { position: relative; }
+.marked span { position: absolute; transform: translate(-50%, -50%); width: 30px; height: 30px; border-radius: 50%; background: var(--sun); color: var(--bg); font-weight: 700; font-size: 17px; display: flex; align-items: center; justify-content: center; box-shadow: 0 0 0 3px #0A142099; }
+.marked.product { max-width: 480px; justify-self: center; }
+.shots { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 20px; margin-top: -32px; }
+.shots img { aspect-ratio: 3 / 4; }
+.parts { margin: 0; padding-left: 24px; color: var(--muted); columns: 2; column-gap: 28px; }
+.parts li::marker { color: var(--sun); font-weight: 700; }
+.video video { aspect-ratio: 16 / 9; }
+.video video.wide { aspect-ratio: 21 / 8; }
+.netmap { width: 100%; max-width: 560px; justify-self: center; }
+.map-view .mv-network .fcc-sub { display: none; }
 
-footer { background: var(--fg); color: #C9D6C6; }
-footer .wrap { padding-block: 20px 28px; font-size: 13px; }
+/* map: keep the map, the controls and one chart */
+.map-view .mv-stats, .map-view .mv-placebar, .map-view .mv-station, .map-view .mv-covercard, .map-view .mv-note,
+.map-view .mv-network h4, .map-view .mv-network h4 + .fcc-sub, .map-view .fcc-rank, .map-view .fcc-why, .map-view .fcc-note { display: none; }
 
-@media (max-width: 820px) {
-  .hero, .doors { grid-template-columns: minmax(0, 1fr); }
-  .door { grid-template-columns: 56px minmax(0, 1fr); }
-  .door svg { width: 56px; height: 56px; }
+/* deck pass: blurred photo ground, giant chapter titles, ruled columns, no card chrome */
+main, footer { position: relative; z-index: 1; }
+.bg { position: fixed; inset: 0; z-index: 0; background: url(clips/forest-bg.jpg) center / cover; }
+.bg::after { content: ""; position: absolute; inset: 0; background: #0A1420B8; }
+.top { border-bottom: 0; background: #0A1420E6; }
+.nav a { font-size: 15px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; }
+.media { border-radius: 0; }
+.chapter { border-top: 0; padding-block: 104px; }
+.chapter > .label { font-family: var(--display); font-weight: 700; font-size: clamp(48px, 7vw, 99px); line-height: 1; letter-spacing: .035em; margin-bottom: -24px; }
+.kicker { font-weight: 700; font-size: clamp(30px, 3.4vw, 44px); letter-spacing: .035em; text-transform: uppercase; }
+.col, .num { border-top: 2px solid var(--sun); padding-top: 16px; }
+.col h3 { font-size: 30px; color: var(--fg); }
+.col p { font-size: 19px; }
+.num span { font-size: 19px; }
+.marked span { width: 26px; height: 26px; font-size: 15px; box-shadow: 0 0 0 2px var(--bg); }
+
+.map-view .mv-card, .fc-charts .fcc-card { background: none; border: 0; padding: 0; }
+.map-view .mv-chip { border: 0; background: none; padding: 4px 2px; margin-right: 12px; min-height: 0; border-bottom: 2px solid transparent; border-radius: 0; font-size: 17px; font-weight: 700; color: var(--muted); }
+.map-view .mv-chip[aria-pressed="true"] { background: none; color: var(--fg); border-bottom-color: var(--sun); }
+.map-view .mv-chip-sw, .map-view .mv-scale { display: none; }
+.map-view .mv-range { accent-color: var(--sun); }
+.map-view .mv-svg .mv-outline { fill: #2E7344; fill-opacity: .8; stroke: #F2F5F3; stroke-opacity: .7; stroke-width: 1; }
+.map-view .mv-dot { stroke: var(--bg); stroke-width: 1.5; filter: drop-shadow(0 0 5px #F2C23099); }
+.map-view .mv-sel { stroke: var(--alert); }
+.map-view .mv-play { border-color: var(--sun); color: var(--sun); background: none; border-radius: 0; font-weight: 700; }
+.fc-charts h3 { font-family: var(--body); font-size: 19px; font-weight: 700; color: var(--muted); }
+
+footer { color: var(--faint); }
+footer .wrap { padding-block: 24px 32px; font-size: 16px; }
+
+@media (max-width: 860px) {
+  .split { grid-template-columns: minmax(0, 1fr); }
+  .cols.four { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .cover .label { font-size: 13px; letter-spacing: .12em; }
+  .cover video { width: 100%; opacity: .35; }
+  .cover::after { background: linear-gradient(180deg, #0A142000, var(--bg)); }
+  .cover .wrap { padding-block: 72px; }
+  .chapter { padding-block: 56px; gap: 56px; }
+  .chapter > .label { margin-bottom: -32px; }
+  .nav a { padding: 6px 8px; font-size: 17px; }
+  .marked span { width: 24px; height: 24px; font-size: 14px; }
 }
-@media (prefers-reduced-motion: reduce) { .door { transition: none; } }
+@media (max-width: 600px) { .cols { grid-template-columns: minmax(0, 1fr); } .col img { max-height: 40vh; } }
+@media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
 </style>
-<link rel="stylesheet" href="ai.css">
-<link rel="stylesheet" href="map.css">
-<link rel="stylesheet" href="charts.css">
+<style>
+/* polish pass: rhythm, legibility, media, motion, phone */
+:root { --gap-section: clamp(56px, 7vw, 96px); --gap-block: clamp(48px, 6vw, 72px); }
 
+/* rhythm: chapters breathe evenly, titles hug their first block */
+.chapter { padding-block: var(--gap-section); gap: var(--gap-block); position: relative; }
+.chapter > .label { margin-bottom: calc(var(--gap-block) * -.6); line-height: .95; text-shadow: 0 2px 24px rgba(10, 20, 32, .6); }
+.block { gap: 22px; }
+.split { gap: clamp(28px, 4vw, 56px); }
+.shots { margin-top: 0; }
+.kicker { margin-bottom: -4px; }
+
+/* readability: soft night panel behind each chapter, forest shows in the gaps */
+.chapter::before { content: ""; position: absolute; z-index: -1; inset: 0 -24px; pointer-events: none;
+  background: linear-gradient(180deg, rgba(10, 20, 32, 0) 0, rgba(10, 20, 32, .62) 90px, rgba(10, 20, 32, .62) calc(100% - 90px), rgba(10, 20, 32, 0) 100%); }
+.line, .col p, .parts, .num span { text-shadow: 0 1px 14px rgba(10, 20, 32, .55); }
+
+/* header: translucent glass, accent underline on nav hover */
+.top { background: rgba(10, 20, 32, .72); -webkit-backdrop-filter: blur(14px) saturate(1.2); backdrop-filter: blur(14px) saturate(1.2); box-shadow: 0 1px 0 var(--line); }
+.nav a { position: relative; transition: color .2s; }
+.nav a::after { content: ""; position: absolute; left: 12px; right: 12px; bottom: 2px; height: 2px; background: var(--sun); transform: scaleX(0); transform-origin: left; transition: transform .25s ease; }
+.nav a:hover::after, .nav a:focus-visible::after { transform: scaleX(1); }
+.brand { letter-spacing: -.02em; font-weight: 700; }
+
+/* media: hairline, hover zoom on images only */
+.media { outline: 1px solid var(--line); outline-offset: -1px; }
+img.media, .marked, .col img { overflow: hidden; }
+.shots, .col, .marked { overflow: visible; }
+img.media { transition: transform 1.2s cubic-bezier(.2, .6, .2, 1); }
+.shots img.media, .col img { transition: transform 1.2s cubic-bezier(.2, .6, .2, 1); }
+@media (hover: hover) { img.media:hover { transform: scale(1.035); } .marked img.media:hover { transform: none; } }
+.shots { overflow: hidden; }
+.shots img.media { outline-offset: -1px; }
+
+/* numbers and ruled columns */
+.num b { letter-spacing: -.045em; font-variant-numeric: tabular-nums lining-nums; font-feature-settings: "tnum" 1, "lnum" 1; text-shadow: 0 2px 22px rgba(10, 20, 32, .5); }
+.col, .num { position: relative; border-top: 0; }
+.col::before, .num::before { content: ""; position: absolute; left: 0; top: 0; height: 2px; width: 100%; background: var(--sun); transform-origin: left; }
+
+/* reveal: visible by default; only animates when JS marks the page */
+.reveal { opacity: 1; transform: none; }
+@media (prefers-reduced-motion: no-preference) {
+  .js .reveal, html.js .reveal { opacity: 0; transform: translateY(22px); transition: opacity .8s ease, transform .8s cubic-bezier(.2, .6, .2, 1); }
+  .js .reveal.is-in, html.js .reveal.is-in { opacity: 1; transform: none; }
+  .js .col.reveal::before, .js .num.reveal::before { transform: scaleX(0); transition: transform 1s .15s cubic-bezier(.2, .6, .2, 1); }
+  .js .col.reveal.is-in::before, .js .num.reveal.is-in::before { transform: scaleX(1); }
+}
+@media (prefers-reduced-motion: reduce) { .reveal, .reveal * { transition: none !important; } img.media:hover { transform: none; } .nav a::after { transition: none; } }
+
+/* stat strip */
+.stat-strip { position: relative; z-index: 1; background: rgba(10, 20, 32, .78); -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px); border-block: 1px solid var(--line); }
+.stat-strip .wrap, .stat-strip > .wrap { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.stat-strip > *:not(.wrap), .stat-strip .wrap > * { padding: 30px 24px; text-align: left; }
+.stat-strip .wrap > * + *, .stat-strip > .stat + .stat { border-left: 1px solid var(--line); }
+.stat-strip b, .stat-strip strong { display: block; font-family: var(--display); font-weight: 700; font-size: clamp(40px, 5.4vw, 72px); line-height: 1; letter-spacing: -.04em; color: var(--sun); font-variant-numeric: tabular-nums lining-nums; }
+.stat-strip span, .stat-strip small { display: block; margin-top: 8px; font-size: 15px; line-height: 1.3; color: var(--muted); }
+
+/* proof tag */
+.proof { display: inline-flex; align-items: center; gap: 10px; font-size: 13px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; color: var(--sun); margin-bottom: 10px; }
+.proof::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--sun); flex: none; box-shadow: 0 0 10px var(--sun); }
+
+/* focus stays loud */
+:focus-visible { outline: 3px solid var(--sun); outline-offset: 3px; border-radius: 2px; }
+.media:focus-visible { outline-offset: 2px; }
+
+@media (max-width: 860px) {
+  .chapter::before { inset: 0 -16px; }
+  .stat-strip .wrap, .stat-strip > .wrap { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .stat-strip .wrap > :nth-child(3), .stat-strip > .stat:nth-child(3) { border-left: 0; }
+  .stat-strip .wrap > :nth-child(n+3) { border-top: 1px solid var(--line); }
+}
+@media (max-width: 600px) {
+  body { font-size: 17px; }
+  .chapter { padding-block: 48px; gap: 44px; }
+  .chapter > .label { font-size: clamp(40px, 13vw, 56px); margin-bottom: -26px; }
+  .cover .wrap { padding-block: 64px; gap: 16px; }
+  .cover p.line, .line { font-size: 20px; }
+  .block h2 { font-size: clamp(32px, 9.5vw, 42px); }
+  .kicker { font-size: 26px; }
+  .col h3 { font-size: 26px; }
+  .cols.four { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 22px 18px; }
+  .parts { columns: 1; }
+  .shots { display: flex; gap: 12px; overflow-x: auto; scroll-snap-type: x mandatory; -webkit-overflow-scrolling: touch; margin-inline: -16px; padding-inline: 16px; scroll-padding-inline: 16px; scrollbar-width: none; }
+  .shots::-webkit-scrollbar { display: none; }
+  .shots img.media { flex: 0 0 78%; scroll-snap-align: start; }
+  .stat-strip > *:not(.wrap), .stat-strip .wrap > * { padding: 22px 14px; }
+  .stat-strip span, .stat-strip small { font-size: 14px; }
+}
+
+</style>
+
+<style>
+/* v3: text sits on the looping clips. A stage is a clip on one side with the words over its dark edge. */
+.stage { position: relative; overflow: hidden; min-height: clamp(440px, 64vh, 660px); display: flex; align-items: center; background: #05090F; }
+.stage video { position: absolute; inset: 0 0 0 auto; width: 68%; height: 100%; object-fit: cover; }
+.stage::after { content: ""; position: absolute; inset: 0; background: linear-gradient(90deg, #05090F 30%, #05090FD9 44%, #05090F00 74%); }
+.stage-in { position: relative; z-index: 1; width: 48%; padding: 48px 0 48px 48px; display: flex; flex-direction: column; gap: 18px; }
+.stage-in h2 { font-size: clamp(34px, 4.4vw, 58px); }
+.stage-in .line { font-size: 21px; }
+.stage.flip { justify-content: flex-end; }
+.stage.flip video { inset: 0 auto 0 0; }
+.stage.flip::after { background: linear-gradient(270deg, #05090F 30%, #05090FD9 44%, #05090F00 74%); }
+.stage.flip .stage-in { padding: 48px 48px 48px 0; }
+.stage-list { list-style: none; margin: 6px 0 0; padding: 0; display: flex; flex-direction: column; gap: 14px; }
+.stage-list li { border-top: 2px solid var(--sun); padding-top: 10px; font-size: 18px; color: var(--muted); }
+.stage-list b { display: block; font-family: var(--display); font-size: 24px; font-weight: 600; color: var(--fg); }
+.stage-nums { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 20px; }
+.stage-nums b { display: block; font-family: var(--display); font-weight: 700; font-size: clamp(40px, 4.6vw, 64px); line-height: 1; letter-spacing: -.03em; color: var(--sun); }
+.stage-nums span { display: block; margin-top: 8px; font-size: 16px; color: var(--muted); }
+.stat-strip .wrap { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
+.stage.why .stage-in { width: 58%; }
+.stage.why video { width: 60%; }
+.stage.why::after { background: linear-gradient(90deg, #05090F 42%, #05090FD9 56%, #05090F00 86%); }
+.stage.why .line { font-size: 19px; }
+/* clean pass: quiet ground, no hairlines or panels, more air */
+.bg::after { background: #0A1420EB; }
+.media, .stage { border: 0 !important; outline: 0 !important; box-shadow: none !important; }
+.chapter { background: none !important; box-shadow: none !important; padding-block: 120px; gap: 96px; }
+.chapter::before, .chapter::after { content: none !important; }
+.stat-strip { background: none; border-block: 1px solid var(--line); }
+.col, .num { border-top-width: 1px; }
+.stage-list li { border-top: 1px solid var(--line); }
+img.media:hover { transform: none !important; }
+/* final polish: tight, even spacing */
+.chapter { padding-block: 64px 0 !important; gap: 40px !important; }
+.chapter:last-of-type { padding-bottom: 72px !important; }
+.chapter > .label { margin-bottom: -8px !important; }
+.block { gap: 22px; }
+.stat-strip + .chapter { padding-top: 56px !important; }
+.pipe { margin-top: 14px; }
+footer .wrap { padding-block: 20px 24px; }
+@media (max-width: 860px) {
+  .stage, .stage.flip { align-items: flex-end; justify-content: flex-start; min-height: 440px; }
+  .stage video, .stage.flip video, .stage.why video { inset: 0; width: 100%; height: 100%; }
+  .stage::after, .stage.flip::after { background: linear-gradient(0deg, #05090FF5 0%, #05090FD1 48%, #05090F26 100%); }
+  .stage.why::after { background: linear-gradient(0deg, #05090FF5 0%, #05090FE0 70%, #05090F66 100%); }
+  .stage-in, .stage.flip .stage-in, .stage.why .stage-in { width: auto; padding: 140px 20px 24px; }
+  .stage-in h2 { font-size: 32px; }
+  .stage-nums { gap: 12px; }
+  .stage-nums b { font-size: 34px; }
+  .stage-nums span { font-size: 14px; }
+}
+</style>
+</head>
+<body>
+<div class="bg" aria-hidden="true"></div>
 <header class="top">
   <div class="wrap">
-    <a class="brand" href="#home">
-      <svg viewBox="0 0 32 32" aria-hidden="true"><ellipse cx="15" cy="18" rx="9" ry="7" fill="#E0B93A"/><circle cx="22" cy="11" r="5.2" fill="#F8F9F1"/><path d="M17.5 9.5a5.2 5.2 0 0 1 9 0z" fill="#16291C" stroke="#F8F9F1" stroke-width=".6"/><circle cx="23.6" cy="10.8" r=".9" fill="#16291C"/><path d="M27 11l4 1-4 1.4z" fill="#C9D6C6"/><path d="M7 16L1 13l3 6z" fill="#7FA3B8"/></svg>
-      Feeder Census
-    </a>
-    <nav class="nav" aria-label="Demo sections">
-      <a href="#ai" data-nav="ai">Explore the AI</a>
-      <a href="#implications" data-nav="implications">Explore the implications</a>
+    <a class="brand" href="#top" data-go="top">BirdAI</a>
+    <nav class="nav" aria-label="Sections">
+      <a href="#basics" data-go="basics">Basics</a>
+      <a href="#ai" data-go="ai">The AI</a>
+      <a href="#implications" data-go="implications">Implications</a>
     </nav>
   </div>
 </header>
 
-<main>
-  <section id="view-home">
-    <div class="wrap home">
-      <div class="hero">
-        <div>
-          <p class="eyebrow">A winter field guide that writes itself</p>
-          <h1>A bird feeder that <em>counts</em> its own visitors</h1>
-          <p class="lead">A camera and a small model on an Arduino UNO Q name the birds at a winter feeder and count each species by the rule Finland’s national monitoring already uses. Nothing leaves the box except a table of counts.</p>
+<main id="top">
+  <div class="cover">
+    <video src="clips/hero.mp4" autoplay muted loop playsinline aria-label="3D animation of the feeder on a tree in falling snow"></video>
+    <div class="wrap">
+      <p class="label">Team RBC · Junction 2026 · Arduino challenge</p>
+      <h1>BirdAI</h1>
+      <p class="line">An Arduino-powered AI bird sensor capable of population and ecosystem tracking.</p>
+    </div>
+  </div>
+
+  <div class="stat-strip" role="group" aria-label="Key numbers"><div class="wrap">
+    <div><b>94%</b><span>of named birds named right</span></div>
+    <div><b>0</b><span>photos sent anywhere</span></div>
+  </div></div>
+
+  <section id="basics" class="wrap chapter">
+    <p class="label">Basics</p>
+
+    <div class="split reveal">
+      <div class="block">
+        <p class="kicker">What</p>
+        <h2>A feeder that counts its own birds using edge compute.</h2>
+        <p class="line">The prototype we built at Junction.</p>
+        <ol class="parts"><li>Camera boom</li><li>Roof</li><li>Servo and wires</li><li>Hatch and seed tray</li><li>Birch stand</li></ol>
+      </div>
+      <div><div class="marked product"><img class="media" src="clips/product-main.jpg" alt="The wooden feeder on a birch stand in a forest, with a camera on a boom and five numbered parts">
+        <span style="left:14%;top:26%">1</span><span style="left:53%;top:18.5%">2</span><span style="left:50%;top:27%">3</span><span style="left:47%;top:46%">4</span><span style="left:51%;top:62%">5</span></div></div>
+    </div>
+
+    <div class="block reveal">
+      <div class="stage why">
+        <video src="clips/birds.mp4" autoplay muted loop playsinline aria-label="3D animation of birds at the feeder"></video>
+        <div class="stage-in">
+          <p class="kicker">Why</p>
+          <h2>Winter is the blind spot.</h2>
+          <p class="line">Birds are a bioindicator: when their numbers change, the ecosystem around them has changed. The EU already tracks bird numbers as an official measure of biodiversity, but almost only in summer.</p>
+          <p class="line" style="color:var(--fg)">A network of these feeders could change that: daily winter counts from every feeder, counted the same way across Europe, with no volunteer and no form.</p>
+          <div class="stage-nums">
+            <div><b>&minus;41%</b><span>farmland birds in the EU since 1990</span></div>
+            <div><b>80%+</b><span>of bird indicators use summer data only</span></div>
+            <div><b>200+</b><span>Finnish winter feeders, each counted by hand</span></div>
+          </div>
+          <p class="credit">Eurostat 2026 · Fraixedas et al. 2020 · Luomus</p>
         </div>
-        <figure>
-          <video src="clips/hero.mp4" autoplay muted loop playsinline aria-label="3D animation of the Feeder Census feeder on a tree trunk in falling snow, with two birds"></video>
-          <figcaption class="caption">3D animation of our build, not footage from the device.</figcaption>
-        </figure>
-      </div>
-      <div class="doors">
-        <a class="door tech" href="#ai">
-          <svg viewBox="0 0 72 72" aria-hidden="true"><rect x="22" y="6" width="28" height="14" rx="3" fill="#1E5F74"/><circle cx="36" cy="20" r="4" fill="#16291C"/><path d="M36 22L12 64h48z" fill="#1E5F74" opacity=".18"/><path d="M36 22L12 64M36 22l24 42" stroke="#1E5F74" stroke-width="2" fill="none"/><ellipse cx="36" cy="54" rx="9" ry="6.5" fill="#C99700"/><circle cx="42" cy="48" r="4" fill="#16291C"/><rect x="24" y="42" width="26" height="22" fill="none" stroke="#B23A2B" stroke-width="2"/></svg>
-          <div class="door-body">
-            <p class="eyebrow">The machine</p>
-            <h2>Explore the AI</h2>
-            <p>Watch what the board does every five seconds: photograph, detect, filter, confirm, count, and close the latch when a squirrel shows up.</p>
-            <span class="go">Open the edge view →</span>
-          </div>
-        </a>
-        <a class="door sci" href="#implications">
-          <svg viewBox="0 0 72 72" aria-hidden="true"><path d="M30 6l14 4 6 16-4 14 8 14-10 12-16-2-10-14 4-16-2-14z" fill="#DDE5D0" stroke="#2E6B3A" stroke-width="2"/><circle cx="36" cy="18" r="3" fill="#2E6B3A"/><circle cx="30" cy="34" r="4.5" fill="#2E6B3A"/><circle cx="42" cy="44" r="6" fill="#2E6B3A"/><circle cx="28" cy="52" r="3.5" fill="#2E6B3A"/><circle cx="40" cy="29" r="2.5" fill="none" stroke="#2E6B3A" stroke-width="1.5"/></svg>
-          <div class="door-body">
-            <p class="eyebrow">The meaning</p>
-            <h2>Explore the implications</h2>
-            <p>See what a network of these feeders could tell us: a map of stations across Finland and the counts each one would report through a winter.</p>
-            <span class="go">Open the map →</span>
-          </div>
-        </a>
       </div>
     </div>
-    <svg class="treeline" id="treeline" viewBox="0 0 1200 84" preserveAspectRatio="none" aria-hidden="true"></svg>
+
+    <div class="block reveal">
+      <div class="stage">
+        <video src="clips/xray.mp4" autoplay muted loop playsinline aria-label="3D x-ray animation of the feeder: the board, the servo and the camera view"></video>
+        <div class="stage-in">
+          <p class="kicker">How</p>
+          <h2>One Arduino does it all.</h2>
+          <p class="line">The camera, the model and the hatch all run on one UNO Q.</p>
+        </div>
+      </div>
+<style>
+.pipe{position:relative;max-width:1200px;margin:0 auto;display:grid;grid-template-columns:repeat(5,1fr);gap:24px;color:var(--fg);font-family:var(--body)}
+.pipe-track{position:absolute;left:0;right:0;top:80px;height:2px;background:var(--line);pointer-events:none}
+.pipe-dot{position:absolute;top:-4px;left:0;width:10px;height:10px;border-radius:50%;background:var(--sun);animation:pipe-run 6s linear infinite}
+@keyframes pipe-run{from{left:0}to{left:calc(100% - 10px)}}
+.pipe-step{position:relative;padding:0 8px 0 0;margin:0}
+.pipe-icon{display:block;width:56px;height:56px;margin-bottom:24px;color:var(--fg)}
+.pipe-icon svg{width:56px;height:56px;fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round}
+.pipe-step-act .pipe-icon{color:var(--sun)}
+.pipe-text{padding-top:24px}
+.pipe-title{margin:0 0 6px;font-family:var(--display);font-size:28px;font-weight:600;line-height:1.15;color:var(--fg)}
+.pipe-detail{margin:0;font-family:var(--body);font-size:17px;line-height:1.4;color:var(--muted)}
+@media (max-width:860px){
+  .pipe{display:flex;flex-direction:column;gap:32px;padding-left:36px}
+  .pipe-track{left:0;right:auto;top:0;bottom:0;width:2px;height:auto}
+  .pipe-dot{display:none}
+  .pipe-step{display:flex;align-items:flex-start;gap:20px}
+  .pipe-icon{flex:0 0 56px;margin:0}
+  .pipe-text{padding-top:0}
+}
+@media (prefers-reduced-motion:reduce){.pipe-dot{animation:none}}
+</style>
+<div class="pipe">
+  <div class="pipe-track"><span class="pipe-dot"></span></div>
+  <div class="pipe-step">
+    <span class="pipe-icon"><svg viewBox="0 0 56 56" aria-hidden="true"><rect x="6" y="16" width="44" height="30" rx="3"/><path d="M19 16l4-6h10l4 6"/><circle cx="28" cy="31" r="9"/></svg></span>
+    <div class="pipe-text"><h3 class="pipe-title">Photo</h3><p class="pipe-detail">every 5 s</p></div>
+  </div>
+  <div class="pipe-step">
+    <span class="pipe-icon"><svg viewBox="0 0 56 56" aria-hidden="true"><rect x="14" y="14" width="28" height="28" rx="2"/><rect x="22" y="22" width="12" height="12"/><path d="M20 14V6M28 14V6M36 14V6M20 50v-8M28 50v-8M36 50v-8M14 20H6M14 28H6M14 36H6M50 20h-8M50 28h-8M50 36h-8"/></svg></span>
+    <div class="pipe-text"><h3 class="pipe-title">Model</h3><p class="pipe-detail">0.5 s on the Arduino</p></div>
+  </div>
+  <div class="pipe-step">
+    <span class="pipe-icon"><svg viewBox="0 0 56 56" aria-hidden="true"><rect x="12" y="6" width="34" height="26" rx="2"/><rect x="6" y="20" width="34" height="26" rx="2"/><path d="M15 34l6 6 12-12"/></svg></span>
+    <div class="pipe-text"><h3 class="pipe-title">Confirm</h3><p class="pipe-detail">2 photos in a row</p></div>
+  </div>
+  <div class="pipe-step">
+    <span class="pipe-icon"><svg viewBox="0 0 56 56" aria-hidden="true"><path d="M6 48h44"/><path d="M12 48V32M22 48V20M32 48V12M42 48V26"/></svg></span>
+    <div class="pipe-text"><h3 class="pipe-title">Count</h3><p class="pipe-detail">largest seen at once</p></div>
+  </div>
+  <div class="pipe-step pipe-step-act">
+    <span class="pipe-icon"><svg viewBox="0 0 56 56" aria-hidden="true"><path d="M8 10h40"/><path d="M12 10v6M44 10v6"/><path d="M12 16l-4 28 30-6 4-22z"/><circle cx="12" cy="10" r="2"/></svg></span>
+    <div class="pipe-text"><h3 class="pipe-title">Hatch</h3><p class="pipe-detail">shuts on squirrels</p></div>
+  </div>
+</div>
+
+    </div>
   </section>
 
-  <section id="view-ai" class="wrap view" hidden>
-    <div class="view-head">
-      <p class="eyebrow">The machine · edge compute</p>
-      <h1>Explore the AI</h1>
-      <p>Detection, counting and the latch all run on the board. The numbers on this page were measured by the team; the tray below is a simulation of the loop, not live video.</p>
+  <section id="ai" class="wrap chapter">
+    <p class="label">The AI</p>
+
+    <div class="block reveal">
+      <div class="stage flip">
+        <video src="clips/feeder-ai.mp4" autoplay muted loop playsinline aria-label="Feeder camera footage with a box labelled Red squirrel following a squirrel up a pole"></video>
+        <div class="stage-in">
+          <h2>Why it runs on edge</h2>
+          <p class="line">The edge compute algorithm we built, running on the Arduino UNO Q.</p>
+        </div>
+      </div>
+      <div class="cols four">
+        <div class="col reveal"><h3>Offline</h3><p>No network needed.</p></div>
+        <div class="col reveal"><h3>Private</h3><p>No photos leave the device.</p></div>
+        <div class="col reveal"><h3>Cheap</h3><p>One board runs it all.</p></div>
+        <div class="col reveal"><h3>Fast</h3><p>0.5 s per photo.</p></div>
+      </div>
+      <p class="line" style="max-width:none;color:var(--fg);font-size:26px">It can run in the middle of nowhere: no data connection, no mains power, no privacy concerns.</p>
     </div>
-    <div id="fc-ai"></div>
+
+    <div class="block reveal">
+      <div class="stage">
+        <video src="clips/squirrel.mp4" autoplay muted loop playsinline aria-label="3D animation of the camera spotting a squirrel at the feeder"></video>
+        <div class="stage-in">
+          <p class="kicker">The model</p>
+          <h2>Trained on our own feeder footage.</h2>
+          <div class="stage-nums">
+            <div><b>94%</b><span>of named birds named right</span></div>
+            <div><b>89%</b><span>of birds found</span></div>
+            <div><b>13</b><span>classes: 12 birds and the red squirrel</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
   </section>
 
-  <section id="view-implications" hidden>
-    <div class="sim-banner"><div class="wrap">Illustration with simulated data. One prototype feeder exists today; the network and its counts on this page are made up to show what the data could look like.</div></div>
-    <div class="wrap view">
-      <div class="view-head">
-        <p class="eyebrow">The meaning · what the data is for</p>
-        <h1>Explore the implications</h1>
-        <p>Bird counts are one of the ways Europe measures ecosystem health. Every feeder here counts by the same rule, so their counts can be combined.</p>
+  <section id="implications" class="wrap chapter">
+    <p class="label">Implications</p>
+
+    <div class="block reveal">
+      <div class="stage">
+        <video src="clips/forest.mp4" autoplay muted loop playsinline aria-label="3D animation of a snowy forest with a feeder unit on every trunk"></video>
+        <div class="stage-in">
+          <h2>Separate sensors, linked into one network.</h2>
+          <p class="line">Each feeder sends a small table of counts. Put together, the tables show which birds winter where, day by day.</p>
+        </div>
       </div>
-      <div id="fc-map"></div>
     </div>
+
+    <div class="split reveal">
+      <div class="block">
+        <p class="kicker" style="font-size:clamp(22px,2.4vw,30px)">What the data is for</p>
+        <ul class="stage-list">
+          <li><b>Map</b>See where each species spends the winter, feeder by feeder, and how that shifts from one winter to the next.</li>
+          <li><b>Compare</b>Every sensor counts by the rule Finland's national winter count uses, so numbers from different places and years can be compared.</li>
+          <li><b>Act</b>A drop in a species shows up within weeks, while there is still time to respond.</li>
+        </ul>
+      </div>
+      <div><img class="netmap" src="clips/network.png" alt="Map of Espoo with yellow sensor dots of different sizes joined by thin lines into one network">
+        <p class="credit">Illustration: sensors across Espoo. Bigger dot: more bird visits. Map data © OpenStreetMap contributors.</p></div>
+    </div>
+
   </section>
 </main>
 
-<footer><div class="wrap">Feeder Census · Team BirdAI · Junction 2026. Measured figures are from the project’s own tests on 14 November 2026. Map data is simulated.</div></footer>
+<footer><div class="wrap">BirdAI · Team RBC · Junction 2026</div></footer>
 
-<script src="data.js"></script>
-<script src="charts.js"></script>
-<script src="ai.js"></script>
-<script src="map.js"></script>
 <script>
 (function () {
-  // spruce treeline: the same forest every time
-  (function () {
-    const svg = document.getElementById('treeline');
-    let s = 7, out = '';
-    const r = () => (s = (s * 16807) % 2147483647) / 2147483647;
-    for (let layer = 0; layer < 2; layer++) {
-      let x = -10;
-      while (x < 1210) {
-        const h = (layer ? 34 : 22) + r() * (layer ? 46 : 30), w = h * (0.32 + r() * 0.1);
-        out += '<path d="M' + x.toFixed(1) + ' 84L' + (x + w / 2).toFixed(1) + ' ' + (84 - h).toFixed(1) + 'L' + (x + w).toFixed(1) + ' 84z" fill="' + (layer ? '#16291C' : '#7E9A7C') + '"/>';
-        x += w * (0.55 + r() * 0.5);
-      }
-    }
-    svg.innerHTML = out;
-  })();
-
-  const views = { home: 'view-home', ai: 'view-ai', implications: 'view-implications' };
-  const mounted = {};
-  function show() {
-    const name = views[location.hash.slice(1)] ? location.hash.slice(1) : 'home';
-    Object.entries(views).forEach(([k, id]) => { document.getElementById(id).hidden = k !== name; });
-    document.querySelectorAll('[data-nav]').forEach((a) => {
-      if (a.dataset.nav === name) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current');
-    });
-    if (name === 'ai' && !mounted.ai && window.FC && FC.mountAI) { mounted.ai = true; FC.mountAI(document.getElementById('fc-ai')); }
-    if (name === 'implications' && !mounted.map && window.FC && FC.mountMap) { mounted.map = true; FC.mountMap(document.getElementById('fc-map')); }
-    window.scrollTo(0, 0);
+  if ('IntersectionObserver' in window && !matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    document.documentElement.classList.add('js');
+    const io = new IntersectionObserver((es) => es.forEach((e) => { if (e.isIntersecting) { e.target.classList.add('is-in'); io.unobserve(e.target); } }), { rootMargin: '0px 0px -6% 0px' });
+    document.querySelectorAll('.reveal').forEach((el) => io.observe(el));
+    setTimeout(() => document.querySelectorAll('.reveal').forEach((el) => el.classList.add('is-in')), 4000);
   }
-  window.addEventListener('hashchange', show);
-  show();
+  const go = (name) => { const t = document.getElementById(name); if (t) t.scrollIntoView(); };
+  document.querySelectorAll('[data-go]').forEach((a) => a.addEventListener('click', (e) => { e.preventDefault(); go(a.dataset.go); try { history.replaceState(null, '', '#' + a.dataset.go); } catch (err) {} }));
+  if (location.hash.length > 1) go(location.hash.slice(1));
 })();
 </script>
+
 </body>
 </html>
