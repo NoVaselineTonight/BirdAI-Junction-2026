@@ -77,7 +77,7 @@ footer{color:var(--muted);font-size:13.5px;border-top:1px solid var(--line);padd
   <ol class="steps">
     <li><div><b>Take one photo.</b><span>One frame from the camera (in the demo, from the recording).</span></div></li>
     <li><div><b>Shrink it to 960 pixels and run the detector.</b><span>About 1.1 s on the board in the benchmark; about 2.0 s per photo at the stand, where the board also runs the camera and a full-screen browser. Out come boxes, each with a species name and a confidence.</span></div></li>
-    <li><div><b>Keep the sure ones.</b><span>A name with confidence under the cut-off, 0.25, is shown as "unidentified" and is not counted. 0.25 is also the detector's own floor.</span></div></li>
+    <li><div><b>Keep the sure ones.</b><span>The detector itself drops every box under 0.25 (its floor). The cut-off is that same 0.25, so every box it reports can be counted.</span></div></li>
     <li><div><b>Confirm and count.</b><span>A bird counts when it is there in two photos in a row. The largest number seen at once becomes the count for that hour, day and half-month.</span></div></li>
     <li><div><b>Save and show.</b><span>Counts, visits and an evidence photo go to the database; the page shows the photo with its boxes until the next one replaces it.</span></div></li>
     <li><div><b>Check for a squirrel.</b><span>Photos in a row with a red squirrel close the latch (two by default, three at the stand, where the squirrel must also have at least 0.8 confidence); five clear photos open it again.</span></div></li>
@@ -88,11 +88,11 @@ footer{color:var(--muted);font-size:13.5px;border-top:1px solid var(--line);padd
   <h2>How the model was made</h2>
   <ol class="steps">
     <li><div><b>Collect footage.</b><span>38 days of one feeder camera's stream (October and November 2026, plus two days from earlier winters), two videos of forest feeders, and squirrel material: 400 Creative Commons photos, frames of one documentary, and cut-outs pasted into feeder frames.</span></div></li>
-    <li><div><b>Pick the frames with birds.</b><span>Long streams are mostly an empty feeder. A miner keeps the moments where something moves. With the squirrel material and the blurred copies, the 38-day training set has 103,798 frames.</span></div></li>
+    <li><div><b>Pick the frames with birds.</b><span>Long streams are mostly an empty feeder. A miner keeps the moments where something moves. The 38-day training set has 103,798 frames.</span></div></li>
     <li><div><b>Let big models label them.</b><span>A large detector and two detectors tuned to this camera draw the boxes. Two bird classifiers (BioCLIP 2 and an iNaturalist classifier) give the names.</span></div></li>
-    <li><div><b>Check the labels with a second AI model.</b><span>Boxes from the old labels, three earlier students and a camera-tuned teacher are pooled into one candidate per bird. An open vision-language model (Qwen3-VL-8B-Instruct) looks at a crop of each candidate. Where all five sources already agreed, it named the same species in 96.5 % of cases, too weak to judge alone, so a bird is kept only when two votes agree on its species. Unclear cases become ignore zones, blurred out of training frames. "No animal" is dropped, except when the old label, the teacher and at least two earlier students all saw a bird there; then it becomes an ignore zone. No person checked the result. The 13 days added last were checked the same way (53,803 candidates judged, 42,105 checked frames added). The shipped model trained on 102,142 labelled boxes; great tit 45,223 of them, willow tit 39.</span></div></li>
-    <li><div><b>Train the small model on those labels.</b><span>The 960 px student that had been trained on the 25 checked days trained 8 more epochs on all 38 days. The checked labels have no "unidentified" examples; a bird it names under the cut-off is still shown as "unidentified" on the page. One training frame in four also has a blurred, noisy copy so a worse camera does not throw it off.</span></div></li>
-    <li><div><b>Measure on a day it never saw, time it on the board, choose by a fixed rule.</b><span>The cut-off (0.25, the lowest value of the grid) is picked on 7,599 frames of 13 October days, never on the test day. The model later trained on other frames of those same days, so the cut-off is picked on days it has seen. A model ships only if it runs in under 1.5 s on the board.</span></div></li>
+    <li><div><b>Check the labels with a second AI model.</b><span>Boxes from the old labels, three earlier students and a camera-tuned teacher are pooled into one candidate per bird. An open vision-language model (Qwen3-VL-8B-Instruct) looks at a crop of each candidate. Where all five sources already agreed, it named the same species in 96.5 % of cases, too weak to judge alone, so a bird is kept only when two votes agree on its species. Unclear cases become ignore zones, blurred out of training frames. "No animal" is dropped, except when the old label, the teacher and at least two earlier students all saw a bird there; then it becomes an ignore zone. No person checked the result. The 13 days added last were checked the same way (53,803 candidates judged, 42,105 checked frames added). The training boxes per species in the model's card (<code>models/student/feeder.json</code>) add up to 102,142; great tit 45,223 of them, willow tit 39.</span></div></li>
+    <li><div><b>Train the small model on those labels.</b><span>The 960 px student that had been trained on the 25 checked days trained 8 more epochs on all 38 days. The checked labels have no "unidentified" examples. One training frame in four also has a blurred, noisy copy so a worse camera does not throw it off.</span></div></li>
+    <li><div><b>Measure on a day it never saw, time it on the board, choose by a fixed rule.</b><span>The cut-off (0.25, the lowest value of the grid) is picked on 7,599 frames from 13 days of October 2026, never on the test day. The model later trained on other frames of those same days, so the cut-off is picked on days it has seen. A model ships only if it runs in under 1.5 s on the board.</span></div></li>
   </ol>
   <p class="muted small">Species the model can name: great tit, blue tit, bullfinch, jay, magpie, tree sparrow, nuthatch, house sparrow, great spotted woodpecker, crested tit, coal tit, willow tit, and red squirrel.</p>
 </section>
@@ -107,7 +107,7 @@ footer{color:var(--muted);font-size:13.5px;border-top:1px solid var(--line);padd
     <tr><td>Our student, nano 640 px, 38 days</td><td>0.25</td><td>0.919</td><td>0.855</td></tr>
     <tr class="ship"><td>Our student, nano 960 px, 38 days ("BC 960")</td><td>0.25</td><td>0.954</td><td>0.909</td></tr>
   </table></div>
-  <p class="muted small">All numbers from the evaluation file written by the repository's evaluation tool (<code>models/eval.json</code>). Birds found is pooled over all species: per-species recall times the birds of that species, summed, out of 1,856. For a fair comparison on the same checked labels: at cut-off 0.50, the earlier 640 px student trained on the old labels counted 0.751 of frames exactly right (ad-hoc scorer), and the 640 px student trained on 25 checked days that shipped before this one counted 0.831.</p>
+  <p class="muted small">All numbers from the evaluation file written by the repository's evaluation tool (<code>models/eval.json</code>). Birds found is pooled over all species: per-species recall times the birds of that species, summed, out of 1,856. The test labels and the training labels come from the same automatic check, so part of any gain may be agreement with that check. An earlier 640 px student trained on the old labels counted 0.751 of the frames exactly right on the same checked labels, but that number is from an ad-hoc scorer at cut-off 0.50 and cannot be set directly against the 0.909 above. The 640 px student trained on 25 checked days that shipped before this one counted 0.831, at cut-off 0.50.</p>
 
   <h3>What happens to 1,856 birds</h3>
   <div class="bar" role="img" aria-label="Of 1,856 checked birds: 95 percent found under the right name, 5 percent missed or wrongly named">
@@ -151,21 +151,21 @@ footer{color:var(--muted);font-size:13.5px;border-top:1px solid var(--line);padd
 
 <section>
   <h2>What we tried, and what helped</h2>
-  <p>Five more days of the same camera that no model trained on (3, 9, 14, 19 and 25 October 2026, 2,808 frames, same automatic labels) served as exam days. They were scored with an ad-hoc scorer that picks its cut-off on the scored frames themselves (0.30 to 0.90), so the numbers run a little high and are only good for comparing models with each other. They were used to choose what to train next, so they are not an untouched test either.</p>
+  <p>Five more days of the same camera that no model trained on (3, 9, 14, 19 and 25 October 2026, 2,808 frames, same automatic labels) served as exam days. They were scored with an ad-hoc scorer that picks its cut-off on the scored frames themselves (0.30 to 0.90), so the numbers run a little high and are only good for comparing models with each other. They were used to compare models and to choose what to train next, so they are not an untouched test either.</p>
   <div class="scroll"><table>
     <tr><th>Student</th><th>Exam days</th><th>12 Nov, ad-hoc scorer</th></tr>
     <tr><td>nano 960 px, 25 days</td><td>0.915</td><td>0.854</td></tr>
     <tr class="ship"><td>nano 960 px, 38 days, 8 epochs</td><td>0.922</td><td>0.887</td></tr>
     <tr><td>same, second run with another random seed</td><td>0.923</td><td>0.875</td></tr>
     <tr><td>same, 14 epochs</td><td>0.920</td><td>0.881</td></tr>
-    <tr><td>control: nano 960 px, 25 days, 8 more epochs</td><td>0.916</td><td>0.853</td></tr>
+    <tr><td>control: nano 960 px, 25 days, 8 more epochs (more training, no more days)</td><td>0.916</td><td>0.853</td></tr>
     <tr><td>nano 640 px, 38 days</td><td>0.914</td><td>0.839</td></tr>
     <tr><td>small 640 px, 25 days, 30 epochs</td><td>0.922</td><td>0.879</td></tr>
     <tr><td>small 640 px, then 8 epochs on 38 days</td><td>0.921</td><td>0.861</td></tr>
     <tr><td>nano 960 px, 38 days + 2,948 frames of other feeders</td><td>0.917</td><td>0.855</td></tr>
   </table></div>
   <p class="muted small">Frames counted exactly right. On 12 November the ad-hoc scorer gives lower numbers than the official evaluation (0.887 against 0.909 for the shipped model); its grid starts at 0.30, while the official cut-off is 0.25. The small 640 px student scored 0.887 officially, at cut-off 0.30.</p>
-  <p class="note">What helped: reading 960 px instead of 640 px, and 13 more checked days of the same camera (about +3 points on 12 November, seen again in a second training run; under one point on the exam days). What did not help: an automatic search over training settings (16 variants per generation, 18 generations; 0.926 on the days it was tuned on, 0.906 on the exam days); a bigger model (same accuracy, 1,479 ms on the board against 1,111 ms); longer training; and 2,948 checked frames from other feeders' Creative Commons streams (Finland, Russia, the UK, Germany, Poland). An earlier test with 19 more days of uncleaned labels changed nothing; with checked labels, more days did help. Only two 2026 stream days of this camera remain unused.</p>
+  <p class="note">What helped: reading 960 px instead of 640 px, and 13 more checked days of the same camera (about +3 points on 12 November, seen again in a second training run; under one point on the exam days). What did not help: an automatic search over training settings (16 variants per generation, 18 generations; 0.926 on the days it was tuned on, 0.906 on the exam days, below the plain model); a bigger model (same accuracy, 1,479 ms on the board against 1,111 ms); longer training; and 2,948 checked frames from other feeders' Creative Commons streams (Finland, Russia, the UK, Germany, Poland). An earlier test with 19 more days of uncleaned labels changed nothing; with checked labels, more days did help. Only two 2026 stream days of this camera remain unused.</p>
 </section>
 
 <section>
@@ -173,7 +173,7 @@ footer{color:var(--muted);font-size:13.5px;border-top:1px solid var(--line);padd
   <ul>
     <li>The test day is the same feeder and camera as the training footage. Nothing here says how the model does at another feeder, with another camera, or in another season.</li>
     <li>The truth labels are machine-made and checked by a second AI model. No person checked them; the AI assistant that ran the work looked at sample sheets.</li>
-    <li>The test labels and the training labels come from the same automatic check, so the test rewards agreeing with that check. The fair comparison is the earlier student scored on the same checked labels.</li>
+    <li>The test labels and the training labels come from the same automatic check, so the test rewards agreeing with that check. An earlier student's number on the same labels was measured another way (ad-hoc scorer, cut-off 0.50), so it is not a direct comparison.</li>
     <li>392 of the 2,256 candidates on the test day (17 %) are ignore zones: cut-off birds, blurred flight, sources that disagree. They are not scored, so the test is easier than counting every bird.</li>
     <li>We do not claim it names species better than a skilled volunteer.</li>
     <li>Only 12 November 2026 and the five exam days are days the shipped model never trained on. Its cut-off was picked on frames of days it did train on (other frames of them).</li>
