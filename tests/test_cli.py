@@ -503,3 +503,59 @@ def test_camera_source_reaches_the_settings_and_the_pipeline(monkeypatch, tmp_pa
 
 def test_videos_source_is_recorded(monkeypatch, tmp_path, make_video):
     assert run_cli(monkeypatch, tmp_path, make_video).source == "recorded"
+
+
+# --- --host: the page answers only on this machine unless asked ---
+
+
+def run_served(monkeypatch, tmp_path, make_video, *extra):
+    """Runs main() through _serve with uvicorn faked out; returns the uvicorn.Config keyword arguments."""
+    seen = {}
+
+    class StubPipeline:
+        error = None
+
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def run(self, stop):
+            pass
+
+    class FakeServer:
+        def __init__(self, config):
+            pass
+
+        def run(self):
+            pass
+
+    class FakeUvicorn:
+        Server = FakeServer
+
+        @staticmethod
+        def Config(app, **kwargs):
+            seen.update(kwargs)
+
+    monkeypatch.setattr(cli, "Pipeline", StubPipeline)
+    monkeypatch.setattr(cli, "create_app", lambda *a, **k: None)
+    monkeypatch.setattr(cli, "uvicorn", FakeUvicorn)
+    script = tmp_path / "script.json"
+    script.write_text('{"species": ["great_tit"], "frames": [[]]}')
+    argv = ["--videos", str(make_video()), "--detector", "scripted", "--script", str(script),
+            "--db", str(tmp_path / "data" / "c.db"), "--port", "0", *extra]
+    assert cli.main(argv) == 0
+    return seen
+
+
+def test_the_page_listens_only_on_this_machine_by_default(monkeypatch, tmp_path, make_video, capsys):
+    assert run_served(monkeypatch, tmp_path, make_video)["host"] == "127.0.0.1"
+    assert "Feeder Census: http://localhost:0" in capsys.readouterr().out
+
+
+def test_host_flag_is_passed_to_the_server(monkeypatch, tmp_path, make_video, capsys):
+    assert run_served(monkeypatch, tmp_path, make_video, "--host", "0.0.0.0")["host"] == "0.0.0.0"
+    assert "Feeder Census: http://localhost:0" in capsys.readouterr().out  # still a URL that works here
+
+
+def test_a_specific_host_address_is_the_url_printed(monkeypatch, tmp_path, make_video, capsys):
+    assert run_served(monkeypatch, tmp_path, make_video, "--host", "192.168.1.20")["host"] == "192.168.1.20"
+    assert "Feeder Census: http://192.168.1.20:0" in capsys.readouterr().out

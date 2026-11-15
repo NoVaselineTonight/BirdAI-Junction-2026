@@ -48,6 +48,10 @@ def _parser() -> argparse.ArgumentParser:
                    help="auto: the kind named by models/model_card.json, else two_stage (default: %(default)s)")
     p.add_argument("--db", type=Path, default=Path("data/census.db"))
     p.add_argument("--port", type=int, default=Settings.port)
+    p.add_argument("--host", default="127.0.0.1",
+                   help="the address the page listens on: 127.0.0.1 means only this machine can open it; 0.0.0.0 "
+                        "lets other machines on the network open the page, including the camera picture "
+                        "(default: %(default)s)")
     p.add_argument("--fast", action="store_true", help="play unpaced, to fill the table before a demo")
     p.add_argument("--no-web", action="store_true", help="print a line per detection instead of serving the page")
     p.add_argument("--detect-every-s", type=_positive, default=None,
@@ -132,7 +136,7 @@ def _print_line(state: LiveState) -> None:
           flush=True)
 
 
-def _serve(app, port: int, stop: threading.Event) -> None:
+def _serve(app, port: int, stop: threading.Event, host: str = "127.0.0.1") -> None:
     """Serve until Ctrl-C or SIGTERM. Open video streams end first, or the shutdown would wait on them."""
 
     class Server(uvicorn.Server):
@@ -141,8 +145,9 @@ def _serve(app, port: int, stop: threading.Event) -> None:
             app.state.stopping.set()
             super().handle_exit(sig, frame)
 
-    print(f"Feeder Census: http://localhost:{port}", flush=True)
-    config = uvicorn.Config(app, host="0.0.0.0", port=port, access_log=False, timeout_graceful_shutdown=5)
+    shown = "localhost" if host in ("127.0.0.1", "0.0.0.0", "localhost", "::", "::1") else host  # works on this machine
+    print(f"Feeder Census: http://{shown}:{port}", flush=True)
+    config = uvicorn.Config(app, host=host, port=port, access_log=False, timeout_graceful_shutdown=5)
     Server(config).run()
 
 
@@ -248,7 +253,7 @@ def main(argv: list[str] | None = None) -> int:
             while thread.is_alive():
                 thread.join(0.2)
         else:
-            _serve(create_app(pipeline, store, species, settings, model_card=card), settings.port, stop)
+            _serve(create_app(pipeline, store, species, settings, model_card=card), settings.port, stop, args.host)
     except KeyboardInterrupt:
         pass
     finally:  # also when uvicorn exits early, e.g. the port is taken
