@@ -57,8 +57,9 @@ def _parser() -> argparse.ArgumentParser:
     p.add_argument("--detect-every-s", type=_positive, default=None,
                    help=f"footage seconds between detections (default: {Settings.detect_every_s:g})")
     p.add_argument("--photo-every-s", type=_positive, default=None,
-                   help="photo mode: analyse one photo every SECONDS of footage and show only those photos, each "
-                        "held until the next, as the board's camera would; use instead of --detect-every-s")
+                   help="photo mode: analyse one photo every SECONDS of footage, as the board's camera would; the "
+                        "page shows the live picture next to the analysed photo, held until the next one; use "
+                        "instead of --detect-every-s")
     p.add_argument("--roi", type=_roi, default=None, help="x,y,w,h as fractions of the frame")
     p.add_argument("--script", type=Path, default=None, help="script file for --detector scripted")
     p.add_argument("--models-dir", type=Path, default=Path("models"))

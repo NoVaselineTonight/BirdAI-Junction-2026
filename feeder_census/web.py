@@ -9,7 +9,7 @@ from datetime import date
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import FileResponse, Response, StreamingResponse
+from fastapi.responses import FileResponse, HTMLResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
 from feeder_census.config import Settings
@@ -49,8 +49,13 @@ def create_app(
     pest_names = {p.key: {"english": p.english, "finnish": p.finnish} for p in pests}
 
     @app.get("/", include_in_schema=False)
-    def page() -> FileResponse:
-        return FileResponse(STATIC / "index.html", headers={"Cache-Control": "no-cache"})
+    def page() -> Response:
+        if settings.source != "camera":
+            return FileResponse(STATIC / "index.html", headers={"Cache-Control": "no-cache"})
+        # a camera page must never say "recorded", not even before the script's first poll answers
+        html = (STATIC / "index.html").read_text(encoding="utf-8").replace(
+            "Recorded feeder footage, standing in for the camera.", "Live picture from the camera.")
+        return HTMLResponse(html, headers={"Cache-Control": "no-cache"})
 
     @app.get("/api/live")
     def live() -> dict:

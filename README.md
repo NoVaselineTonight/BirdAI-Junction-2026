@@ -22,7 +22,7 @@ uv run python -m feeder_census --camera /dev/video4 --camera-rotate 180 --photo-
 
 `--camera` and `--videos` are alternatives: give exactly one. `--camera` takes a device path or a camera number such as `0`. `--camera-rotate 180` turns the picture upside down, for a camera mounted that way. `--fast` only works with video files. If the camera cannot be opened, the program stops and names the device. With `--photo-every-s` the page shows the two pictures, live and analysed. The demo clock stays the same: 1 second of watching is 1 minute on the clock.
 
-With a live camera the page shows whoever is in front of it. The program does not record the live picture, but it keeps evidence photos under `data/evidence`: one each time a day's count for a species rises. Those photos can show people too.
+With a live camera the page shows whoever is in front of it. The program does not record the live picture, but it keeps evidence photos under `data/evidence`: one photo per species per day (`data/evidence/<date>/<species>.jpg`), replaced when that day's count rises. The page shows them to whoever opens it, and they can show people too.
 
 `--footage-note TEXT` sets the sentence the page shows about the footage (the default says "Recorded feeder footage"), for example to say the reel is an edited cut: `board/run.sh --footage-note "Edited reel: 12 November 2026, with a squirrel visit from 22 October 2026 in the middle."`. On the board only letters, digits, spaces and `. , : -` are allowed, and it combines with `--latch`, `--fast`, `--photo-every-s` and `--fresh`.
 

@@ -15,7 +15,7 @@ class Settings:
     sim_start: date = date(2026, 11, 1)
     evidence_dir: Path = Path("data/evidence")
     source: str = "recorded"  # "recorded" (video files) | "camera" (a live USB webcam)
-    photo_mode: bool = False  # the feed shows only the analysed photos, each held until the next one
+    photo_mode: bool = False  # the analysed photos, each held until the next one, shown next to the live picture
     preview_fps: float = 5.0
     preview_width: int = 960
     port: int = 8088

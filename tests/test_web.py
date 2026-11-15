@@ -353,3 +353,14 @@ def test_page_has_two_feeds_and_the_script_words_them(client):
     assert '"/live.mjpg"' in js and "Live picture from the camera." in js
     assert "Recorded feeder footage, playing in real time, standing in for the camera." in js
     assert "s, with a box around each bird the model found." in js
+
+
+def test_page_never_says_recorded_footage_when_the_source_is_a_camera(tmp_path, make_video, client):
+    recorded = client.get("/")
+    assert "Recorded feeder footage, standing in for the camera." in recorded.text
+    assert recorded.headers["cache-control"] == "no-cache"
+    app, _, _ = scripted_app(tmp_path / "cam", make_video, ["great_tit"], [[GT]], 1, source="camera")
+    with TestClient(app) as c:
+        r = c.get("/")
+    assert "Recorded feeder footage" not in r.text and "Live picture from the camera." in r.text
+    assert r.headers["cache-control"] == "no-cache" and r.headers["content-type"].startswith("text/html")
