@@ -1,0 +1,211 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<style>body{margin:0}img{max-width:100%}[hidden]{display:none!important}</style>
+</head>
+<body>
+<title>Feeder Census Demo</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400..700;1,9..144,400..600&family=Public+Sans:wght@400;500;600&display=swap">
+<style>
+/* Layout: a winter field guide. Lichen-pale paper, spruce-green ink, rowan-red for alarms, lake-blue for the machine.
+   One light look on purpose. A spruce treeline closes the home screen and the page. */
+:root {
+  color-scheme: light;
+  --bg: #ECEFE3;        /* lichen */
+  --surface: #F8F9F1;   /* birch bark */
+  --surface2: #DDE5D0;  /* moss shade */
+  --line: #C3CDB4;
+  --fg: #16291C;        /* spruce at dusk */
+  --muted: #4A5D4E; --faint: #68796A;
+  --sci: #2E6B3A;       /* moss green: the science view */
+  --sci-ink: #F8F9F1;
+  --tech: #1E5F74;      /* lake blue: the machine view */
+  --alert: #B23A2B;     /* rowan berry */
+  --bark: #6B5238; --sun: #C99700;
+  --display: "Fraunces", Georgia, "Times New Roman", serif;
+  --body: "Public Sans", "Segoe UI", system-ui, sans-serif;
+  --radius: 6px;
+}
+html, body { background: var(--bg); color: var(--fg); }
+body { font-family: var(--body); font-size: 16px; line-height: 1.55; }
+* { box-sizing: border-box; }
+h1, h2, h3 { font-family: var(--display); font-weight: 600; line-height: 1.1; margin: 0; text-wrap: balance; letter-spacing: -0.01em; }
+p { margin: 0; }
+a { color: inherit; }
+button { font: inherit; color: inherit; }
+:focus-visible { outline: 2px solid var(--alert); outline-offset: 2px; }
+
+.wrap { max-width: 1240px; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+
+.top { background: var(--fg); color: var(--surface); }
+.top .wrap { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; padding-block: 12px; }
+.brand { font-family: var(--display); font-weight: 600; font-size: 20px; text-decoration: none; display: flex; align-items: center; gap: 10px; }
+.brand svg { width: 26px; height: 26px; flex: none; }
+.nav { display: flex; gap: 4px; margin-left: auto; flex-wrap: wrap; }
+.nav a { text-decoration: none; padding: 8px 14px; border-radius: var(--radius); color: #C9D6C6; font-weight: 500; font-size: 14px; border-bottom: 2px solid transparent; }
+.nav a:hover { color: #FFFFFF; }
+.nav a[aria-current="page"] { color: #FFFFFF; border-bottom-color: #E0B93A; border-radius: 0; }
+
+.sim-banner { background: var(--surface2); border-bottom: 1px solid var(--line); color: var(--muted); font-size: 13px; }
+.sim-banner .wrap { padding-block: 8px; }
+
+/* home */
+.home { padding-block: 44px 0; display: flex; flex-direction: column; gap: 36px; }
+.hero { display: grid; grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr); gap: 36px; align-items: center; }
+.hero h1 { font-size: clamp(36px, 5.2vw, 64px); font-weight: 500; }
+.hero h1 em { font-style: italic; color: var(--sci); }
+.hero p.lead { font-size: 18px; color: var(--muted); max-width: 52ch; margin-top: 18px; }
+.hero figure { margin: 0; }
+.hero video { width: 100%; max-width: 100%; aspect-ratio: 16 / 9; border-radius: var(--radius); background: var(--fg); object-fit: cover; display: block; box-shadow: 10px 10px 0 var(--surface2); }
+.eyebrow { font-family: var(--display); font-style: italic; font-size: 16px; color: var(--bark); margin-bottom: 10px; }
+.doors { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px; }
+.door { display: grid; grid-template-columns: 72px minmax(0, 1fr); gap: 20px; padding: 26px; border-radius: var(--radius); background: var(--surface); border: 1px solid var(--line); border-left: 6px solid var(--sci); text-decoration: none; transition: background .15s; }
+.door.tech { border-left-color: var(--tech); }
+.door:hover { background: #FFFFFF; }
+.door svg { width: 72px; height: 72px; }
+.door-body { display: flex; flex-direction: column; gap: 10px; }
+.door h2 { font-size: 28px; }
+.door p { color: var(--muted); }
+.door .go { margin-top: 6px; font-weight: 600; color: var(--sci); }
+.door.tech .go { color: var(--tech); }
+.caption { font-size: 13px; color: var(--faint); margin-top: 16px; }
+
+.treeline { display: block; width: 100%; height: 84px; margin-top: 8px; }
+
+.view { padding-block: 30px 56px; }
+.view-head { display: flex; flex-direction: column; gap: 10px; margin-bottom: 26px; padding-bottom: 20px; border-bottom: 1px solid var(--line); }
+.view-head h1 { font-size: clamp(30px, 4.2vw, 48px); font-weight: 500; }
+.view-head p { color: var(--muted); max-width: 70ch; font-size: 17px; }
+.view-head .eyebrow { margin-bottom: 0; }
+
+footer { background: var(--fg); color: #C9D6C6; }
+footer .wrap { padding-block: 20px 28px; font-size: 13px; }
+
+@media (max-width: 820px) {
+  .hero, .doors { grid-template-columns: minmax(0, 1fr); }
+  .door { grid-template-columns: 56px minmax(0, 1fr); }
+  .door svg { width: 56px; height: 56px; }
+}
+@media (prefers-reduced-motion: reduce) { .door { transition: none; } }
+</style>
+<link rel="stylesheet" href="ai.css">
+<link rel="stylesheet" href="map.css">
+<link rel="stylesheet" href="charts.css">
+
+<header class="top">
+  <div class="wrap">
+    <a class="brand" href="#home">
+      <svg viewBox="0 0 32 32" aria-hidden="true"><ellipse cx="15" cy="18" rx="9" ry="7" fill="#E0B93A"/><circle cx="22" cy="11" r="5.2" fill="#F8F9F1"/><path d="M17.5 9.5a5.2 5.2 0 0 1 9 0z" fill="#16291C" stroke="#F8F9F1" stroke-width=".6"/><circle cx="23.6" cy="10.8" r=".9" fill="#16291C"/><path d="M27 11l4 1-4 1.4z" fill="#C9D6C6"/><path d="M7 16L1 13l3 6z" fill="#7FA3B8"/></svg>
+      Feeder Census
+    </a>
+    <nav class="nav" aria-label="Demo sections">
+      <a href="#ai" data-nav="ai">Explore the AI</a>
+      <a href="#implications" data-nav="implications">Explore the implications</a>
+    </nav>
+  </div>
+</header>
+
+<main>
+  <section id="view-home">
+    <div class="wrap home">
+      <div class="hero">
+        <div>
+          <p class="eyebrow">A winter field guide that writes itself</p>
+          <h1>A bird feeder that <em>counts</em> its own visitors</h1>
+          <p class="lead">A camera and a small model on an Arduino UNO Q name the birds at a winter feeder and count each species by the rule Finland’s national monitoring already uses. Nothing leaves the box except a table of counts.</p>
+        </div>
+        <figure>
+          <video src="clips/hero.mp4" autoplay muted loop playsinline aria-label="3D animation of the Feeder Census feeder on a tree trunk in falling snow, with two birds"></video>
+          <figcaption class="caption">3D animation of our build, not footage from the device.</figcaption>
+        </figure>
+      </div>
+      <div class="doors">
+        <a class="door tech" href="#ai">
+          <svg viewBox="0 0 72 72" aria-hidden="true"><rect x="22" y="6" width="28" height="14" rx="3" fill="#1E5F74"/><circle cx="36" cy="20" r="4" fill="#16291C"/><path d="M36 22L12 64h48z" fill="#1E5F74" opacity=".18"/><path d="M36 22L12 64M36 22l24 42" stroke="#1E5F74" stroke-width="2" fill="none"/><ellipse cx="36" cy="54" rx="9" ry="6.5" fill="#C99700"/><circle cx="42" cy="48" r="4" fill="#16291C"/><rect x="24" y="42" width="26" height="22" fill="none" stroke="#B23A2B" stroke-width="2"/></svg>
+          <div class="door-body">
+            <p class="eyebrow">The machine</p>
+            <h2>Explore the AI</h2>
+            <p>Watch what the board does every five seconds: photograph, detect, filter, confirm, count, and close the latch when a squirrel shows up.</p>
+            <span class="go">Open the edge view →</span>
+          </div>
+        </a>
+        <a class="door sci" href="#implications">
+          <svg viewBox="0 0 72 72" aria-hidden="true"><path d="M30 6l14 4 6 16-4 14 8 14-10 12-16-2-10-14 4-16-2-14z" fill="#DDE5D0" stroke="#2E6B3A" stroke-width="2"/><circle cx="36" cy="18" r="3" fill="#2E6B3A"/><circle cx="30" cy="34" r="4.5" fill="#2E6B3A"/><circle cx="42" cy="44" r="6" fill="#2E6B3A"/><circle cx="28" cy="52" r="3.5" fill="#2E6B3A"/><circle cx="40" cy="29" r="2.5" fill="none" stroke="#2E6B3A" stroke-width="1.5"/></svg>
+          <div class="door-body">
+            <p class="eyebrow">The meaning</p>
+            <h2>Explore the implications</h2>
+            <p>See what a network of these feeders could tell us: a map of stations across Finland and the counts each one would report through a winter.</p>
+            <span class="go">Open the map →</span>
+          </div>
+        </a>
+      </div>
+    </div>
+    <svg class="treeline" id="treeline" viewBox="0 0 1200 84" preserveAspectRatio="none" aria-hidden="true"></svg>
+  </section>
+
+  <section id="view-ai" class="wrap view" hidden>
+    <div class="view-head">
+      <p class="eyebrow">The machine · edge compute</p>
+      <h1>Explore the AI</h1>
+      <p>Detection, counting and the latch all run on the board. The numbers on this page were measured by the team; the tray below is a simulation of the loop, not live video.</p>
+    </div>
+    <div id="fc-ai"></div>
+  </section>
+
+  <section id="view-implications" hidden>
+    <div class="sim-banner"><div class="wrap">Illustration with simulated data. One prototype feeder exists today; the network and its counts on this page are made up to show what the data could look like.</div></div>
+    <div class="wrap view">
+      <div class="view-head">
+        <p class="eyebrow">The meaning · what the data is for</p>
+        <h1>Explore the implications</h1>
+        <p>Bird counts are one of the ways Europe measures ecosystem health. Every feeder here counts by the same rule, so their counts can be combined.</p>
+      </div>
+      <div id="fc-map"></div>
+    </div>
+  </section>
+</main>
+
+<footer><div class="wrap">Feeder Census · Team BirdAI · Junction 2026. Measured figures are from the project’s own tests on 14 November 2026. Map data is simulated.</div></footer>
+
+<script src="data.js"></script>
+<script src="charts.js"></script>
+<script src="ai.js"></script>
+<script src="map.js"></script>
+<script>
+(function () {
+  // spruce treeline: the same forest every time
+  (function () {
+    const svg = document.getElementById('treeline');
+    let s = 7, out = '';
+    const r = () => (s = (s * 16807) % 2147483647) / 2147483647;
+    for (let layer = 0; layer < 2; layer++) {
+      let x = -10;
+      while (x < 1210) {
+        const h = (layer ? 34 : 22) + r() * (layer ? 46 : 30), w = h * (0.32 + r() * 0.1);
+        out += '<path d="M' + x.toFixed(1) + ' 84L' + (x + w / 2).toFixed(1) + ' ' + (84 - h).toFixed(1) + 'L' + (x + w).toFixed(1) + ' 84z" fill="' + (layer ? '#16291C' : '#7E9A7C') + '"/>';
+        x += w * (0.55 + r() * 0.5);
+      }
+    }
+    svg.innerHTML = out;
+  })();
+
+  const views = { home: 'view-home', ai: 'view-ai', implications: 'view-implications' };
+  const mounted = {};
+  function show() {
+    const name = views[location.hash.slice(1)] ? location.hash.slice(1) : 'home';
+    Object.entries(views).forEach(([k, id]) => { document.getElementById(id).hidden = k !== name; });
+    document.querySelectorAll('[data-nav]').forEach((a) => {
+      if (a.dataset.nav === name) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current');
+    });
+    if (name === 'ai' && !mounted.ai && window.FC && FC.mountAI) { mounted.ai = true; FC.mountAI(document.getElementById('fc-ai')); }
+    if (name === 'implications' && !mounted.map && window.FC && FC.mountMap) { mounted.map = true; FC.mountMap(document.getElementById('fc-map')); }
+    window.scrollTo(0, 0);
+  }
+  window.addEventListener('hashchange', show);
+  show();
+})();
+</script>
+</body>
+</html>
