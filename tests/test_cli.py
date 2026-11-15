@@ -338,3 +338,82 @@ def test_a_database_made_for_other_species_exits_1_with_one_line(monkeypatch, tm
     assert len(err.splitlines()) == 1
     assert "different species list" in err
     assert "--db" in err and "board/run.sh --fresh" in err
+
+
+# --- the saved latch angles ---
+
+
+def run_router_cli(monkeypatch, tmp_path, make_video, *extra, angles=None, fail_limits=False):
+    """Runs main() with --latch router and a recording board link; returns (exit code, link calls, the latch state)."""
+    from feeder_census import __main__ as module
+    from feeder_census.latch import LatchError
+
+    calls = []
+    given = {}
+
+    class RecordingLink:
+        def __init__(self, socket_path, timeout_s=0.5):
+            self.socket_path = socket_path
+
+        def set(self, closed):
+            calls.append(("set", closed))
+
+        def set_limits(self, open_degrees, closed_degrees):
+            calls.append(("limits", open_degrees, closed_degrees))
+            if fail_limits:
+                raise LatchError("no answer from the board")
+
+    class StubPipeline:
+        error = None
+
+        def __init__(self, camera, detector, store, settings, names, *args, latch=None, **kwargs):
+            given["latch"] = latch
+
+        def run(self, stop):
+            from feeder_census.latch import LatchController
+
+            # the controller sends the open command as it is made, and reports a latch error instead of raising it
+            given["state"] = LatchController(given["latch"], "router", order=[]).state
+
+    monkeypatch.setattr(module, "Pipeline", StubPipeline)
+    monkeypatch.setattr(module, "RouterLatch", RecordingLink)
+    script = tmp_path / "script.json"
+    script.write_text('{"species": ["great_tit"], "frames": [[]]}')
+    data = tmp_path / "data"
+    data.mkdir(exist_ok=True)
+    if angles is not None:
+        (data / "latch_angles.json").write_text(angles)
+    argv = ["--videos", str(make_video()), "--detector", "scripted", "--script", str(script),
+            "--db", str(data / "c.db"), "--no-web", "--latch", "router", "--latch-socket", str(tmp_path / "s"), *extra]
+    return module.main(argv), calls, given.get("state")
+
+
+def test_saved_angles_are_sent_before_the_first_latch_command(monkeypatch, tmp_path, make_video):
+    code, calls, state = run_router_cli(monkeypatch, tmp_path, make_video, angles='{"open": 20, "closed": 150}')
+    assert code == 0 and calls == [("limits", 20, 150), ("set", False)]
+
+
+def test_without_an_angles_file_nothing_extra_is_sent(monkeypatch, tmp_path, make_video):
+    code, calls, state = run_router_cli(monkeypatch, tmp_path, make_video)
+    assert code == 0 and calls == [("set", False)]
+
+
+def test_the_angles_file_can_be_named(monkeypatch, tmp_path, make_video):
+    other = tmp_path / "mine.json"
+    other.write_text('{"open": 5, "closed": 90}')
+    code, calls, state = run_router_cli(monkeypatch, tmp_path, make_video, "--latch-angles", str(other))
+    assert code == 0 and calls == [("limits", 5, 90), ("set", False)]
+
+
+def test_a_failing_set_limits_does_not_stop_the_program(monkeypatch, tmp_path, make_video, capsys):
+    code, calls, state = run_router_cli(
+        monkeypatch, tmp_path, make_video, angles='{"open": 20, "closed": 150}', fail_limits=True
+    )
+    assert code == 0 and calls == [("limits", 20, 150), ("set", False)]  # the open command still went out
+    assert state.error == "no answer from the board" and state.headline == "not_answering"
+
+
+def test_a_broken_angles_file_is_a_warning_not_a_stop(monkeypatch, tmp_path, make_video, capsys):
+    code, calls, state = run_router_cli(monkeypatch, tmp_path, make_video, angles="not json")
+    assert code == 0 and calls == [("set", False)]
+    assert "latch_angles.json" in capsys.readouterr().err

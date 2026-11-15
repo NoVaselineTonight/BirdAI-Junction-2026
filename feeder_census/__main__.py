@@ -12,7 +12,7 @@ import uvicorn
 from feeder_census.camera import SimulatedCamera, _expand
 from feeder_census.config import Settings
 from feeder_census.detectors import KINDS, build_detector
-from feeder_census.latch import MODES as LATCH_MODES, ROUTER_SOCKET, RouterLatch
+from feeder_census.latch import MODES as LATCH_MODES, ROUTER_SOCKET, AnglesLatch, LatchError, RouterLatch, load_angles
 from feeder_census.pipeline import LiveState, Pipeline
 from feeder_census.species import load_pests, load_species
 from feeder_census.store import SpeciesMismatch, Store
@@ -59,6 +59,9 @@ def _parser() -> argparse.ArgumentParser:
     p.add_argument("--latch", choices=LATCH_MODES, default=Settings.latch,
                    help="close the feeder latch when a squirrel or rat is seen: off, sim (no hardware, the page shows "
                         "what it would do) or router (the servo on the UNO Q) (default: %(default)s)")
+    p.add_argument("--latch-angles", type=Path, default=None,
+                   help="saved open and closed angles for --latch router, written by feeder_census.calibrate "
+                        "(default: latch_angles.json next to --db)")
     p.add_argument("--latch-socket", type=Path, default=ROUTER_SOCKET,
                    help="arduino-router socket for --latch router (default: %(default)s)")
     return p
@@ -196,6 +199,15 @@ def main(argv: list[str] | None = None) -> int:
         latch = RouterLatch(args.latch_socket)
         if not args.latch_socket.exists():  # not fatal: the page says the latch is not answering
             print(f"warning: no arduino-router socket at {args.latch_socket}; the latch will not move", file=sys.stderr)
+        angles_file = args.latch_angles if args.latch_angles is not None else args.db.parent / "latch_angles.json"
+        try:
+            angles = load_angles(angles_file)
+        except LatchError as exc:  # not fatal: the board keeps the angles of its sketch
+            print(f"warning: {exc}; the latch uses the angles in the sketch", file=sys.stderr)
+            angles = None
+        if angles is not None:  # the controller's first (open) command sends them first
+            latch = AnglesLatch(latch, angles)
+            print(f"latch angles: open {angles[0]}, closed {angles[1]} (from {angles_file})", flush=True)
     if args.latch != "off":
         print(f"latch: {args.latch}", flush=True)
     pipeline = Pipeline(

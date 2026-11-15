@@ -71,6 +71,18 @@ board/run.sh --latch router
 
 The link between the program and the sketch follows Arduino's documentation for the router bridge; it has not yet been tried on our board.
 
+### Calibrating the angles
+
+To find the open and closed angles that fit the real latch, turn the servo by hand from a browser. Deploy, upload the sketch, then start the page and open it:
+
+```
+board/deploy.sh
+arduino-cli upload -b arduino:zephyr:unoq -p /dev/ttyACM0 board/latch
+board/calibrate.sh          # then open http://localhost:8090 ; stop it with: board/calibrate.sh --stop
+```
+
+The page shows the servo angle in big digits. Move the slider or press -10, -1, +1 or +10 and the servo follows. When the latch is where you want it open, press "Save as OPEN". Do the same for "Save as CLOSED". "Test: open" and "Test: close" run the latch with the saved angles. The angles are kept on the board in `data/latch_angles.json`. The microcontroller forgets them at a restart, so the demo sends them again at its start (`board/run.sh --latch router`). To make them the sketch's own start values, put the two numbers into the sketch. Stop the demo first (`board/run.sh --stop`) if it runs with `--latch router`: both would command the servo. From the board's shell, `python -m feeder_census.latch angle 90` also turns the servo to one angle.
+
 ## Measured speed
 
 Milliseconds per frame on the Arduino UNO Q (4-core Kryo-V2), measured on 14 November 2026 with `python -m feeder_census.bench --detector student --video CLIP.mp4 --frames 30` (`--detector two_stage` for the first row). The clip is **real feeder footage**: 120 s of the held-out day (12 November 2026), 1280x720, prepared with `tools/prepare_video.py`. The budget is 1500 ms per frame.

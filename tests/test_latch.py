@@ -3,7 +3,9 @@ import threading
 
 import pytest
 
-from feeder_census.latch import LatchController, LatchError, RouterLatch, pack_request, unpack
+from feeder_census.latch import (
+    AnglesLatch, LatchController, LatchError, RouterLatch, load_angles, pack_request, save_angles, unpack,
+)
 
 SQ = {"red_squirrel": 1, "brown_rat": 0}
 CLEAR = {"red_squirrel": 0, "brown_rat": 0}
@@ -139,7 +141,7 @@ def test_pack_request_bytes():
     assert pack_request(5, "set_latch", [False]) == bytes.fromhex("940005a97365745f6c6174636891c2")
     assert pack_request(2, "get_latch", []) == bytes.fromhex("940002a9") + b"get_latch" + bytes.fromhex("90")
     with pytest.raises(LatchError):
-        pack_request(200, "set_latch", [True])
+        pack_request(256, "set_latch", [True])
     with pytest.raises(LatchError):
         pack_request(1, "x" * 32, [])
     with pytest.raises(LatchError):
@@ -286,3 +288,148 @@ def test_a_failed_open_after_a_close_is_not_shown_as_open():
     assert c.update(SQ).headline == "closed"
     state = c.update(CLEAR)
     assert (state.closed, state.error, state.headline) == (False, "timed out", "not_answering")
+
+
+# --- angles: packing, the router calls, the saved file ---
+
+
+def test_pack_ints_up_to_255_as_uint8():
+    assert pack_request(1, "a", [127]) == bytes.fromhex("940001a161") + bytes.fromhex("917f")
+    assert pack_request(1, "a", [128]) == bytes.fromhex("940001a161") + bytes.fromhex("91cc80")
+    assert pack_request(1, "a", [180]) == bytes.fromhex("940001a161") + bytes.fromhex("91ccb4")
+    assert pack_request(1, "a", [255]) == bytes.fromhex("940001a161") + bytes.fromhex("91ccff")
+    assert pack_request(1, "a", [0]) == bytes.fromhex("940001a161") + bytes.fromhex("9100")
+    for bad in (256, -1):
+        with pytest.raises(LatchError):
+            pack_request(1, "a", [bad])
+
+
+def test_a_uint8_reply_is_read_back():
+    assert unpack(bytes.fromhex("940101c0ccb4")) == [1, 1, None, 180]
+
+
+def serve_script(path, replies):
+    """A Unix socket that answers len(replies) requests, one per connection; returns (thread, requests seen)."""
+    server = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+    server.bind(str(path))
+    server.listen(1)
+    server.settimeout(5.0)
+    seen: list[bytes] = []
+
+    def run():
+        for result in replies:
+            try:
+                conn, _ = server.accept()
+            except OSError:
+                break
+            with conn:
+                data = conn.recv(256)
+                seen.append(data)
+                conn.sendall(bytes([0x94, 0x01, data[2], 0xC0]) + result)
+        server.close()
+
+    thread = threading.Thread(target=run, daemon=True)
+    thread.start()
+    return thread, seen
+
+
+def test_set_angle_get_angle_and_set_limits_send_the_right_calls(tmp_path):
+    path = tmp_path / "router.sock"
+    thread, seen = serve_script(path, [b"\xcc\xb4", b"\x5a", b"\xc3"])
+    link = RouterLatch(path)
+    assert link.set_angle(180) == 180
+    assert link.get_angle() == 90
+    assert link.set_limits(20, 150) is None
+    thread.join(5)
+    assert [r[3:] for r in seen] == [
+        b"\xa9set_angle\x91\xcc\xb4", b"\xa9get_angle\x90", b"\xaaset_limits\x92\x14\xcc\x96",
+    ]
+
+
+@pytest.mark.parametrize("bad", [-1, 181, 1.5, "90", True, None])
+def test_set_angle_rejects_bad_values_without_sending(tmp_path, bad):
+    link = RouterLatch(tmp_path / "missing.sock")
+    with pytest.raises(ValueError):
+        link.set_angle(bad)  # a LatchError (no socket) would mean it tried to send
+
+
+@pytest.mark.parametrize("pair", [(-1, 100), (10, 181), (1.5, 100), (10, "100"), (True, 100), (10, False)])
+def test_set_limits_rejects_bad_values_without_sending(tmp_path, pair):
+    with pytest.raises(ValueError):
+        RouterLatch(tmp_path / "missing.sock").set_limits(*pair)
+
+
+def test_get_angle_that_is_not_a_number_is_a_latch_error(tmp_path):
+    path = tmp_path / "router.sock"
+    thread, _ = serve_script(path, [b"\xc3"])
+    with pytest.raises(LatchError, match="get_angle"):
+        RouterLatch(path).get_angle()
+    thread.join(5)
+
+
+def test_angles_file_round_trip(tmp_path):
+    path = tmp_path / "data" / "latch_angles.json"
+    assert load_angles(path) is None
+    save_angles(path, 20, 150)
+    assert load_angles(path) == (20, 150)
+    assert path.read_text().strip() == '{"open": 20, "closed": 150}'
+    save_angles(path, 0, 180)
+    assert load_angles(path) == (0, 180)
+
+
+@pytest.mark.parametrize("text", [
+    "not json", "[]", "{}", '{"open": 10}', '{"open": 10, "closed": 181}', '{"open": -1, "closed": 100}',
+    '{"open": 1.5, "closed": 100}', '{"open": "10", "closed": 100}', '{"open": true, "closed": 100}',
+])
+def test_a_broken_angles_file_is_a_latch_error_naming_the_file(tmp_path, text):
+    path = tmp_path / "latch_angles.json"
+    path.write_text(text)
+    with pytest.raises(LatchError, match="latch_angles.json"):
+        load_angles(path)
+
+
+def test_save_angles_rejects_bad_values_and_writes_nothing(tmp_path):
+    path = tmp_path / "latch_angles.json"
+    with pytest.raises(ValueError):
+        save_angles(path, 10, 181)
+    assert not path.exists()
+
+
+class FakeAngleLink(FakeLatch):
+    def __init__(self, fail_limits: list[str | None] | None = None):
+        super().__init__()
+        self.limits: list[tuple[int, int]] = []
+        self.order: list[object] = []
+        self._fail_limits = list(fail_limits or [])
+
+    def set(self, closed):
+        self.order.append(("set", closed))
+        super().set(closed)
+
+    def set_limits(self, open_degrees, closed_degrees):
+        self.order.append(("limits", open_degrees, closed_degrees))
+        self.limits.append((open_degrees, closed_degrees))
+        if self._fail_limits:
+            message = self._fail_limits.pop(0)
+            if message is not None:
+                raise LatchError(message)
+
+
+def test_angles_latch_sends_the_limits_before_the_first_command_only():
+    link = FakeAngleLink()
+    wrapped = AnglesLatch(link, (20, 150))
+    wrapped.set(False)
+    wrapped.set(True)
+    assert link.order == [("limits", 20, 150), ("set", False), ("set", True)]
+
+
+def test_a_failing_set_limits_is_reported_but_the_latch_still_moves_and_is_tried_again():
+    link = FakeAngleLink(fail_limits=["no answer", None])
+    c = LatchController(AnglesLatch(link, (20, 150)), "router", close_frames=1)
+    assert c.state.error == "no answer"  # shown like any other latch error
+    assert link.calls == [False]  # the open command still went out
+    state = c.update(SQ)
+    assert state.closed is True and state.error is None
+    assert link.limits == [(20, 150), (20, 150)]
+    c.update(SQ)
+    assert link.limits == [(20, 150), (20, 150)]  # sent once it worked

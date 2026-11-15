@@ -4,9 +4,13 @@
 through the arduino-router service (MessagePack-RPC on a Unix socket), where board/latch/latch.ino
 moves the servo. Bring the hardware up by hand with:
 
-    python -m feeder_census.latch close|open|cycle [--socket PATH]
+    python -m feeder_census.latch close|open|cycle|angle N [--socket PATH]
+
+The open and closed angles can be set from a browser (feeder_census.calibrate) and are kept in a small
+JSON file, see load_angles / save_angles.
 """
 import argparse
+import json
 import itertools
 import socket
 import struct
@@ -19,6 +23,8 @@ from typing import Protocol
 
 MODES = ("off", "sim", "router")
 ROUTER_SOCKET = Path("/var/run/arduino-router.sock")
+DEFAULT_OPEN, DEFAULT_CLOSED = 10, 100  # the sketch's own start values (board/latch/latch.ino)
+MAX_DEGREES = 180
 
 
 class LatchError(OSError):
@@ -127,13 +133,15 @@ def _pack(value: object) -> bytes:
         return b"\xc3" if value else b"\xc2"
     if isinstance(value, int) and 0 <= value <= 127:
         return bytes([value])
+    if isinstance(value, int) and 128 <= value <= 255:
+        return bytes([0xCC, value])  # uint 8
     if isinstance(value, str):
         raw = value.encode()
         if len(raw) < 32:
             return bytes([0xA0 | len(raw)]) + raw
     if isinstance(value, (list, tuple)) and len(value) < 16:
         return bytes([0x90 | len(value)]) + b"".join(_pack(v) for v in value)
-    raise LatchError(f"cannot send {value!r} to the board (only nil, bool, 0-127, short strings and lists)")
+    raise LatchError(f"cannot send {value!r} to the board (only nil, bool, 0-255, short strings and lists)")
 
 
 def pack_request(msgid: int, method: str, args: list) -> bytes:
@@ -192,6 +200,72 @@ def unpack(data: bytes) -> object:
     return value
 
 
+# --- the saved open / closed angles ---
+
+
+def _is_degrees(value: object) -> bool:
+    return isinstance(value, int) and not isinstance(value, bool) and 0 <= value <= MAX_DEGREES
+
+
+def _check_degrees(*values: object) -> None:
+    for value in values:
+        if not _is_degrees(value):
+            raise ValueError(f"an angle must be a whole number from 0 to {MAX_DEGREES}, got {value!r}")
+
+
+def load_angles(path: Path) -> tuple[int, int] | None:
+    """The saved (open, closed) angles, or None when the file does not exist. A file that cannot be read or holds
+    anything but `{"open": N, "closed": N}` with N from 0 to 180 raises LatchError naming the file."""
+    path = Path(path)
+    try:
+        text = path.read_text()
+    except FileNotFoundError:
+        return None
+    except OSError as exc:
+        raise LatchError(f"cannot read {path}: {exc.strerror or exc}")
+    try:
+        data = json.loads(text)
+    except ValueError as exc:
+        raise LatchError(f"{path} is not valid JSON ({exc}); delete it or save the angles again")
+    if not (isinstance(data, dict) and _is_degrees(data.get("open")) and _is_degrees(data.get("closed"))):
+        raise LatchError(f'{path} must look like {{"open": 10, "closed": 100}} with angles from 0 to {MAX_DEGREES}, '
+                         f"got {text.strip()[:80]!r}")
+    return data["open"], data["closed"]
+
+
+def save_angles(path: Path, open_degrees: int, closed_degrees: int) -> None:
+    """Writes the angles file (parent folder made when missing); the old file stays whole if the write fails."""
+    _check_degrees(open_degrees, closed_degrees)
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_name(path.name + ".tmp")
+    tmp.write_text(json.dumps({"open": open_degrees, "closed": closed_degrees}) + "\n")
+    tmp.replace(path)
+
+
+class AnglesLatch:
+    """Wraps a latch link that has `set_limits`: the saved angles go to the board before the first command.
+
+    If `set_limits` fails the command is still sent (the board's own angles apply) and the failure is raised
+    afterwards, so the controller reports it like any latch error; the angles are sent again with the next command.
+    """
+
+    def __init__(self, latch, angles: tuple[int, int]):
+        self._latch, self._angles, self._limits_sent = latch, angles, False
+
+    def set(self, closed: bool) -> None:
+        limits_error = None
+        if not self._limits_sent:
+            try:
+                self._latch.set_limits(*self._angles)
+                self._limits_sent = True
+            except LatchError as exc:
+                limits_error = exc
+        self._latch.set(closed)
+        if limits_error is not None:
+            raise limits_error
+
+
 # --- the router link ---
 
 
@@ -204,6 +278,26 @@ class RouterLatch:
 
     def set(self, closed: bool) -> None:
         self.call("set_latch", [bool(closed)])
+
+    def set_angle(self, degrees: int) -> int:
+        """Turns the servo to `degrees` (0..180) at once; returns the angle the board used."""
+        _check_degrees(degrees)
+        return self._int_result("set_angle", self.call("set_angle", [degrees]))
+
+    def get_angle(self) -> int:
+        """The last angle the board wrote to the servo."""
+        return self._int_result("get_angle", self.call("get_angle", []))
+
+    def set_limits(self, open_degrees: int, closed_degrees: int) -> None:
+        """Gives the board its open and closed angles (kept there until it restarts)."""
+        _check_degrees(open_degrees, closed_degrees)
+        self.call("set_limits", [open_degrees, closed_degrees])
+
+    @staticmethod
+    def _int_result(method: str, result: object) -> int:
+        if not _is_int(result):
+            raise LatchError(f"the board answered {method} with {result!r}, not an angle")
+        return result
 
     def call(self, method: str, args: list) -> object:
         """Sends one request and returns the board's result; any failure raises LatchError."""
@@ -249,6 +343,10 @@ class RouterLatch:
             raise LatchError(f"lost the connection to {self.socket_path}: {exc.strerror or exc}")
 
 
+def _is_int(value: object) -> bool:
+    return isinstance(value, int) and not isinstance(value, bool)
+
+
 def _error_text(error: object) -> str:
     if isinstance(error, list) and len(error) == 2:  # RPClite sends [code, traceback]
         return f"{error[1]} (code {error[0]})"
@@ -257,10 +355,27 @@ def _error_text(error: object) -> str:
 
 def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(prog="python -m feeder_census.latch", description="Move the feeder latch by hand.")
-    p.add_argument("command", choices=("close", "open", "cycle"), help="cycle: close, wait 2 s, open")
+    p.add_argument("command", choices=("close", "open", "cycle", "angle"),
+                   help="cycle: close, wait 2 s, open; angle N: turn the servo to N degrees (0 to 180)")
+    p.add_argument("degrees", nargs="?", type=int, help="for angle: where to turn the servo")
     p.add_argument("--socket", type=Path, default=ROUTER_SOCKET, help="arduino-router socket (default: %(default)s)")
     args = p.parse_args(argv)
+    if (args.command == "angle") != (args.degrees is not None):
+        p.error("angle needs a number of degrees (angle 90); the other commands take none")
     latch = RouterLatch(args.socket)
+    if args.command == "angle":
+        try:
+            used = latch.set_angle(args.degrees)
+        except ValueError as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return 2
+        except LatchError as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            print("check that the arduino-router service runs on the board and that board/latch/latch.ino is "
+                  "uploaded (README.md, Latch)", file=sys.stderr)
+            return 1
+        print(f"angle: the board turned the servo to {used} degrees", flush=True)
+        return 0
     steps = {"close": [True], "open": [False], "cycle": [True, None, False]}[args.command]
     try:
         for closed in steps:
