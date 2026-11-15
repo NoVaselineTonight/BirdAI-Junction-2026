@@ -163,7 +163,7 @@ def test_build_curves_gives_precision_and_recall_per_threshold():
     curves = build_curves(frames_for_curves(), ["great_tit"])["great_tit"]
     assert [t for t, _, _ in curves] == list(THRESHOLDS)
     at = {t: (p, r) for t, p, r in curves}
-    assert at[0.25] == (pytest.approx(2 / 3), 1.0)   # below every detection: the same as at 0.50
+    assert at[0.25] == (pytest.approx(2 / 3), 1.0)   # no detection scores under 0.50, so 0.25 sees the same as 0.50
     assert at[0.50] == (pytest.approx(2 / 3), 1.0)   # tp 2, fp 1
     assert at[0.60] == (pytest.approx(1 / 2), 0.5)   # tp 1, fp 1, fn 1
     assert at[0.75] == (1.0, 0.5)                    # the false alarm is gone
@@ -181,6 +181,18 @@ def test_pick_threshold_on_tallies_built_from_detections():
     assert list(tallies) == list(THRESHOLDS)
     assert tallies[0.50]["great_tit"] == Tally(tp=2, fp=1, fn=0) and tallies[0.60]["great_tit"] == Tally(1, 1, 1)
     assert pick_threshold(tallies, {"great_tit": 20}) == 0.75
+
+
+def test_the_default_grid_picks_0_30_when_precision_first_reaches_the_bar_there():
+    # 10 frames, one bird each. The right name scores 0.30, a wrong-name box scores 0.28.
+    # At 0.25 both count: 10 right, 10 false alarms, precision 0.5. At 0.30 only the right one does: 1.0.
+    # Nothing scores 0.50 or more, so on the old grid (0.50 and up) nothing is named and the pick falls back to 0.90.
+    frames = [([det("great_tit", A, 0.30), det("great_tit", B, 0.28)], [det("great_tit", A, 1.0)])
+              for _ in range(10)]
+    tallies = build_tallies(frames, ["great_tit"])  # the default grid decides which thresholds exist
+    assert tallies[0.25]["great_tit"] == Tally(tp=10, fp=10, fn=0)
+    assert tallies[0.30]["great_tit"] == Tally(tp=10, fp=0, fn=0)
+    assert student_threshold(tallies, {"great_tit": 80}, default=0.60) == (0.30, PICKED)
 
 
 def test_score_frames_reports_per_species_numbers_at_one_threshold():
