@@ -128,7 +128,13 @@ def create_app(
 
     @app.get("/api/model")
     def model() -> dict:
-        return model_card if model_card is not None else {"name": pipeline.detector.name, "metrics": None}
+        card = dict(model_card) if model_card is not None else {"name": pipeline.detector.name, "metrics": None}
+        # the picture size and parameter count come from the detector's own metadata (feeder.json), when it has them
+        for key in ("imgsz", "params"):
+            value = getattr(pipeline.detector, key, None)
+            if isinstance(value, int) and not isinstance(value, bool) and value > 0:
+                card[key] = value
+        return card
 
     @app.get("/stream.mjpg")
     async def stream(request: Request) -> StreamingResponse:

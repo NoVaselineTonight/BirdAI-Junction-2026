@@ -66,139 +66,184 @@ function every(ms, fn) {
 
 /* ---------- live ---------- */
 
+// Writes text only when it differs, so a poll that changes nothing leaves the DOM (and screen readers) alone.
+function setText(id, text) {
+  const node = $(id);
+  if (node.textContent !== text) node.textContent = text;
+}
+
 function renderLive() {
   if (!live) return;
   const t = parseSim(live.sim_time);
-  $("clock-day").textContent = `${t.weekday} ${t.da} ${MONTHS[t.mo - 1]} ${t.y}`;
-  $("clock-time").textContent = `${pad(t.h)}:${pad(t.mi)}`;
-  $("sheet-day").textContent = `${t.da} ${MONTHS[t.mo - 1]}`;
-  $("scale-sim").textContent = spanText(live.time_scale);
+  setText("clock-day", `${t.weekday} ${t.da} ${MONTHS[t.mo - 1]} ${t.y}`);
+  setText("clock-time", `${pad(t.h)}:${pad(t.mi)}`);
+  setText("sheet-day", `${t.da} ${MONTHS[t.mo - 1]}`);
+  setText("scale-sim", spanText(live.time_scale));
   if (!modelCard || !modelCard.name) {
-    $("card-name").textContent = live.detector;
-    $("model-name").textContent = live.detector;
+    setText("card-name", live.detector);
+    setText("model-name", live.detector);
   }
-  $("model-ms").textContent = msText(live.detect_ms);
-  $("card-ms").textContent = `${msText(live.detect_ms)} per frame`;
-  $("unidentified-n").textContent = String(live.unidentified);
-  $("footage-note").textContent = live.footage_note || "";
+  setText("model-ms", `${msText(live.detect_ms)} on this machine`);
+  setText("card-ms", `${msText(live.detect_ms)} per frame`);
+  setText("unidentified-n", String(live.unidentified));
+  setText("footage-note", live.footage_note || "");
   $("footage-note").hidden = !live.footage_note;
   const photo = typeof live.photo_every_s === "number";
-  $("photo-note").textContent = photo ? `One photo every ${live.photo_every_s} s, as the board's camera would take them.` : "";
+  setText("photo-note", photo ? `One photo every ${live.photo_every_s} s, as the board's camera would take them.` : "");
   $("photo-note").hidden = !photo || live.two_feeds;
-  $("spec-interval").textContent = photo ? `One photo every ${live.photo_every_s} s` : "Photo mode off";
-  $("spec-source").textContent = SPEC_SOURCES[live.source];
+  setText("spec-interval", photo ? `One photo every ${live.photo_every_s} s` : "Photo mode off");
+  setText("spec-source", SPEC_SOURCES[live.source]);
   renderFeeds();
 
   renderLatch(live.latch);
 
-  const stopped = $("stopped");
-  if (live.error) {
-    $("stopped-msg").textContent = `${live.error}.`;
-    stopped.hidden = false;
-  } else if (!stopped.dataset.lost) {
-    stopped.hidden = true;
-  }
+  if (live.error) showStopped(`${live.error}.`);
+  else if (!$("stopped").dataset.lost) showStopped(null);
 
   if (!tables) return;
   renderTally(t);
 }
 
-// Hidden when the program runs without a latch. In sim mode no hardware moves, and the page says so.
-// `headline` is decided by the server: the page never calls the latch open or closed when the board did
-// not confirm the last command ("not_answering", in neutral ink, never the green open or the red band).
+// The red band over the whole first screen; touched only when its text or visibility changes.
+function showStopped(message) {
+  const band = $("stopped");
+  if (message) setText("stopped-msg", message);
+  if (band.hidden !== !message) {
+    band.hidden = !message;
+    layoutBoard(); // the band takes height from the pictures
+  }
+}
+
+// Below the first screen only, and hidden when the program runs without a latch. In sim mode no hardware
+// moves, and the page says so. `headline` is decided by the server: the page never calls the latch open or
+// closed when the board did not confirm the last command ("not_answering").
 const LATCH_HEADLINES = { off: "", open: "Latch: open", closed: "Latch: closed", not_answering: "Latch: not answering" };
-const LATCH_MODES = { off: "Off", sim: "Shown only, no servo connected", router: "Servo on the board" };
 
 function renderLatch(latch) {
   const block = $("latch");
-  const headline = latch.headline in LATCH_HEADLINES ? latch.headline : "off";
-  $("spec-latch").textContent = LATCH_MODES[latch.mode] || LATCH_MODES.off;
-  $("spec-latch-row").hidden = false;
+  const headline = latch && latch.headline in LATCH_HEADLINES ? latch.headline : "off";
   block.hidden = headline === "off";
-  $("latch-rule").hidden = block.hidden;
   if (block.hidden) return;
-  const who = latch.reason_name ? `${latch.reason_name.english} · ${latch.reason_name.finnish} at the feeder` : "";
+  const who = latch.reason_name ? `· ${latch.reason_name.english} · ${latch.reason_name.finnish} at the feeder` : "";
   // written only on a change: the line is a polite live region and must not repeat itself every second
-  if ($("latch-state").textContent !== LATCH_HEADLINES[headline]) $("latch-state").textContent = LATCH_HEADLINES[headline];
-  $("latch-who").textContent = headline === "open" ? "" : who;
-  $("latch-who").hidden = headline === "open" || !who;
-  block.classList.toggle("closed", headline === "closed");
-  block.classList.toggle("not-answering", headline === "not_answering");
+  setText("latch-state", LATCH_HEADLINES[headline]);
+  setText("latch-who", headline === "open" ? "" : who);
   $("latch-sim").hidden = latch.mode !== "sim";
-  $("latch-error-msg").textContent = latch.error || "";
+  setText("latch-error-msg", latch.error || "");
   $("latch-error").hidden = !latch.error;
 }
 
-// One row per species seen today or in frame now, the census number (most at once) deciding the order.
-// The rest share one line. On the one-screen board the panel must not overflow: fitTally() folds what does
-// not fit into a compact line instead of cutting it off.
+// Every species the model can name, always, so the panel keeps its shape: visits today and most seen at the
+// same time today. Most visits first; species with nothing today last (dimmed), in species.toml order.
+let tallyRows = [];
 let tallyKey = "";
+let tallyLayout = "";
 function renderTally(t) {
   const today = `${t.y}-${pad(t.mo)}-${pad(t.da)}`;
   const maxOf = (sp) => live.day_max[sp.key] ?? 0;
-  const nowOf = (sp) => live.now[sp.key] ?? 0;
   const visitsOf = (sp) => live.visits_today[sp.key] ?? 0;
-  const shown = tables.nameable.filter((sp) => maxOf(sp) > 0 || nowOf(sp) > 0)
-    .sort((a, b) => maxOf(b) - maxOf(a) || nowOf(b) - nowOf(a) || visitsOf(b) - visitsOf(a));
-  // "watched for" = the species the tables give a column (core, or seen this season), as there a zero is stated too
-  const unseen = tables.species.filter((sp) => !shown.some((x) => x.key === sp.key));
+  tallyRows = tables.nameable.map((sp, i) => ({ sp, i, visits: visitsOf(sp), max: maxOf(sp) }))
+    .sort((a, b) => b.visits - a.visits || b.max - a.max || a.i - b.i);
   // live.sim_time only moves with recorded detections, so a newer day than the tables' was watched
-  const watched = shown.length > 0 || tables.day !== today || tables.hours.length > 0;
+  const watched = tallyRows.some((r) => r.visits || r.max) || tables.day !== today || tables.hours.length > 0;
+  const line = $("unseen");
+  setText("unseen", watched ? "" : "Not watched yet today.");
+  line.dataset.unwatched = watched ? "" : "1";
+  line.hidden = watched;
 
-  // the panel is redrawn only when something in it changed, not on every poll
-  const key = JSON.stringify([shown.map((sp) => [sp.key, nowOf(sp), maxOf(sp), visitsOf(sp)]),
-    unseen.map((sp) => sp.key), watched]);
+  // the panel is rebuilt only when a number changed, not on every poll
+  const key = JSON.stringify(tallyRows.map((r) => [r.sp.key, r.visits, r.max]));
   if (key === tallyKey) return;
   tallyKey = key;
-
-  // a folded row keeps its census number; one only in view now (not yet counted) says so
-  const alsoText = (sp) => (maxOf(sp) > 0 ? `${sp.english} ${maxOf(sp)}` : `${sp.english} (in view now)`);
-  $("tally").replaceChildren(...shown.map((sp) => el("tr", { "data-also": alsoText(sp) },
-    el("th", { scope: "row" }, el("span", { class: "name" }, sp.english), " ", el("span", { class: "fi" }, sp.finnish)),
-    el("td", { class: "num in-frame" }, String(nowOf(sp))),
-    el("td", { class: "num max" }, String(maxOf(sp))),
-    el("td", { class: "num visits" }, String(visitsOf(sp))))));
-  $("tally-table").hidden = shown.length === 0;
-
-  const line = $("unseen");
-  if (!watched) {
-    line.textContent = "Not watched yet today.";
-  } else {
-    line.replaceChildren(el("span", { class: "lead" }, "Watched for, none today:"), " ",
-      unseen.map(fullName).join(", "));
-  }
-  line.dataset.unwatched = watched ? "" : "1";
-  line.dataset.empty = watched && unseen.length === 0 ? "1" : "";
+  tallyLayout = "";
   fitTally();
 }
 
-// Shows every row, then, while the box overflows, first drops the "none today" line and then folds the
-// lowest rows into one "also today" line with their census numbers. Stacked (phone) layout never overflows.
-function fitTally() {
-  const box = $("tally-box");
-  const rows = [...$("tally").children];
-  const also = $("also");
-  const unseen = $("unseen");
-  rows.forEach((r) => { r.hidden = false; });
-  also.hidden = true;
-  unseen.hidden = unseen.dataset.empty === "1";
-  const over = () => box.scrollHeight > box.clientHeight + 1;
-  if (!over()) return;
-  if (!unseen.dataset.unwatched) unseen.hidden = true;
-  const folded = [];
-  for (let i = rows.length - 1; i > 0 && over(); i--) {
-    rows[i].hidden = true;
-    folded.unshift(rows[i].dataset.also);
-    also.replaceChildren(el("span", { class: "lead" }, "Also today, most at once:"), " ", folded.join(", "));
-    also.hidden = false;
-  }
-}
-// the box changes size with the window and when the "stopped" banner comes or goes
-let fitTimer = 0;
-if ("ResizeObserver" in window) {
-  new ResizeObserver(() => { clearTimeout(fitTimer); fitTimer = setTimeout(fitTally, 150); }).observe($("tally-box"));
+function tallyTable(rows) {
+  return el("table", { class: "tally" },
+    el("thead", {}, el("tr", {},
+      el("th", { scope: "col" }, "Species"),
+      el("th", { scope: "col", class: "num" }, "Visits"),
+      el("th", { scope: "col", class: "num" }, "Most at once"))),
+    el("tbody", {}, ...rows.map((r) => el("tr", r.visits || r.max ? {} : { class: "zero" },
+      el("th", { scope: "row", title: fullName(r.sp) }, el("span", { class: "name" }, r.sp.english)),
+      el("td", { class: "num visits" }, String(r.visits)),
+      el("td", { class: "num max" }, String(r.max))))));
 }
 
+// Picks the first layout that fits the box, across and down: two side-by-side lists when the panel is wide,
+// one when it is narrow, then tighter rows. Only as a last resort (a 4:3 screen) the two caveat sentences
+// under the list give way; the full list itself is never cut. A stacked (phone) page has no fixed box.
+function fitTally() {
+  const box = $("tally-box");
+  if (!tallyRows.length) return;
+  const rem = parseFloat(getComputedStyle(document.documentElement).fontSize) || 16;
+  const wide = box.clientWidth >= 30 * rem;
+  const layouts = wide
+    ? ["2", "2 tight", "1 tight", "2 tight nonote", "1 tight nonote"]
+    : ["1", "1 tight", "2 tight", "1 tight nonote", "2 tight nonote"];
+  const over = () => box.scrollHeight > box.clientHeight + 1 || box.scrollWidth > box.clientWidth + 1;
+  const sizeKey = `${box.clientWidth}x${box.clientHeight}|${tallyKey}`;
+  if (tallyLayout === sizeKey) return;
+  for (const layout of layouts) {
+    const cols = Number(layout[0]);
+    const per = Math.ceil(tallyRows.length / cols);
+    const groups = Array.from({ length: cols }, (_, c) => tallyRows.slice(c * per, (c + 1) * per));
+    box.className = `tally-box cols-${cols}${layout.includes("tight") ? " tight" : ""}`;
+    $("stats-note").hidden = layout.includes("nonote");
+    box.replaceChildren($("unseen"), ...groups.map(tallyTable));
+    if (!over()) break;
+  }
+  tallyLayout = `${box.clientWidth}x${box.clientHeight}|${tallyKey}`; // hiding the note may have grown the box
+}
+
+/* ---------- the first screen's two columns ---------- */
+
+// The left column is as wide as two stacked pictures can be at the height left after their own headings
+// (measured, not assumed); the right column takes the rest but never less than it needs. One-feed mode keeps
+// the same split, so the stats get the same room in both modes.
+const BOARD_MEDIA = window.matchMedia("(min-width: 900px) and (min-height: 560px)");
+function layoutBoard() {
+  const board = $("board");
+  if (!BOARD_MEDIA.matches) {
+    board.style.removeProperty("--pic-w");
+    return;
+  }
+  const pictures = $("pictures");
+  const aiPane = $("feed").closest(".pane");
+  const img = $("feed");
+  const ratio = img.naturalWidth && img.naturalHeight ? img.naturalWidth / img.naturalHeight : 16 / 9;
+  const rem = parseFloat(getComputedStyle(document.documentElement).fontSize) || 16;
+  const gap = parseFloat(getComputedStyle(pictures).rowGap) || 0;
+  const colGap = parseFloat(getComputedStyle(board).columnGap) || 0;
+  // on a squarer screen (4:3) the pictures are letterboxed anyway: the stats get half the width there
+  const minSide = Math.max(30 * rem, board.clientWidth * (innerWidth / innerHeight < 1.5 ? 0.5 : 0.45));
+  for (let pass = 0; pass < 2; pass++) { // headings wrap differently at the new width: measure once more
+    const chromeOf = (pane) => pane.offsetHeight - pane.querySelector(".window").offsetHeight;
+    const liveShown = !$("live-pane").hidden;
+    const chrome = chromeOf(aiPane) + (liveShown ? chromeOf($("live-pane")) : chromeOf(aiPane));
+    const padX = aiPane.offsetWidth - aiPane.querySelector(".window").offsetWidth;
+    const picH = (pictures.clientHeight - gap - chrome) / 2;
+    const most = board.clientWidth - colGap - minSide;
+    const width = Math.max(Math.min(picH * ratio + padX, most), board.clientWidth * 0.3);
+    board.style.setProperty("--pic-w", `${Math.floor(width)}px`);
+  }
+}
+
+let fitTimer = 0;
+function relayout() {
+  clearTimeout(fitTimer);
+  fitTimer = setTimeout(() => { layoutBoard(); fitTally(); }, 100);
+}
+if ("ResizeObserver" in window) {
+  new ResizeObserver(relayout).observe($("pictures"));
+  new ResizeObserver(() => { clearTimeout(fitTimer); fitTimer = setTimeout(fitTally, 100); }).observe($("tally-box"));
+} else {
+  window.addEventListener("resize", relayout);
+}
+$("feed").addEventListener("load", layoutBoard, { once: true }); // the picture's own shape, once known
+
+let failedPolls = 0;
 async function pollLive() {
   try {
     const j = await getJSON("/api/live");
@@ -211,18 +256,19 @@ async function pollLive() {
     j.two_feeds = j.two_feeds === true;
     j.latch = j.latch || { mode: "off", closed: false, reason: null, error: null, reason_name: null, headline: "off" };
     live = j;
+    // Watchdog: after a server restart an MJPEG <img> often just stops, with no error event to reconnect on,
+    // and Chromium fires `load` only for a stream's first frame, so a stale frame cannot be told from a live
+    // one. The first good poll after failed ones therefore restarts every stream.
+    if (failedPolls > 0) for (const f of feeds) f.img.src = `${f.url}?t=${Date.now()}`;
+    failedPolls = 0;
     delete $("stopped").dataset.lost;
     renderLive();
   } catch {
     // without the counter the page cannot know that today was not watched
-    if ($("unseen").dataset.unwatched) {
-      $("unseen").hidden = true;
-      tallyKey = ""; // say it again once the counter answers
-    }
-    const s = $("stopped");
-    s.dataset.lost = "1";
-    $("stopped-msg").textContent = "This page cannot reach the counter.";
-    s.hidden = false;
+    failedPolls += 1;
+    if ($("unseen").dataset.unwatched) $("unseen").hidden = true;
+    $("stopped").dataset.lost = "1";
+    showStopped("This page cannot reach the counter.");
   }
 }
 
@@ -333,12 +379,24 @@ async function loadModel() {
   return true;
 }
 
+// 2400000 -> "2.4 million", 850000 -> "850 thousand"
+function paramsText(n) {
+  if (n >= 1e6) return `${Number((n / 1e6).toFixed(1))} million`;
+  if (n >= 1e3) return `${Math.round(n / 1e3)} thousand`;
+  return String(n);
+}
+
 function renderModel() {
   if (!modelCard) return;
   $("card-name").textContent = modelCard.name || (live ? live.detector : DASH);
   $("model-name").textContent = $("card-name").textContent;
-  if (typeof modelCard.imgsz === "number") {
-    $("spec-imgsz").textContent = `${modelCard.imgsz} px`;
+  // only what the model's own metadata states (feeder.json via /api/model); the rows stay hidden otherwise
+  if (Number.isInteger(modelCard.params) && modelCard.params > 0) {
+    $("spec-params").textContent = paramsText(modelCard.params);
+    $("spec-params-row").hidden = false;
+  }
+  if (Number.isInteger(modelCard.imgsz) && modelCard.imgsz > 0) {
+    $("spec-imgsz").textContent = `${modelCard.imgsz} × ${modelCard.imgsz} px`;
     $("spec-imgsz-row").hidden = false;
   }
   const m = modelCard.metrics;
@@ -351,8 +409,8 @@ function renderModel() {
   if (modelCard.board_ms != null) {
     $("card-board").textContent = `${msText(modelCard.board_ms)} per frame`;
     $("card-board-row").hidden = false;
-    $("spec-board").textContent = msText(modelCard.board_ms);
-    $("spec-board-row").hidden = false;
+    $("spec-board").textContent = `${msText(modelCard.board_ms)} on the board`;
+    $("spec-board").hidden = false;
   }
   if (modelCard.count_threshold != null) {
     const source = modelCard.threshold_source ? ` ${sentence(modelCard.threshold_source)}` : "";
@@ -382,8 +440,10 @@ function renderModel() {
 /* ---------- feed ---------- */
 
 // The stream may be slow (the board): keep the last frame up, and reconnect if it ends.
+const feeds = []; // started streams, for the watchdog
 function startFeed(imgId, waitingId, url) {
   const img = $(imgId);
+  feeds.push({ img, url });
   const shown = () => { img.classList.add("on"); $(waitingId).hidden = true; };
   img.addEventListener("load", shown);
   // some browsers fire no load event for a multipart stream; a decoded frame has a size
@@ -407,10 +467,13 @@ let liveFeedStarted = false;
 
 function renderFeeds() {
   const two = live.two_feeds;
-  $("source-line").textContent = SOURCE_LINES[live.source];
+  setText("source-line", SOURCE_LINES[live.source]);
   $("source-line").hidden = two; // each picture has its own caption then
-  $("board").classList.toggle("two", two);
-  $("live-pane").hidden = !two;
+  if ($("live-pane").hidden === two) {
+    $("board").classList.toggle("two", two);
+    $("live-pane").hidden = !two;
+    layoutBoard();
+  }
   $("feed-note").hidden = !two;
   // the footage note sits with the picture that shows the footage: the live one when there are two
   const noteHome = two ? $("live-footage-slot") : $("source-line").parentElement;
@@ -419,8 +482,8 @@ function renderFeeds() {
     ? "The photo the model analysed, with a box around each bird it found"
     : "Live view of the feeder with a box around each bird the model found";
   if (!two) return;
-  $("live-note").textContent = LIVE_NOTES[live.source];
-  $("feed-note").textContent = `One photo every ${live.photo_every_s} s, with a box around each bird the model found.`;
+  setText("live-note", LIVE_NOTES[live.source]);
+  setText("feed-note", `One photo every ${live.photo_every_s} s, with a box around each bird the model found.`);
   if (!liveFeedStarted) {
     liveFeedStarted = true;
     startFeed("live-feed", "live-waiting", "/live.mjpg");

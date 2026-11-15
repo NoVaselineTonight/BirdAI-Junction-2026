@@ -1,23 +1,21 @@
-/* A hide and its census sheet. The pictures sit in dark hide windows on the left, the counts on pale census
-   paper on the right, under a spruce band. Bullfinch red only for what must stop a passer-by: the latch
-   closed, the counter stopped. One screen on the stand's TV; the rest of the record scrolls below. */
+/* A hide and its census sheet. The pictures sit in dark hide windows that own the whole left side, as tall
+   as the screen allows; the name, the counts and the specs sit on pale census paper on the right. Spruce
+   ink for the name, bullfinch red only for the counter stopping and the LIVE dot. */
 :root {
   --snow: #e6ecef;
   --sheet: #f8fafb;
   --ink: #13222a;
   --ink-2: #3a4d56;
+  --dim: #5b6d75;          /* zero rows: dimmed but still 5:1 on the paper */
   --rule: #b9c6cd;
   --rule-soft: #d8e0e4;
   --hide: #0d1519;
-  --hide-2: #16222a;
   --hide-ink: #dfe8ec;
-  --hide-ink-2: #a9bac2;
+  --hide-ink-2: #b3c3ca;
   --spruce: #24483f;
   --spruce-ink: #eef4f1;
-  --spruce-ink-2: #bcd2c9;
-  --moss: #3f9b6a;
   --bullfinch: #b3313b;
-  --gap: clamp(10px, 0.9vw, 20px);
+  --gap: clamp(8px, 0.8vw, 16px);
   --sans: "Segoe UI", system-ui, -apple-system, "Helvetica Neue", "Noto Sans", "DejaVu Sans", Arial, sans-serif;
   font-size: clamp(14px, min(1.1vw, 2vh), 22px);
 }
@@ -26,6 +24,9 @@
 [hidden] { display: none !important; }
 
 html { background: var(--snow); color: var(--ink); }
+/* the TV at the stand (?kiosk) cannot scroll: no scroll bar there; everyone else keeps theirs */
+html.kiosk { scrollbar-width: none; }
+html.kiosk::-webkit-scrollbar { display: none; }
 
 body {
   margin: 0;
@@ -41,80 +42,37 @@ h1, h2, p, figure, ul, dl, dd { margin: 0; }
 h2 { font-size: 1.3rem; font-weight: 650; letter-spacing: -0.01em; }
 .sub { font-weight: 400; color: var(--ink-2); }
 
-/* ---------- masthead: name, latch, clock ---------- */
-.masthead {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.5rem 2rem;
-  padding: 0.55rem var(--gap);
-  background: var(--spruce);
-  color: var(--spruce-ink);
-}
-.brand { display: flex; align-items: baseline; gap: 0.75rem; flex-wrap: wrap; line-height: 1; }
-.brand-name { font-size: 2.3rem; font-weight: 800; letter-spacing: -0.03em; }
-.brand-tag { font-size: 1.1rem; font-weight: 500; color: var(--spruce-ink-2); }
-
-.clock-block { margin-left: auto; text-align: right; }
-.clock { font-size: 1.15rem; color: var(--spruce-ink-2); line-height: 1.1; }
-.clock strong { font-size: 2rem; color: var(--spruce-ink); font-weight: 700; margin-left: 0.4rem; letter-spacing: -0.01em; }
-.demo-clock { font-size: 0.9rem; color: var(--spruce-ink-2); margin-top: 0.15rem; }
-
-/* Latch: a quiet mark while open; solid bullfinch red when closed, to be read from across the hall */
-.latch { display: flex; flex-wrap: wrap; align-items: center; gap: 0.3rem 0.9rem; max-width: 42rem; }
-.latch-detail { flex: 1 1 16rem; }
-.latch-state {
-  display: inline-flex; align-items: center; gap: 0.5rem; flex: none; white-space: nowrap;
-  padding: 0.25rem 0.85rem 0.25rem 0.7rem;
-  border-radius: 999px;
-  background: var(--spruce-ink); color: var(--spruce);
-  font-size: 1.25rem; font-weight: 750; line-height: 1.2;
-}
-.latch-dot { width: 0.7rem; height: 0.7rem; border-radius: 50%; background: var(--moss); flex: none; }
-.latch.closed .latch-state { background: var(--bullfinch); color: #fff; font-size: 1.45rem; }
-.latch.closed .latch-dot { background: #fff; }
-.latch.not-answering .latch-state { background: transparent; color: var(--spruce-ink); box-shadow: inset 0 0 0 2px var(--spruce-ink-2); }
-.latch.not-answering .latch-dot { background: transparent; box-shadow: inset 0 0 0 2px var(--spruce-ink-2); }
-.latch-detail { display: grid; font-size: 0.9rem; color: var(--spruce-ink-2); line-height: 1.25; overflow-wrap: anywhere; }
-.latch-detail > span:not([hidden]) { display: block; }
-.latch-detail:not(:has(> span:not([hidden]))) { display: none; }
-.latch-who { font-weight: 650; color: var(--spruce-ink); }
-.latch.closed .latch-who { font-size: 1.05rem; }
-.latch-error { font-weight: 650; color: #ffd9d9; }
-
 .stopped {
-  padding: 0.65rem var(--gap);
+  padding: 0.55rem var(--gap);
   background: var(--bullfinch);
   color: #fff;
   font-size: 1.2rem;
 }
 
-/* ---------- the board: AI and Live on the left, stats and specs on the right ---------- */
-.board-wrap { padding: var(--gap); }
+/* ---------- the first screen: pictures left, paper right ---------- */
 .board {
   display: grid;
   gap: var(--gap);
+  padding: var(--gap);
   grid-template-columns: minmax(0, 1fr);
 }
+.pictures, .side { display: flex; flex-direction: column; gap: var(--gap); min-width: 0; min-height: 0; }
 
 .pane {
   background: var(--hide);
   color: var(--hide-ink);
   border-radius: 4px;
-  padding: 0.5rem 0.6rem 0.6rem;
-  display: flex; flex-direction: column; gap: 0.4rem;
+  padding: 0.3rem 0.45rem 0.45rem;
+  display: flex; flex-direction: column; gap: 0.3rem;
   min-width: 0; min-height: 0;
 }
-.pane-head { display: grid; gap: 0.1rem; }
-.pane-title {
-  font-size: 1.2rem; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; line-height: 1.2;
-}
-.pane-sub { margin-left: 0.5rem; font-size: 0.85rem; font-weight: 500; letter-spacing: 0; text-transform: none; color: var(--hide-ink-2); }
+.pane-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 0.7rem; }
+.pane-title { font-size: 1.1rem; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; line-height: 1.2; }
 .pane-live .pane-title::before {
-  content: ""; display: inline-block; width: 0.6rem; height: 0.6rem; margin: 0 0.5rem 0.1rem 0;
+  content: ""; display: inline-block; width: 0.55rem; height: 0.55rem; margin: 0 0.45rem 0.12rem 0;
   border-radius: 50%; background: var(--bullfinch); vertical-align: middle;
 }
-.pane-note { font-size: 0.9rem; color: var(--hide-ink-2); line-height: 1.25; }
+.pane-note { font-size: 1rem; color: var(--hide-ink-2); line-height: 1.25; }
 .pane-note .footage-note { margin-left: 0.3rem; color: var(--hide-ink); }
 
 .window {
@@ -132,116 +90,96 @@ h2 { font-size: 1.3rem; font-weight: 650; letter-spacing: -0.01em; }
   color: var(--hide-ink-2); font-size: 1.1rem;
 }
 
+/* name and clock at the top of the right column */
+.brand-row { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 0.2rem 1.2rem; padding: 0 0.2rem; }
+.brand { display: flex; align-items: baseline; gap: 0.6rem; line-height: 1; }
+.brand-name { font-size: 2.3rem; font-weight: 800; letter-spacing: -0.03em; color: var(--spruce); }
+.brand-tag { font-size: 1.1rem; font-weight: 600; color: var(--ink-2); }
+.clock-block { text-align: right; }
+.clock { font-size: 1.05rem; color: var(--ink-2); line-height: 1.1; }
+.clock strong { font-size: 1.7rem; color: var(--ink); font-weight: 750; margin-left: 0.35rem; }
+.demo-clock { font-size: 1rem; color: var(--ink-2); }
+
 /* census paper */
 .panel {
   background: var(--sheet);
   border: 1px solid var(--rule);
   border-top: 4px solid var(--ink);
   border-radius: 2px;
-  padding: 0.6rem 1rem 0.7rem;
-  display: flex; flex-direction: column; gap: 0.45rem;
+  padding: 0.5rem 0.9rem 0.6rem;
+  display: flex; flex-direction: column; gap: 0.4rem;
   min-width: 0; min-height: 0;
   container-type: inline-size;
 }
-.panel-head { display: flex; align-items: baseline; gap: 0.25rem 1rem; flex-wrap: wrap; }
-.panel-head .rule-line { margin-left: auto; }
+.panel-head { display: flex; align-items: baseline; gap: 0.2rem 1rem; flex-wrap: wrap; }
 .panel-title { font-size: 1.2rem; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; line-height: 1.2; }
 .panel-sub { font-size: 1.1rem; color: var(--ink-2); }
-.panel-sub span { color: var(--ink); font-weight: 600; }
+.panel-sub span { color: var(--ink); font-weight: 650; }
 
-/* Bird stats: the census number (most at once) is the headline, set largest; visits sit apart, small */
-.rule-line { font-size: 0.9rem; color: var(--ink-2); font-weight: 550; }
-/* plain flow, not grid: a grid would squeeze its rows and hide an overflow from the fitting script */
-.tally-box { display: block; min-height: 0; }
-.tally-box > * + * { margin-top: 0.4rem; }
+/* Bird stats: every species, two numbers each. Plain flow inside the box, so an overflow is measurable. */
+.tally-box { min-height: 0; }
+.tally-box.cols-2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 1.6rem; align-items: start; }
+.tally-box .unseen { grid-column: 1 / -1; color: var(--ink-2); font-weight: 600; margin-bottom: 0.3rem; }
 .tally { width: 100%; border-collapse: collapse; }
 .tally thead th {
-  text-align: left; font-weight: 600; font-size: 0.85rem; color: var(--ink-2); line-height: 1.15;
-  padding: 0 0 0.3rem; border-bottom: 2px solid var(--ink); vertical-align: bottom;
+  text-align: left; font-weight: 650; font-size: 1rem; color: var(--ink-2); line-height: 1.15;
+  padding: 0 0 0.25rem; border-bottom: 2px solid var(--ink); vertical-align: bottom; white-space: nowrap;
 }
-.tally thead th.num { text-align: right; padding-left: 0.8rem; white-space: nowrap; }
-.tally thead th.max { color: var(--ink); font-size: 0.95rem; }
-.th-sub { display: block; font-weight: 500; font-size: 0.8rem; color: var(--ink-2); }
-.tally tbody th { text-align: left; font-weight: 400; padding: 0.15rem 0; }
+.tally thead th.num { text-align: right; padding-left: 0.8rem; }
 .tally th, .tally td { border-bottom: 1px solid var(--rule-soft); vertical-align: baseline; }
+.tally tbody th { text-align: left; font-weight: 400; padding: 0.12rem 0; }
 .tally td.num { text-align: right; padding-left: 0.8rem; white-space: nowrap; }
-.tally td.in-frame { font-size: 1.6rem; font-weight: 500; color: var(--ink-2); }
-.tally td.max { font-size: 2.6rem; font-weight: 800; color: var(--ink); line-height: 1.05; letter-spacing: -0.02em; }
-.tally .visits { border-left: 1px dotted var(--rule); }
-.tally td.visits { font-size: 1.2rem; color: var(--ink-2); padding-left: 0.8rem; }
-.tally .name { font-size: 1.3rem; font-weight: 650; }
-.tally .fi { margin-left: 0.3rem; font-size: 0.95rem; color: var(--ink-2); }
-.also, .unseen { color: var(--ink-2); font-size: 0.95rem; }
-.also .lead, .unseen .lead { font-weight: 650; color: var(--ink); }
+.tally .name { font-size: 1.4rem; font-weight: 650; line-height: 1.2; }
+.tally td.visits { font-size: 1.55rem; font-weight: 650; color: var(--ink); line-height: 1.2; }
+.tally td.max { font-size: 1.55rem; font-weight: 800; color: var(--ink); line-height: 1.2; }
+.tally tr.zero .name, .tally tr.zero .fi, .tally tr.zero td { color: var(--dim); font-weight: 400; }
+/* tight: when every species would not fit otherwise (Finnish names are in the tables below) */
+.tally-box.tight .tally tbody th { padding: 0.02rem 0; }
+.tally-box.tight .name { font-size: 1.1rem; }
+.tally-box.tight td.visits, .tally-box.tight td.max { font-size: 1.2rem; }
+.tally-box.tight .tally thead th.num { white-space: normal; padding-left: 0.5rem; }
+.tally-box.tight .tally td.num { padding-left: 0.5rem; }
 
-.stats-foot { display: grid; gap: 0.3rem; margin-top: auto; }
-.foot-facts { display: flex; flex-wrap: wrap; gap: 0.2rem 2rem; }
-.foot-facts div { display: flex; align-items: baseline; gap: 0.5rem; }
-.foot-facts dt { color: var(--ink-2); }
-.foot-facts dd { font-size: 1.3rem; font-weight: 750; }
-.visits-note { color: var(--ink-2); font-size: 0.85rem; }
+.foot-line { display: flex; flex-wrap: wrap; gap: 0.1rem 1.6rem; color: var(--ink-2); font-size: 1rem; }
+.foot-line strong { color: var(--ink); font-size: 1.15rem; }
+.stats-note { color: var(--ink-2); font-size: 1rem; line-height: 1.25; }
 
 /* Tech specs: label-value rows, two columns when the panel is wide */
 .spec-rows { display: grid; gap: 0 1.6rem; align-content: start; }
 .spec-rows div {
   display: flex; justify-content: space-between; align-items: baseline; gap: 1rem;
-  padding: 0.3rem 0; border-bottom: 1px dotted var(--rule);
+  padding: 0.25rem 0; border-bottom: 1px dotted var(--rule);
 }
-.spec-rows dt { color: var(--ink-2); font-size: 0.95rem; }
-.spec-rows dd { font-weight: 650; text-align: right; font-size: 1.05rem; overflow-wrap: anywhere; }
-.dd-sub { display: block; font-size: 0.8rem; font-weight: 500; color: var(--ink-2); }
+.spec-rows dt { color: var(--ink-2); font-size: 1rem; }
+.spec-rows dd { font-weight: 650; text-align: right; font-size: 1.15rem; overflow-wrap: anywhere; }
+.dd-sub { display: block; font-size: 1rem; font-weight: 500; color: var(--ink-2); }
 @container (min-width: 28rem) {
   .spec-rows { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 /* a medium-width panel: each cell sets its label over its value, so values never break mid-phrase */
 @container (min-width: 28rem) and (max-width: 44rem) {
-  .spec-rows div { display: block; padding: 0.25rem 0; }
-  .spec-rows dt { font-size: 0.85rem !important; line-height: 1.15; }
+  .spec-rows div { display: block; padding: 0.15rem 0; }
+  .spec-rows dt { line-height: 1.15; }
   .spec-rows dd { text-align: left; }
 }
 .accuracy { font-weight: 550; }
-.specs .accuracy { font-size: 0.9rem; color: var(--ink-2); }
+.specs .accuracy { font-size: 1rem; color: var(--ink-2); }
 
-/* ---------- one screen: header plus a 2 x 2 board, no scrolling of the first screen ---------- */
+.more-hint { font-size: 1rem; color: var(--ink-2); padding: 0 0.2rem; }
+html.kiosk .more-hint { display: none; }
+
+/* ---------- one screen (laptop, TV): nothing scrolls inside the first screen ---------- */
 @media (min-width: 900px) and (min-height: 560px) {
-  /* the kiosk cannot scroll; a laptop still scrolls to the tables below with wheel or keys */
-  html { scrollbar-width: none; }
-  html::-webkit-scrollbar { display: none; }
-
   .screen { height: 100vh; height: 100dvh; display: flex; flex-direction: column; overflow: hidden; }
-  .board-wrap { flex: 1; min-height: 0; container-type: size; }
   .board {
-    /* the left column is as wide as a 16:9 picture that fills its pane's height, so no side bars */
-    --pane-chrome: 4.6rem;
-    --pic-w: min(calc(((100cqh - var(--gap)) / 2 - var(--pane-chrome)) * 16 / 9 + 1.2rem), 58cqw);
-    height: 100%;
-    grid-template-columns: var(--pic-w) minmax(0, 1fr);
-    /* the pictures split the left column in half; on the right the stats get more room than the specs */
-    grid-template-rows: minmax(0, 50fr) minmax(0, 8fr) minmax(0, 42fr);
-    grid-template-areas: "ai stats" "live stats" "live specs";
+    flex: 1; min-height: 0;
+    /* --pic-w is set by the script from the height the pictures have; 55% until it has measured */
+    grid-template-columns: var(--pic-w, 55%) minmax(0, 1fr);
   }
-  .board:not(.two) {
-    --pic-w: min(calc((100cqh - var(--pane-chrome)) * 16 / 9 + 1.2rem), 52cqw);
-    grid-template-areas: "ai stats" "ai specs" "ai specs";
-  }
-  .pane-ai { grid-area: ai; }
-  .pane-live { grid-area: live; }
-  .stats { grid-area: stats; }
-  .specs { grid-area: specs; }
+  .pane { flex: 1 1 0; }
   .window { flex: 1; min-height: 0; aspect-ratio: auto; }
+  .stats { flex: 1 1 auto; }
   .tally-box { flex: 1; overflow: hidden; }
-  /* the pictures are bound by the height, so the paper gets the room: larger type for the far viewer */
-  .tally .name { font-size: 1.45rem; }
-  .tally .fi { font-size: 1.05rem; }
-  .tally td.in-frame { font-size: 1.8rem; line-height: 1.1; }
-  .tally td.max { font-size: 2.8rem; line-height: 1; }
-  .tally td.visits { font-size: 1.35rem; }
-  .tally thead th { font-size: 0.95rem; }
-  .tally thead th.max { font-size: 1.05rem; }
-  .spec-rows div { padding: 0.4rem 0; }
-  .spec-rows dt { font-size: 1.02rem; }
-  .spec-rows dd { font-size: 1.2rem; }
-  .specs .accuracy { font-size: 0.95rem; }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -250,18 +188,18 @@ h2 { font-size: 1.3rem; font-weight: 650; letter-spacing: -0.01em; }
 
 /* ---------- below the first screen: the record ---------- */
 .below {
-  padding: calc(var(--gap) * 2) var(--gap) var(--gap);
+  padding: calc(var(--gap) * 2.5) var(--gap) var(--gap);
   display: grid;
-  gap: calc(var(--gap) * 2.4);
-  border-top: 2px solid var(--ink);
   grid-template-columns: minmax(0, 1fr);
+  gap: calc(var(--gap) * 3);
+  border-top: 2px solid var(--ink);
 }
 .below > *, .block { min-width: 0; }
 
 .ledger {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: calc(var(--gap) * 2) calc(var(--gap) * 2.4);
+  gap: calc(var(--gap) * 2.5) calc(var(--gap) * 3);
 }
 /* more than four species columns: every block takes the full width, so no column is cut off */
 .ledger.wide { grid-template-columns: minmax(0, 1fr); }
@@ -316,32 +254,31 @@ a:focus-visible { outline: 3px solid var(--bullfinch); outline-offset: 3px; }
 .photos .when { color: var(--ink-2); }
 .empty { color: var(--ink-2); }
 
-.model { display: grid; gap: 0.7rem; max-width: 52rem; padding-bottom: var(--gap); }
+.model { display: grid; grid-template-columns: minmax(0, 1fr); gap: 0.7rem; max-width: 52rem; }
 .facts { display: grid; gap: 0.25rem; }
 .facts div { display: flex; justify-content: space-between; gap: 1rem; border-bottom: 1px dotted var(--rule); padding-bottom: 0.2rem; }
 .facts dt { color: var(--ink-2); }
 .facts dd { font-weight: 600; text-align: right; }
 .metrics { max-width: 40rem; }
 .can-name { font-size: 0.95rem; color: var(--ink-2); }
-.latch-rule { font-weight: 550; }
 
-/* ---------- phone and small windows: the four panels stack in reading order and the page scrolls ---------- */
+.latch { display: grid; gap: 0.4rem; max-width: 52rem; padding-bottom: var(--gap); }
+.latch-state { font-weight: 700; font-size: 1.1rem; }
+.latch-who { font-weight: 600; }
+.latch-rule { font-weight: 550; }
+.latch-sim { font-weight: 600; }
+.latch-error { font-weight: 650; color: var(--bullfinch); overflow-wrap: anywhere; }
+
+/* ---------- phone and small windows: name first, then AI, Live, stats, specs; the page scrolls ---------- */
 @media (max-width: 899px), (max-height: 559px) {
-  .masthead { gap: 0.5rem 1rem; }
-  .clock-block { margin-left: 0; text-align: left; flex-basis: 100%; }
-  .brand-name { font-size: 2rem; }
+  .board { display: flex; flex-direction: column; }
+  .side { display: contents; }
+  .brand-row { order: -1; }
+  .clock-block { text-align: left; }
   .ledger { grid-template-columns: minmax(0, 1fr); }
-  .tally td.max { font-size: 2.2rem; }
 }
 @media (max-width: 480px) {
   :root { font-size: 16px; }
-  .tally .fi { display: block; margin-left: 0; }
-  .tally .name { font-size: 1.05rem; }
-  .tally thead th.num { white-space: normal; }
-  .tally thead th, .th-sub { font-size: 0.8rem; }
-  .tally thead th.num, .tally td.num { padding-left: 0.45rem; }
-  .tally td.in-frame { font-size: 1.3rem; }
-  .tally td.max { font-size: 1.9rem; }
-  .tally td.visits { font-size: 1.1rem; }
+  .tally thead th.num, .tally td.num { padding-left: 0.5rem; }
   .habitats li { grid-template-columns: 7rem 2.5rem minmax(0, 1fr); }
 }

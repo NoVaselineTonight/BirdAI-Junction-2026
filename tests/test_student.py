@@ -117,6 +117,17 @@ def test_student_detector_reads_its_card(detector):
     assert detector.count_threshold == 0.6
     assert detector.species == ("great_tit", "blue_tit")
     assert FakeSession.last.providers == ["CPUExecutionProvider"]
+    assert detector.imgsz == 640
+    assert detector.params is None  # the card does not state it, so nothing is made up
+
+
+@pytest.mark.parametrize("params, expected", [(2_400_000, 2_400_000), ("2.4M", None), (True, None), (0, None)])
+def test_student_detector_takes_the_parameter_count_only_as_a_positive_whole_number(
+        monkeypatch, card, tmp_path, params, expected):
+    info = json.loads(card.read_text())
+    card.write_text(json.dumps({**info, "params": params}))
+    monkeypatch.setattr(student.ort, "InferenceSession", FakeSession)
+    assert StudentDetector(tmp_path / "feeder.onnx", card).params == expected
 
 
 def test_student_detector_feeds_a_letterboxed_rgb_float_image(detector):

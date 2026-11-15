@@ -175,6 +175,31 @@ def test_model_card_is_passed_through_with_unmeasured_rates(tmp_path, make_video
         assert c.get("/api/model").json() == card
 
 
+def test_model_shows_picture_size_and_parameters_when_the_detector_metadata_has_them(tmp_path, make_video):
+    card = {"name": "Feeder student 960", "metrics": None}
+    app, _, pipeline = scripted_app(tmp_path, make_video, ["great_tit"], [[GT]], 1, model_card=card)
+    pipeline.detector.imgsz = 960  # as a StudentDetector reads them from feeder.json
+    pipeline.detector.params = 2_400_000
+    with TestClient(app) as c:
+        j = c.get("/api/model").json()
+    assert j["imgsz"] == 960 and j["params"] == 2_400_000 and j["name"] == "Feeder student 960"
+    assert card == {"name": "Feeder student 960", "metrics": None}  # the loaded card itself is not changed
+
+
+def test_model_leaves_picture_size_and_parameters_out_when_the_metadata_lacks_them(tmp_path, make_video):
+    app, _, pipeline = scripted_app(tmp_path, make_video, ["great_tit"], [[GT]], 1)
+    pipeline.detector.params = None  # a card without "params"
+    with TestClient(app) as c:
+        j = c.get("/api/model").json()
+    assert "imgsz" not in j and "params" not in j
+
+
+def test_page_words_the_parameter_count_and_picture_size_only_from_the_api(client):
+    js = client.get("/static/app.js").text
+    assert "modelCard.params" in js and "modelCard.imgsz" in js
+    assert "million" in js
+
+
 def test_live_state_carries_the_footage_note(tmp_path, make_video, client):
     assert client.get("/api/live").json()["footage_note"] is None
     app, _, _ = scripted_app(tmp_path / "edited", make_video, ["great_tit"], [[GT]], 1,
@@ -355,7 +380,7 @@ def test_live_mjpg_is_404_without_photo_mode(web, client):
 
 def test_page_has_two_feeds_and_the_script_words_them(client):
     html = client.get("/").text
-    for needle in ('id="live-feed"', 'id="live-pane"', ">Live<", "What the model analysed", 'id="source-line"'):
+    for needle in ('id="live-feed"', 'id="live-pane"', ">Live<", 'id="feed-title">AI<', 'id="source-line"'):
         assert needle in html
     assert 'alt="' in html.split('id="live-feed"')[1].split(">")[0]
     js = client.get("/static/app.js").text

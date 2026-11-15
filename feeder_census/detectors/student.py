@@ -59,13 +59,16 @@ class StudentDetector:
         self.count_threshold: float = info["count_threshold"]
         self._classes: list[str] = info["classes"]
         self.species: tuple[str, ...] = tuple(c for c in self._classes if c != UNIDENTIFIED)
-        self._size = int(info["imgsz"])
+        self.imgsz: int = int(info["imgsz"])  # the square picture size the model reads
+        # parameter count, when the card states it (written by hand or by training); never estimated here
+        params = info.get("params")
+        self.params: int | None = params if isinstance(params, int) and not isinstance(params, bool) and params > 0 else None
         self._session = ort.InferenceSession(str(model), providers=["CPUExecutionProvider"])
         self._input_name = self._session.get_inputs()[0].name
 
     def detect(self, frame_bgr: np.ndarray) -> list[Detection]:
         h, w = frame_bgr.shape[:2]
-        square, ratio, pad = letterbox(frame_bgr, self._size, center=True)
+        square, ratio, pad = letterbox(frame_bgr, self.imgsz, center=True)
         rgb = square[:, :, ::-1].transpose(2, 0, 1)[None]
         blob = np.ascontiguousarray(rgb, dtype=np.float32) / 255.0
         output = self._session.run(None, {self._input_name: blob})[0]
