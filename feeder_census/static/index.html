@@ -42,17 +42,13 @@
 
     <div class="side">
       <header class="brand-row">
-        <h1 class="brand"><span class="brand-name">Bird AI</span> <span class="brand-tag">Feeder Census</span></h1>
-        <div class="clock-block">
-          <p class="clock" aria-live="off"><span id="clock-day">—</span> <strong id="clock-time">--:--</strong></p>
-          <p class="demo-clock" id="demo-clock">Demo clock: <span id="scale-footage">1 second</span> of footage = <span id="scale-sim">1 minute</span>.</p>
-        </div>
+        <h1 class="brand"><span class="brand-name">Bird AI</span> <span class="brand-tag">Smart ecosystem monitoring with birds</span></h1>
       </header>
 
       <section class="panel stats" aria-labelledby="stats-title">
         <div class="panel-head">
           <h2 class="panel-title" id="stats-title">Bird stats</h2>
-          <p class="panel-sub">Today <span id="sheet-day"></span></p>
+          <p class="panel-sub">Today</p>
         </div>
         <div class="tally-box" id="tally-box">
           <p class="unseen" id="unseen" hidden></p>
@@ -85,6 +81,7 @@
 </div>
 
 <div class="below">
+  <p class="sim-clock" aria-live="off">The tables are at <span id="clock-day">—</span> <strong id="clock-time">--:--</strong>. <span class="demo-clock" id="demo-clock">Demo clock: <span id="scale-footage">1 second</span> of footage = <span id="scale-sim">1 minute</span>.</span></p>
   <section class="ledger" id="ledger" aria-label="Counts">
     <div class="block">
       <h2>Today by hour <span class="sub" id="today-label"></span></h2>

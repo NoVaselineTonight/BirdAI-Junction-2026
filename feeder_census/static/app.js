@@ -77,7 +77,6 @@ function renderLive() {
   const t = parseSim(live.sim_time);
   setText("clock-day", `${t.weekday} ${t.da} ${MONTHS[t.mo - 1]} ${t.y}`);
   setText("clock-time", `${pad(t.h)}:${pad(t.mi)}`);
-  setText("sheet-day", `${t.da} ${MONTHS[t.mo - 1]}`);
   setText("scale-sim", spanText(live.time_scale));
   if (!modelCard || !modelCard.name) {
     setText("card-name", live.detector);
@@ -379,9 +378,9 @@ async function loadModel() {
   return true;
 }
 
-// 2400000 -> "2.4 million", 850000 -> "850 thousand"
+// 2400000 -> "2.4 million", 999500 -> "1.0 million", 850000 -> "850 thousand"
 function paramsText(n) {
-  if (n >= 1e6) return `${Number((n / 1e6).toFixed(1))} million`;
+  if (n >= 999500) return `${(n / 1e6).toFixed(1)} million`;
   if (n >= 1e3) return `${Math.round(n / 1e3)} thousand`;
   return String(n);
 }

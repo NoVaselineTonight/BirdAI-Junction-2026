@@ -95,10 +95,7 @@ h2 { font-size: 1.3rem; font-weight: 650; letter-spacing: -0.01em; }
 .brand { display: flex; align-items: baseline; gap: 0.6rem; line-height: 1; }
 .brand-name { font-size: 2.3rem; font-weight: 800; letter-spacing: -0.03em; color: var(--spruce); }
 .brand-tag { font-size: 1.1rem; font-weight: 600; color: var(--ink-2); }
-.clock-block { text-align: right; }
-.clock { font-size: 1.05rem; color: var(--ink-2); line-height: 1.1; }
-.clock strong { font-size: 1.7rem; color: var(--ink); font-weight: 750; margin-left: 0.35rem; }
-.demo-clock { font-size: 1rem; color: var(--ink-2); }
+.brand { flex-wrap: wrap; row-gap: 0.25rem; }
 
 /* census paper */
 .panel {
@@ -120,7 +117,12 @@ h2 { font-size: 1.3rem; font-weight: 650; letter-spacing: -0.01em; }
 .tally-box { min-height: 0; }
 .tally-box.cols-2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 1.6rem; align-items: start; }
 .tally-box .unseen { grid-column: 1 / -1; color: var(--ink-2); font-weight: 600; margin-bottom: 0.3rem; }
-.tally { width: 100%; border-collapse: collapse; }
+/* fixed number columns: the two side-by-side lists line up row for row, headings wrap alike */
+.tally { width: 100%; border-collapse: collapse; table-layout: fixed; }
+.tally thead th.num:nth-child(2) { width: 4.6rem; }
+.tally thead th.num:nth-child(3) { width: 7.2rem; }
+.tally-box.tight .tally thead th.num:nth-child(2) { width: 3.6rem; }
+.tally-box.tight .tally thead th.num:nth-child(3) { width: 4.6rem; }
 .tally thead th {
   text-align: left; font-weight: 650; font-size: 1rem; color: var(--ink-2); line-height: 1.15;
   padding: 0 0 0.25rem; border-bottom: 2px solid var(--ink); vertical-align: bottom; white-space: nowrap;
@@ -195,6 +197,8 @@ html.kiosk .more-hint { display: none; }
   border-top: 2px solid var(--ink);
 }
 .below > *, .block { min-width: 0; }
+.sim-clock { color: var(--ink-2); font-size: 1.05rem; }
+.sim-clock strong { color: var(--ink); }
 
 .ledger {
   display: grid;
@@ -274,7 +278,6 @@ a:focus-visible { outline: 3px solid var(--bullfinch); outline-offset: 3px; }
   .board { display: flex; flex-direction: column; }
   .side { display: contents; }
   .brand-row { order: -1; }
-  .clock-block { text-align: left; }
   .ledger { grid-template-columns: minmax(0, 1fr); }
 }
 @media (max-width: 480px) {
