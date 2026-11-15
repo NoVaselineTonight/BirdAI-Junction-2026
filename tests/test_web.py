@@ -314,3 +314,42 @@ def test_model_table_names_every_nameable_species_and_falls_back_to_a_readable_k
     assert "tables.nameable" in js.split("function renderModel()")[1].split("/* ---------- feed")[0]
     assert "tables.species" not in js.split("function renderModel()")[1].split("/* ---------- feed")[0]
     assert 'k.replace(/_/g, " ")' in js
+
+
+# --- source and the second (raw) feed ---
+
+
+def test_live_state_names_the_source_and_whether_there_are_two_feeds(tmp_path, make_video, client):
+    j = client.get("/api/live").json()
+    assert j["source"] == "recorded" and j["recorded"] is True and j["two_feeds"] is False
+    app, _, _ = scripted_app(tmp_path / "cam", make_video, ["great_tit"], [[GT]], 1, source="camera",
+                             photo_mode=True, detect_every_s=5.0)
+    with TestClient(app) as c:
+        j = c.get("/api/live").json()
+    assert j["source"] == "camera" and j["recorded"] is False and j["two_feeds"] is True
+
+
+def test_live_mjpg_streams_the_raw_feed_in_photo_mode(tmp_path, make_video):
+    app, _, pipeline = scripted_app(tmp_path / "photo", make_video, ["great_tit"], [[GT]], 1, photo_mode=True)
+    app.state.stopping.set()
+    with TestClient(app) as c:
+        r = c.get("/live.mjpg")
+    raw = pipeline.live().raw_jpeg
+    assert r.status_code == 200 and r.headers["content-type"] == "multipart/x-mixed-replace; boundary=frame"
+    assert r.content.startswith(b"--frame\r\nContent-Type: image/jpeg\r\n") and raw and raw in r.content
+
+
+def test_live_mjpg_is_404_without_photo_mode(web, client):
+    web[0].state.stopping.set()
+    assert client.get("/live.mjpg").status_code == 404
+
+
+def test_page_has_two_feeds_and_the_script_words_them(client):
+    html = client.get("/").text
+    for needle in ('id="live-feed"', 'id="live-pane"', ">Live<", "What the model analysed", 'id="source-line"'):
+        assert needle in html
+    assert 'alt="' in html.split('id="live-feed"')[1].split(">")[0]
+    js = client.get("/static/app.js").text
+    assert '"/live.mjpg"' in js and "Live picture from the camera." in js
+    assert "Recorded feeder footage, playing in real time, standing in for the camera." in js
+    assert "s, with a box around each bird the model found." in js

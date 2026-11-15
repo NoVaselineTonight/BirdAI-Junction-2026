@@ -83,6 +83,16 @@ main { padding: var(--gap); display: grid; gap: calc(var(--gap) * 1.6); }
   color: var(--hide-ink); font-size: 1.2rem;
 }
 
+/* Photo mode: the live picture and the analysed photo, the same width; side by side from 900 px, stacked below */
+.feeds { display: grid; gap: var(--gap); }
+.pane { display: grid; gap: 0.4rem; align-content: start; min-width: 0; }
+.pane-title { margin: 0; font-size: 1.15rem; font-weight: 650; letter-spacing: -0.01em; }
+.pane-note { color: var(--ink-2); font-size: 1rem; }
+.pane .window { width: 100%; } /* a grid item with auto margins would shrink; fill the pane as before */
+@media (min-width: 900px) {
+  .feeds.two { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
 .honesty {
   display: flex; flex-wrap: wrap; gap: 0.2rem 2rem;
   padding-top: 0.7rem;

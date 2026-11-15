@@ -21,12 +21,26 @@
 <main>
   <section class="now" aria-label="Live">
     <figure class="feed">
-      <div class="window">
-        <img id="feed" alt="Live view of the feeder with a box around each bird the model found">
-        <p class="waiting" id="waiting">Waiting for the first frame…</p>
+      <div class="feeds" id="feeds">
+        <div class="pane" id="live-pane" hidden>
+          <h3 class="pane-title">Live</h3>
+          <div class="window">
+            <img id="live-feed" alt="Live picture of the feeder as the camera sees it, without boxes">
+            <p class="waiting" id="live-waiting">Waiting for the first frame…</p>
+          </div>
+          <p class="pane-note" id="live-note"></p>
+        </div>
+        <div class="pane">
+          <h3 class="pane-title" id="feed-title" hidden>What the model analysed</h3>
+          <div class="window">
+            <img id="feed" alt="Live view of the feeder with a box around each bird the model found">
+            <p class="waiting" id="waiting">Waiting for the first frame…</p>
+          </div>
+          <p class="pane-note" id="feed-note" hidden></p>
+        </div>
       </div>
       <figcaption class="honesty">
-        <p>Recorded feeder footage, standing in for the camera. <span class="footage-note" id="footage-note" hidden></span> <span class="footage-note" id="photo-note" hidden></span></p>
+        <p><span id="source-line">Recorded feeder footage, standing in for the camera.</span> <span class="footage-note" id="footage-note" hidden></span> <span class="footage-note" id="photo-note" hidden></span></p>
         <p id="demo-clock">Demo clock: <span id="scale-footage">1 second</span> of footage = <span id="scale-sim">1 minute</span>.</p>
       </figcaption>
     </figure>

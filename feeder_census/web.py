@@ -60,8 +60,10 @@ def create_app(
             "sim_time": s.sim_time.isoformat(), "detector": s.detector, "detect_ms": round(s.detect_ms, 1),
             "now": s.now, "confirmed": s.confirmed, "unidentified": s.unidentified,
             "day_max": s.day_max, "visits_today": s.visits_today,  # visits are arrivals, not birds
-            "time_scale": settings.time_scale, "recorded": True, "footage_note": settings.footage_note,
+            "time_scale": settings.time_scale, "footage_note": settings.footage_note,
+            "source": settings.source, "recorded": settings.source == "recorded",
             "photo_every_s": settings.detect_every_s if settings.photo_mode else None,
+            "two_feeds": settings.photo_mode,  # photo mode: the raw picture (/live.mjpg) beside the analysed photo
             "error": None if error is None else (str(error) or type(error).__name__),
             "latch": {"mode": s.latch.mode, "closed": s.latch.closed, "reason": s.latch.reason,
                       "error": s.latch.error, "reason_name": pest_names.get(s.latch.reason),
@@ -130,14 +132,27 @@ def create_app(
             headers={"Cache-Control": "no-store"},
         )
 
+    @app.get("/live.mjpg")
+    async def live_stream(request: Request) -> StreamingResponse:
+        if not settings.photo_mode:  # only photo mode keeps a raw picture apart from the preview
+            raise HTTPException(404)
+        return StreamingResponse(
+            _frames(pipeline, request, app.state.stopping, settings.preview_fps, raw=True),
+            media_type=f"multipart/x-mixed-replace; boundary={_BOUNDARY}",
+            headers={"Cache-Control": "no-store"},
+        )
+
     return app
 
 
-async def _frames(pipeline: Pipeline, request: Request, stopping: threading.Event, fps: float) -> AsyncIterator[bytes]:
-    """The latest preview JPEG whenever it changed, until the client leaves or the server stops."""
+async def _frames(
+    pipeline: Pipeline, request: Request, stopping: threading.Event, fps: float, raw: bool = False,
+) -> AsyncIterator[bytes]:
+    """The latest preview (or raw) JPEG whenever it changed, until the client leaves or the server stops."""
     last = b""
     while True:
-        jpeg = pipeline.live().jpeg
+        state = pipeline.live()
+        jpeg = state.raw_jpeg if raw else state.jpeg
         if jpeg and jpeg is not last:
             last = jpeg
             yield (f"--{_BOUNDARY}\r\nContent-Type: image/jpeg\r\nContent-Length: {len(jpeg)}\r\n\r\n".encode()

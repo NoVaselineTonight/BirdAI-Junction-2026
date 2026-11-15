@@ -417,3 +417,89 @@ def test_a_broken_angles_file_is_a_warning_not_a_stop(monkeypatch, tmp_path, mak
     code, calls, state = run_router_cli(monkeypatch, tmp_path, make_video, angles="not json")
     assert code == 0 and calls == [("set", False)]
     assert "latch_angles.json" in capsys.readouterr().err
+
+
+# --- the camera source: --camera instead of --videos ---
+
+from feeder_census import camera as camera_module  # noqa: E402
+
+
+def cli_argv(tmp_path, *source):
+    script = tmp_path / "script.json"
+    script.write_text('{"species": ["great_tit"], "frames": [[]]}')
+    return [*source, "--detector", "scripted", "--script", str(script), "--db", str(tmp_path / "data" / "c.db"),
+            "--no-web"]
+
+
+def test_neither_videos_nor_camera_is_a_usage_error_naming_both(tmp_path, capsys):
+    with pytest.raises(SystemExit) as stop:
+        cli.main(cli_argv(tmp_path))
+    err = capsys.readouterr().err
+    assert stop.value.code == 2 and "--videos" in err and "--camera" in err
+
+
+def test_both_videos_and_camera_is_a_usage_error_naming_both(tmp_path, make_video, capsys):
+    with pytest.raises(SystemExit) as stop:
+        cli.main(cli_argv(tmp_path, "--videos", str(make_video()), "--camera", "/dev/video4"))
+    err = capsys.readouterr().err
+    assert stop.value.code == 2 and "--videos" in err and "--camera" in err
+
+
+def test_fast_with_camera_is_a_usage_error(tmp_path, capsys):
+    with pytest.raises(SystemExit) as stop:
+        cli.main(cli_argv(tmp_path, "--camera", "/dev/video4", "--fast"))
+    err = capsys.readouterr().err
+    assert stop.value.code == 2 and "--fast" in err and "--camera" in err
+
+
+def test_camera_rotate_takes_only_0_or_180():
+    with pytest.raises(SystemExit):
+        cli._parser().parse_args(["--camera", "0", "--camera-rotate", "90"])
+    assert cli._parser().parse_args(["--camera", "0"]).camera_rotate == 0
+
+
+class _Unopened:
+    def isOpened(self):
+        return False
+
+    def release(self):
+        pass
+
+
+def test_a_camera_that_cannot_open_exits_2_with_one_line_naming_the_device(monkeypatch, tmp_path, capsys):
+    opened = []
+    monkeypatch.setattr(camera_module, "_open_capture", lambda source: opened.append(source) or _Unopened())
+    assert cli.main(cli_argv(tmp_path, "--camera", "/dev/video99")) == 2
+    err = capsys.readouterr().err
+    assert opened == ["/dev/video99"]
+    assert err.strip().splitlines()[-1] == "error: cannot open camera /dev/video99" and "Traceback" not in err
+
+
+def test_camera_source_reaches_the_settings_and_the_pipeline(monkeypatch, tmp_path):
+    seen = {}
+
+    class FakeLiveCamera:
+        def __init__(self, device, rotate=0):
+            seen["camera"] = (device, rotate)
+
+    class StubPipeline:
+        error = None
+
+        def __init__(self, camera, detector, store, settings, *args, **kwargs):
+            seen["settings"], seen["inline"] = settings, kwargs.get("inline")
+
+        def run(self, stop):
+            pass
+
+    monkeypatch.setattr(cli, "LiveCamera", FakeLiveCamera)
+    monkeypatch.setattr(cli, "Pipeline", StubPipeline)
+    argv = cli_argv(tmp_path, "--camera", "/dev/video4", "--camera-rotate", "180", "--photo-every-s", "5")
+    assert cli.main(argv) == 0
+    s = seen["settings"]
+    assert seen["camera"] == ("/dev/video4", 180) and seen["inline"] is False
+    assert s.source == "camera" and s.photo_mode is True and s.detect_every_s == 5.0 and s.footage_note is None
+    assert s.time_scale == Settings.time_scale
+
+
+def test_videos_source_is_recorded(monkeypatch, tmp_path, make_video):
+    assert run_cli(monkeypatch, tmp_path, make_video).source == "recorded"

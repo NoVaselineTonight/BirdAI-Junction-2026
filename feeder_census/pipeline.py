@@ -10,7 +10,7 @@ from datetime import date, datetime
 import cv2
 import numpy as np
 
-from feeder_census.camera import SimClock, SimulatedCamera
+from feeder_census.camera import LiveCamera, SimClock, SimulatedCamera
 from feeder_census.census import ConfirmFilter, frame_counts
 from feeder_census.config import Settings
 from feeder_census.detectors.base import Detector
@@ -36,6 +36,7 @@ class LiveState:
     day_max: dict[str, int]  # largest number seen at once today
     latch: LatchState
     pests: dict[str, int]  # pest boxes in frame now, every pest key; pests are never census birds
+    raw_jpeg: bytes = b""  # photo mode only: the camera frame as it came, no boxes; empty otherwise
 
 
 class Pipeline:
@@ -48,7 +49,7 @@ class Pipeline:
 
     def __init__(
         self,
-        camera: SimulatedCamera,
+        camera: SimulatedCamera | LiveCamera,
         detector: Detector,
         store: Store,
         settings: Settings,
@@ -86,6 +87,8 @@ class Pipeline:
         self._detect_ms = 0.0
         self._jpeg = b""
         self._last_preview: float | None = None
+        self._raw_jpeg = b""  # photo mode: the raw camera picture, beside the analysed photo
+        self._last_raw: float | None = None
         self._first_shown = False  # photo mode: the first frame has been shown
         self._last_start_t: float | None = None  # footage time the last detection started
         self._day: date | None = None  # worker side only
@@ -102,6 +105,7 @@ class Pipeline:
                 self._jpeg, self.clock.at(self._total_s), dict(self._now), dict(self._confirmed),
                 self._unidentified, self._detect_ms, self.detector.name,
                 dict(self._visits), dict(self._day_max), self._latch_state, dict(self._pests_now),
+                self._raw_jpeg,
             )
 
     def _today(self, day: date) -> tuple[dict[str, int], dict[str, int]]:
@@ -131,7 +135,9 @@ class Pipeline:
                     self._executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="detector")
                 self._busy.set()
                 self._executor.submit(self._job, frame, gap)
-        if not self.settings.photo_mode:
+        if self.settings.photo_mode:
+            self._update_raw(frame)
+        else:
             self._update_preview(frame)
 
     def run(self, stop: threading.Event) -> None:
@@ -156,15 +162,30 @@ class Pipeline:
             detections = list(self.last_detections)
         self._show(frame, detections)
 
+    def _update_raw(self, frame: np.ndarray) -> None:
+        """Photo mode: the camera picture without boxes, at most `preview_fps` times a second."""
+        now = time.monotonic()
+        if self._last_raw is not None and now - self._last_raw < 1.0 / self.settings.preview_fps:
+            return
+        self._last_raw = now
+        jpeg = self._encode(frame)
+        if jpeg:
+            with self._lock:
+                self._raw_jpeg = jpeg
+
     def _show(self, frame: np.ndarray, detections: list[Detection]) -> None:
-        img = annotate(frame, detections, self.names, self._threshold, self._pest_thresholds)
+        jpeg = self._encode(annotate(frame, detections, self.names, self._threshold, self._pest_thresholds))
+        if jpeg:
+            with self._lock:
+                self._jpeg = jpeg
+
+    def _encode(self, img: np.ndarray) -> bytes:
+        """A preview JPEG, scaled down to `preview_width`; empty if encoding failed."""
         width = self.settings.preview_width
         if img.shape[1] > width:
             img = cv2.resize(img, (width, round(img.shape[0] * width / img.shape[1])), interpolation=cv2.INTER_AREA)
         ok, buf = cv2.imencode(".jpg", img, [cv2.IMWRITE_JPEG_QUALITY, 70])
-        if ok:
-            with self._lock:
-                self._jpeg = buf.tobytes()
+        return buf.tobytes() if ok else b""
 
     def _job(self, frame: np.ndarray, gap: float | None) -> None:
         try:

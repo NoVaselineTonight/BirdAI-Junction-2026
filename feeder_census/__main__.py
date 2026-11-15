@@ -9,7 +9,7 @@ from pathlib import Path
 
 import uvicorn
 
-from feeder_census.camera import SimulatedCamera, _expand
+from feeder_census.camera import LiveCamera, SimulatedCamera, _expand
 from feeder_census.config import Settings
 from feeder_census.detectors import KINDS, build_detector
 from feeder_census.latch import MODES as LATCH_MODES, ROUTER_SOCKET, AnglesLatch, LatchError, RouterLatch, load_angles
@@ -38,7 +38,12 @@ def _positive(text: str) -> float:
 
 def _parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="python -m feeder_census", description=__doc__)
-    p.add_argument("--videos", nargs="+", required=True, type=Path, help="video files or folders")
+    source = p.add_mutually_exclusive_group(required=True)
+    source.add_argument("--videos", nargs="+", type=Path, help="video files or folders")
+    source.add_argument("--camera", metavar="DEVICE", default=None,
+                        help="a live USB webcam instead of video: a path such as /dev/video4, or a camera number")
+    p.add_argument("--camera-rotate", type=int, choices=(0, 180), default=0,
+                   help="180 turns the camera picture upside down (default: %(default)s)")
     p.add_argument("--detector", choices=("auto", *KINDS), default="auto",
                    help="auto: the kind named by models/model_card.json, else two_stage (default: %(default)s)")
     p.add_argument("--db", type=Path, default=Path("data/census.db"))
@@ -146,6 +151,8 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     if args.photo_every_s is not None and args.detect_every_s is not None:
         parser.error("give one of --photo-every-s and --detect-every-s, not both")
+    if args.fast and args.camera is not None:
+        parser.error("--fast plays recorded video unpaced; it cannot be used with --camera")
     photo = args.photo_every_s is not None
     detect_every_s = args.photo_every_s if photo else args.detect_every_s
     if detect_every_s is None:
@@ -160,10 +167,16 @@ def main(argv: list[str] | None = None) -> int:
         detector = build_detector(
             kind, args.models_dir, species, script=args.script, student_dir=args.student_dir
         )
-        camera = SimulatedCamera(args.videos, realtime=not args.fast)
+        camera = SimulatedCamera(args.videos, realtime=not args.fast) if args.camera is None else None
     except (FileNotFoundError, ValueError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1
+    if camera is None:
+        try:
+            camera = LiveCamera(args.camera, rotate=args.camera_rotate)
+        except ValueError as exc:  # the message names the device
+            print(f"error: {exc}", file=sys.stderr)
+            return 2
     if card is not None and card.get("name") != detector.name:
         # stale files: the card was measured for another model than the one that loaded
         print(f"warning: model card is for {card.get('name')!r} but {detector.name!r} loaded; not showing the card",
@@ -189,8 +202,8 @@ def main(argv: list[str] | None = None) -> int:
         detect_every_s=detect_every_s, photo_mode=photo,
         max_gap_s=max(Settings.max_gap_s, 2 * detect_every_s) if photo else Settings.max_gap_s, roi=args.roi, port=args.port,
         evidence_dir=args.db.parent / "evidence", count_threshold=threshold,
-        footage_note=args.footage_note if args.footage_note is not None else _footage_note(args.videos),
-        latch=args.latch,
+        footage_note=args.footage_note if args.footage_note is not None or args.camera else _footage_note(args.videos),
+        latch=args.latch, source="camera" if args.camera is not None else "recorded",
     )
     in_force = threshold if threshold is not None else detector.count_threshold
     print(f"detector: {kind} ({why}); counting threshold {in_force:g}", flush=True)

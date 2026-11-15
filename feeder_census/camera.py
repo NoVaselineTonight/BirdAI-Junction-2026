@@ -1,5 +1,5 @@
 import time
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from datetime import date, datetime, timedelta
 from datetime import time as clock_time
 from pathlib import Path
@@ -102,6 +102,52 @@ class SimulatedCamera:
         if not ok:
             raise ValueError(f"cannot decode video {self._files[self._file].name}")
         return frame, t
+
+    def close(self) -> None:
+        if self._cap is not None:
+            self._cap.release()
+            self._cap = None
+
+
+def _open_capture(source: str | int) -> cv2.VideoCapture:
+    """The real OpenCV call: V4L2 for a device path, OpenCV's own choice for a camera number."""
+    if isinstance(source, str):
+        return cv2.VideoCapture(source, cv2.CAP_V4L2)
+    return cv2.VideoCapture(source)
+
+
+class LiveCamera:
+    """A USB webcam. `read` gives the newest frame and the seconds since the first one. Frames are never saved."""
+
+    def __init__(
+        self, device: str, rotate: int = 0, size: tuple[int, int] = (1280, 720),
+        open_capture: Callable[[str | int], cv2.VideoCapture] | None = None,
+    ):
+        if rotate not in (0, 180):
+            raise ValueError(f"camera rotate must be 0 or 180, got {rotate}")
+        self._device, self._rotate = device, rotate
+        opener = open_capture if open_capture is not None else _open_capture  # looked up now, so tests can swap it
+        cap = opener(int(device) if device.isdigit() else device)
+        if not cap.isOpened():
+            cap.release()
+            raise ValueError(f"cannot open camera {device}")
+        cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*"MJPG"))
+        cap.set(cv2.CAP_PROP_FRAME_WIDTH, size[0])
+        cap.set(cv2.CAP_PROP_FRAME_HEIGHT, size[1])
+        cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)  # the newest frame, not one queued while the caller was busy
+        self._cap: cv2.VideoCapture | None = cap
+        self._start: float | None = None
+
+    def read(self) -> tuple[np.ndarray, float]:
+        ok, frame = self._cap.read() if self._cap is not None else (False, None)
+        if not ok or frame is None:
+            raise ValueError(f"camera {self._device} gave no picture")
+        now = time.monotonic()
+        if self._start is None:
+            self._start = now
+        if self._rotate == 180:
+            frame = cv2.rotate(frame, cv2.ROTATE_180)
+        return frame, now - self._start
 
     def close(self) -> None:
         if self._cap is not None:

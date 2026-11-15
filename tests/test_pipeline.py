@@ -402,3 +402,43 @@ def test_without_photo_mode_every_camera_frame_refreshes_the_preview(tmp_path):
     time.sleep(0.01)  # past the preview interval
     p.step()  # no detection due, but the preview follows the camera
     assert p.detector.calls == 1 and p.live().jpeg != first
+
+
+# --- photo mode: a second, raw preview of every camera frame ---
+
+
+def test_photo_mode_keeps_a_raw_preview_that_follows_the_camera_while_the_photo_holds(tmp_path):
+    p = photo_pipeline(tmp_path, [[GT]])
+    p.step()  # footage 0 s: a detection
+    raw, photo = p.live().raw_jpeg, p.live().jpeg
+    assert raw.startswith(b"\xff\xd8") and raw != photo  # the raw frame carries no box
+    step_past_throttle(p)  # footage 0.5 s: no detection due
+    assert p.detector.calls == 1 and p.live().jpeg == photo
+    assert p.live().raw_jpeg.startswith(b"\xff\xd8") and p.live().raw_jpeg != raw
+    step_past_throttle(p)
+    assert p.live().raw_jpeg != raw
+
+
+def test_raw_preview_is_throttled_to_preview_fps(tmp_path):
+    p = build(tmp_path, None, [[]], camera=VaryingCamera(), photo_mode=True, preview_fps=0.001)[0]
+    p.step()
+    first = p.live().raw_jpeg
+    p.step()
+    p.step()
+    assert first.startswith(b"\xff\xd8") and p.live().raw_jpeg == first
+
+
+def test_raw_preview_is_scaled_to_preview_width(tmp_path):
+    import cv2
+
+    p = build(tmp_path, None, [[]], camera=VaryingCamera(), photo_mode=True, preview_width=160)[0]
+    p.step()
+    img = cv2.imdecode(np.frombuffer(p.live().raw_jpeg, np.uint8), cv2.IMREAD_COLOR)
+    assert img.shape[:2] == (120, 160)
+
+
+def test_without_photo_mode_there_is_no_raw_preview(tmp_path):
+    p = build(tmp_path, None, [[GT]], camera=VaryingCamera(), preview_fps=1000.0)[0]
+    for _ in range(3):
+        step_past_throttle(p)
+    assert p.live().jpeg.startswith(b"\xff\xd8") and p.live().raw_jpeg == b""
