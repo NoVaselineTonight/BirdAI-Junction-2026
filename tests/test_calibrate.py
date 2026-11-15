@@ -74,7 +74,7 @@ def test_the_page_is_one_plain_html_document(served):
 
 def test_state_before_anything_is_set_shows_the_defaults(served):
     base, _, _ = served
-    assert call(base, "/state") == (200, {"angle": None, "open": 180, "closed": 25, "saved": False, "error": None})
+    assert call(base, "/state") == (200, {"angle": None, "open": 180, "closed": 0, "saved": False, "error": None})
 
 
 def test_state_shows_the_saved_angles(tmp_path):
@@ -125,8 +125,8 @@ def test_save_writes_the_file_and_sends_the_limits(served):
     base, board, angles = served
     call(base, "/angle", {"degrees": 150})
     status, reply = call(base, "/save", {"which": "open"})
-    assert status == 200 and reply == {"open": 150, "closed": 25, "saved": True}
-    assert json.loads(angles.read_text()) == {"open": 150, "closed": 25}
+    assert status == 200 and reply == {"open": 150, "closed": 0, "saved": True}
+    assert json.loads(angles.read_text()) == {"open": 150, "closed": 0}
     call(base, "/angle", {"degrees": 40})
     assert call(base, "/save", {"which": "closed"})[1]["closed"] == 40
     assert json.loads(angles.read_text()) == {"open": 150, "closed": 40}

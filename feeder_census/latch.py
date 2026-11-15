@@ -23,7 +23,7 @@ from typing import Protocol
 
 MODES = ("off", "sim", "router")
 ROUTER_SOCKET = Path("/var/run/arduino-router.sock")
-DEFAULT_OPEN, DEFAULT_CLOSED = 180, 25  # the sketch's own start values (board/latch/latch.ino)
+DEFAULT_OPEN, DEFAULT_CLOSED = 180, 0  # the sketch's own start values (board/latch/latch.ino)
 MAX_DEGREES = 180
 
 
@@ -228,7 +228,7 @@ def load_angles(path: Path) -> tuple[int, int] | None:
     except ValueError as exc:
         raise LatchError(f"{path} is not valid JSON ({exc}); delete it or save the angles again")
     if not (isinstance(data, dict) and _is_degrees(data.get("open")) and _is_degrees(data.get("closed"))):
-        raise LatchError(f'{path} must look like {{"open": 180, "closed": 25}} with angles from 0 to {MAX_DEGREES}, '
+        raise LatchError(f'{path} must look like {{"open": 180, "closed": 0}} with angles from 0 to {MAX_DEGREES}, '
                          f"got {text.strip()[:80]!r}")
     return data["open"], data["closed"]
 
@@ -280,12 +280,12 @@ class RouterLatch:
         self.call("set_latch", [bool(closed)])
 
     def set_angle(self, degrees: int) -> int:
-        """Turns the servo to `degrees` (0..180) at once; returns the angle the board used."""
+        """Starts turning the servo to `degrees` (0..180), 10 degrees every 0.1 s; returns the angle the board used."""
         _check_degrees(degrees)
         return self._int_result("set_angle", self.call("set_angle", [degrees]))
 
     def get_angle(self) -> int:
-        """The last angle the board wrote to the servo."""
+        """The angle the servo is going to or has reached (the board's target)."""
         return self._int_result("get_angle", self.call("get_angle", []))
 
     def set_limits(self, open_degrees: int, closed_degrees: int) -> None:

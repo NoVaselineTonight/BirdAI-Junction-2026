@@ -20,38 +20,42 @@
   - The servo is a 180 degree position servo. It turns at most half a turn and does not spin round.
   - Both pull wires go on the same axis (spool or horn), wound the same way, so they rise together.
   - A spool or horn of radius r pulls about 3.1 x r of wire in half a turn, and about 2.6 x r over
-    the default travel of about 28 to 180 degrees (r = 1 cm: about 2.6 cm of wire, up to about 3 cm at
+    the lifting travel of about 28 to 180 degrees (r = 1 cm: about 2.6 cm of wire, up to about 3 cm at
     0 to 180).
   - On our feeder the hatch is a small board hinged along its top edge. Lifted (the slot under it
-    exposed) is open: the high angle, 180. Hanging down over the slot is closed: 25. Closed is by
-    gravity only, nothing holds the board shut. The wires are slack up to about 25 degrees, the board
-    starts to lift at about 28 to 30 degrees and is still rising at 180, so "open" is at the end of the
-    servo's range.
-  - The angles were measured with a camera on 15 November 2026 with the library's default pulse range
-    (544-2400 us). The sketch now attaches with the wider range from the servo's data sheet,
-    SERVO_MIN_US = 500 to SERVO_MAX_US = 2500 us, so that 180 turns the servo its full 180 degrees. The
-    wider range is NOT YET MEASURED on our feeder: the hatch should open a little further, but nobody
-    has watched it yet. At the end of its range a hobby servo may buzz or get warm. If it does, the fix
-    is a lower open angle or a smaller SERVO_MAX_US.
+    exposed) is open: the high angle, 180. Hanging down over the slot is closed: 0. Closed is by
+    gravity only, nothing holds the board shut. A camera check on 15 November 2026 (with the library's
+    default pulse range, 544-2400 us) saw the wires slack up to about 25 degrees, the board starting to
+    lift at about 28 to 30 degrees and still rising at 180, so "open" is at the end of the servo's range.
+  - The defaults open = 180 and closed = 0 are the team's own calibration on the feeder, saved on the
+    calibration page on 15 November 2026. The sketch attaches with the pulse range from the servo's data
+    sheet, SERVO_MIN_US = 500 to SERVO_MAX_US = 2500 us, so that 180 turns the servo its full 180
+    degrees. At the end of its range a hobby servo may buzz or get warm. If it does, the fix is a lower
+    open angle or a smaller SERVO_MAX_US.
+  - The servo never jumps to a new angle. Every move after setup() is walked in steps of at most
+    STEP_DEGREES (10) degrees, one step every STEP_INTERVAL_MS (100 ms); the last step may be shorter so
+    it lands exactly on the target. A full 180 degree swing takes about 1.8 s. The bridge calls only set
+    the target and return at once; loop() does the stepping. A new target during a move redirects the
+    walk from where the servo is now. The stepped movement has NOT YET been watched on the feeder.
   - Rated torque is about 1.6 kg.cm at 4.8 V, so r = 1 cm gives about 1.6 kg at stall. Plan for well
     under half of that for both wires together (about 0.5 kg at r = 1 cm, 0.25 kg at r = 2 cm).
     A servo held stalled gets hot and can reset the board.
 
   Bring-up from the board's Linux shell: python -m feeder_census.latch close | open | cycle | angle N
 
-  Angles: start with 180 (open, hatch lifted) and 25 (closed, hatch hanging down). Three more calls let the Linux side find the right angles
+  Angles: start with 180 (open, hatch lifted) and 0 (closed, hatch hanging down). Three more calls let the Linux side find the right angles
   without editing this file (the page python -m feeder_census.calibrate uses them):
-  - set_angle(degrees): clamps to 0..180, turns the servo there at once and returns the angle used. The servo
+  - set_angle(degrees): clamps to 0..180, starts turning the servo there (in steps) and returns the angle used. The servo
     is then in a "hand-set" position: the 30 s fail-safe does not reopen it (calibration needs it to stay),
     but a hand-set angle goes back to the open angle by itself HAND_SET_TIMEOUT_MS (10 minutes) after the
     last set_angle call, and the latch is then open. So the feeder never stays shut for good, even when a
     person sets a closed angle and walks away. The next set_latch also moves a hand-set servo, even when the
     latch is already in that state.
-  - get_angle(): the last angle written to the servo.
+  - get_angle(): the target angle, where the servo is going or has arrived (not the step it is at).
   - set_limits(open_degrees, closed_degrees): clamps both to 0..180 and stores them as the open and closed
     angles. Unless the servo is in a hand-set position it moves to the new angle of its current state.
   The limits set this way live in memory only: they are lost at a restart of the microcontroller, which
-  goes back to 180 and 25. The Linux side sends them again at its start (data/latch_angles.json). To make
+  goes back to 180 and 0. The Linux side sends them again at its start (data/latch_angles.json). To make
   other angles the sketch's own, change the two start values below.
 */
 
@@ -63,7 +67,10 @@ const int SERVO_MIN_US = 500;   // pulse width for 0 degrees (servo data sheet; 
 const int SERVO_MAX_US = 2500;  // pulse width for 180 degrees (servo data sheet; the library default is 2400)
 
 int servoOpen = 180;   // hatch lifted
-int servoClosed = 25;  // hatch hanging down
+int servoClosed = 0;   // hatch hanging down
+
+const int STEP_DEGREES = 10;               // the servo moves at most this far per step
+const unsigned long STEP_INTERVAL_MS = 100;  // one step every 0.1 s: a full 180 degree swing takes about 1.8 s
 
 const unsigned long REOPEN_AFTER_MS = 30000;  // fail-safe: open when no close command came for 30 s
 const unsigned long HAND_SET_TIMEOUT_MS = 600000;  // a hand-set angle goes back to open 10 minutes after the last set_angle
@@ -74,15 +81,49 @@ volatile bool latchClosed = false;
 volatile bool handSet = false;  // the servo was turned by set_angle and has not been moved by set_latch since
 volatile unsigned long lastCloseMs = 0;
 volatile unsigned long handSetMs = 0;  // when set_angle was last called
-int lastAngle = 180;
+int currentAngle = 180;  // the angle last written to the servo (one step of a move)
+int targetAngle = 180;   // where the servo is going or has arrived
+bool moving = false;     // a move is under way, so the next step waits for STEP_INTERVAL_MS
+unsigned long lastStepMs = 0;
 
 int clampAngle(int degrees) {
   return degrees < 0 ? 0 : (degrees > 180 ? 180 : degrees);
 }
 
+// Only at power-up: the servo's real position is unknown then, so there is nothing to step from.
 void writeAngle(int degrees) {
   servo.write(degrees);
-  lastAngle = degrees;
+  currentAngle = degrees;
+  targetAngle = degrees;
+  moving = false;
+}
+
+// Every move after setup(): set where to go; stepServo() in loop() walks the servo there.
+void setTarget(int degrees) {
+  targetAngle = degrees;
+}
+
+// Called from loop(). The first step of a new move is taken at once, the next ones every
+// STEP_INTERVAL_MS. millis() differences are unsigned, so the wrap-around after about 49 days is safe.
+void stepServo() {
+  if (currentAngle == targetAngle) {
+    moving = false;
+    return;
+  }
+  unsigned long now = millis();
+  if (moving && now - lastStepMs < STEP_INTERVAL_MS) {
+    return;
+  }
+  int diff = targetAngle - currentAngle;
+  if (diff > STEP_DEGREES) {
+    diff = STEP_DEGREES;
+  } else if (diff < -STEP_DEGREES) {
+    diff = -STEP_DEGREES;
+  }
+  currentAngle += diff;
+  servo.write(currentAngle);
+  lastStepMs = now;
+  moving = currentAngle != targetAngle;
 }
 
 // Moves the servo. Does nothing when the latch is already in that state, so the close command
@@ -91,7 +132,7 @@ void moveLatch(bool closed) {
   if (closed == latchClosed && !handSet) {
     return;
   }
-  writeAngle(closed ? servoClosed : servoOpen);
+  setTarget(closed ? servoClosed : servoOpen);
   latchClosed = closed;
   handSet = false;
 }
@@ -108,17 +149,17 @@ bool get_latch() {
   return latchClosed;
 }
 
-// Calibration: turn the servo to any angle at once. The fail-safe does not reopen a hand-set angle.
+// Calibration: turn the servo (in steps) to any angle. The fail-safe does not reopen a hand-set angle.
 int set_angle(int degrees) {
   int used = clampAngle(degrees);
-  writeAngle(used);
+  setTarget(used);
   handSet = true;
   handSetMs = millis();
   return used;
 }
 
 int get_angle() {
-  return lastAngle;
+  return targetAngle;  // the calibration page shows this after a press, so it reports where the servo is going
 }
 
 // Calibration: new open and closed angles, in memory only.
@@ -126,13 +167,14 @@ bool set_limits(int open_degrees, int closed_degrees) {
   servoOpen = clampAngle(open_degrees);
   servoClosed = clampAngle(closed_degrees);
   if (!handSet) {
-    writeAngle(latchClosed ? servoClosed : servoOpen);
+    setTarget(latchClosed ? servoClosed : servoOpen);
   }
   return true;
 }
 
 void setup() {
-  // a restart always leaves the feeder open
+  // a restart always leaves the feeder open; written directly, not stepped: at power-up the servo's
+  // real position is unknown, so there is nothing to step from
   servo.attach(SERVO_PIN, SERVO_MIN_US, SERVO_MAX_US);
   writeAngle(servoOpen);
 
@@ -147,10 +189,11 @@ void setup() {
 void loop() {
   if (handSet) {
     if (millis() - handSetMs >= HAND_SET_TIMEOUT_MS) {
-      moveLatch(false);  // moves although the latch is "open": it clears the hand-set mark and writes the open angle
+      moveLatch(false);  // moves although the latch is "open": it clears the hand-set mark and sets the open angle as target
     }
   } else if (latchClosed && millis() - lastCloseMs >= REOPEN_AFTER_MS) {
     moveLatch(false);
   }
+  stepServo();
   delay(10);
 }
