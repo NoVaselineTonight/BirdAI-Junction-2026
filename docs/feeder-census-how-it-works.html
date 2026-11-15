@@ -88,10 +88,10 @@ footer{color:var(--muted);font-size:13.5px;border-top:1px solid var(--line);padd
   <h2>How the model was made</h2>
   <ol class="steps">
     <li><div><b>Collect footage.</b><span>25 days of one feeder camera's stream (October and November 2026, plus two days from earlier winters), two videos of forest feeders, and squirrel material: 400 Creative Commons photos, frames of one documentary, and cut-outs pasted into feeder frames.</span></div></li>
-    <li><div><b>Pick the frames with birds.</b><span>Long streams are mostly an empty feeder. A miner keeps the moments where something moves. With the squirrel material and the blurred copies, the training set has 62,185 frames.</span></div></li>
+    <li><div><b>Pick the frames with birds.</b><span>Long streams are mostly an empty feeder. A miner keeps the moments where something moves. With the squirrel material and the blurred copies, 62,183 training frames went into the label check; 490 of them were left out after it, so the student trained on 61,693 frames.</span></div></li>
     <li><div><b>Let big models label them.</b><span>A large detector and two detectors tuned to this camera draw the boxes. Two bird classifiers (BioCLIP 2 and an iNaturalist classifier) give the names.</span></div></li>
-    <li><div><b>Check the labels with a second AI model.</b><span>Boxes from the old labels, three earlier students and a camera-tuned teacher are pooled into one candidate per bird. An open vision-language model (Qwen3-VL-8B-Instruct) looks at a crop of each candidate. Where all five sources already agreed, it named the same species in 96.5 % of cases, too weak to judge alone, so a bird is kept only when two votes agree on its species. Unclear cases become ignore zones, blurred out of training frames. No person checked the result. Result: 63,466 labelled training boxes.</span></div></li>
-    <li><div><b>Train the small model on those labels.</b><span>The earlier 25-day student trained 8 more epochs on the checked labels. One training frame in four also has a blurred, noisy copy so a worse camera does not throw it off.</span></div></li>
+    <li><div><b>Check the labels with a second AI model.</b><span>Boxes from the old labels, three earlier students and a camera-tuned teacher are pooled into one candidate per bird. An open vision-language model (Qwen3-VL-8B-Instruct) looks at a crop of each candidate. Where all five sources already agreed, it named the same species in 96.5 % of cases, too weak to judge alone, so a bird is kept only when two votes agree on its species. Unclear cases become ignore zones, blurred out of training frames. "No animal" is dropped, except when the old label, the teacher and at least two earlier students all saw a bird there; then it becomes an ignore zone. No person checked the result. Result: 63,466 labelled training boxes.</span></div></li>
+    <li><div><b>Train the small model on those labels.</b><span>The earlier 25-day student trained 8 more epochs on the checked labels, which have no "unidentified" examples. On the test day the new student gave the answer "unidentified" 0 times in 2,309 detections; the earlier student gave it 427 times in 2,475. One training frame in four also has a blurred, noisy copy so a worse camera does not throw it off.</span></div></li>
     <li><div><b>Measure on a day it never saw, time it on the board, choose by a fixed rule.</b><span>The cut-off (0.50) is picked on held-back training footage, never on the test day. A model ships only if it runs in under 1.5 s on the board.</span></div></li>
   </ol>
   <p class="muted small">Species the model can name: great tit, blue tit, bullfinch, jay, magpie, tree sparrow, nuthatch, house sparrow, great spotted woodpecker, crested tit, coal tit, willow tit, and red squirrel.</p>
@@ -143,7 +143,7 @@ footer{color:var(--muted);font-size:13.5px;border-top:1px solid var(--line);padd
   <ul>
     <li>The test day has no squirrel. On held-back training footage the model named squirrels right 0.953 of the time and found 0.865 of them (517 boxes); that figure is optimistic for this feeder.</li>
     <li>In 899 test frames the shipped model called nothing a squirrel that was not one. The 960 px student did so once.</li>
-    <li>In the demo reel the simulated latch closed on the squirrel clip. That clip was kept out of training, but the model has seen the same squirrel on other visits (about 790 boxes).</li>
+    <li>In the demo reel the simulated latch closed on the squirrel clip. That clip was kept out of training, but the model has seen the same squirrel on other visits: after the label check, 936 boxes, nearly all from 8, 22 (its second visit that day) and 31 October and 6 and 11 November 2026.</li>
     <li>The model has no rat class, so the latch reacts to squirrels only.</li>
   </ul>
 </section>
@@ -160,7 +160,7 @@ footer{color:var(--muted);font-size:13.5px;border-top:1px solid var(--line);padd
     <tr><td>Earlier 960 px student, 6 more epochs on the checked labels</td><td>0.949</td><td>0.899</td><td>0.831</td></tr>
   </table></div>
   <p class="muted small">All rows: same test day, checked labels, cut-off 0.50, ad-hoc scorer.</p>
-  <p class="note">Before the check, more footage helped up to 25 days; 19 more days of the same camera changed nothing measurable. Removing double boxes and oversized boxes from the old training labels by rule and re-training did not help either. Training the earlier students further on the checked labels gave the most frames counted exactly right; students trained from scratch on the same labels scored lower. Part of that gain is agreeing with the check itself, because the test labels come from the same check.</p>
+  <p class="note">19 more days of the same camera changed nothing measurable. Removing double boxes and oversized boxes from the old training labels by rule and re-training did not help either. Training the earlier students further on the checked labels gave the most frames counted exactly right; students trained from scratch on the same labels scored lower. Part of that gain is agreeing with the check itself, because the test labels come from the same check.</p>
 </section>
 
 <section>
