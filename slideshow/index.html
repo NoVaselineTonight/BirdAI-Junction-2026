@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<!--PAGE-->
+<title>BirdAI Rolling Slideshow</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Space+Grotesk:wght@500;700&display=swap">
+<style>
+/* Layout: full-bleed bird photo per slide, text on the side the bird is not, one unit (--u) scales everything to the screen. */
+:root {
+  --bg: #0a110f;
+  --fg: #f4f2ea;
+  --muted: #c3cbc5;
+  --accent: #f2b632;
+  --line: rgba(244, 242, 234, 0.22);
+  --panel: rgba(10, 17, 15, 0.62);
+  --display: "Space Grotesk", "Avenir Next", "Segoe UI", system-ui, sans-serif;
+  --body: "Inter", "Segoe UI", system-ui, -apple-system, sans-serif;
+  --u: min(1vw, 1.78vh);            /* 1% of the largest 16:9 box that fits */
+  --gut: max(calc(var(--u) * 5), 16px);
+  color-scheme: dark;
+}
+html, body { height: 100%; }
+body { margin: 0; background: var(--bg); color: var(--fg); font-family: var(--body); overflow: hidden; }
+*, *::before, *::after { box-sizing: border-box; }
+
+.show { position: relative; height: 100%; min-height: 320px; overflow: hidden; background: var(--bg); }
+
+.slide { position: absolute; inset: 0; opacity: 0; visibility: hidden; transition: opacity 1.2s ease, visibility 0s linear 1.2s; }
+.slide.on { opacity: 1; visibility: visible; transition: opacity 1.2s ease, visibility 0s; z-index: 1; }
+
+.photo { position: absolute; inset: 0; width: 100%; height: 100%; max-width: none; object-fit: cover; transform: scale(1.02); }
+.slide.on .photo { animation: drift 16s ease-out forwards; }
+@keyframes drift { from { transform: scale(1.02); } to { transform: scale(1.09); } }
+
+.scrim { position: absolute; inset: 0; }
+.text-left .scrim { background: linear-gradient(90deg, rgba(10,17,15,.94) 0%, rgba(10,17,15,.86) 34%, rgba(10,17,15,.5) 58%, rgba(10,17,15,0) 76%), linear-gradient(0deg, rgba(10,17,15,.7) 0%, rgba(10,17,15,0) 22%), linear-gradient(180deg, rgba(10,17,15,.6) 0%, rgba(10,17,15,0) 18%); }
+.text-right .scrim { background: linear-gradient(270deg, rgba(10,17,15,.95) 0%, rgba(10,17,15,.88) 40%, rgba(10,17,15,.4) 62%, rgba(10,17,15,0) 78%), linear-gradient(0deg, rgba(10,17,15,.7) 0%, rgba(10,17,15,0) 22%), linear-gradient(180deg, rgba(10,17,15,.6) 0%, rgba(10,17,15,0) 18%); }
+
+.copy {
+  position: absolute; top: 0; bottom: 0; width: 54%;
+  display: flex; flex-direction: column; justify-content: center; gap: calc(var(--u) * 1.9);
+  padding-block: calc(var(--u) * 10) calc(var(--u) * 7);
+}
+.text-left .copy { left: 0; padding-left: max(var(--gut), env(safe-area-inset-left, 0px)); }
+.text-right .copy { right: 0; width: 56%; padding-top: calc(var(--u) * 5); padding-right: max(var(--gut), env(safe-area-inset-right, 0px)); }
+
+.eyebrow { margin: 0; font: 600 calc(var(--u) * 1.25)/1.2 var(--body); letter-spacing: .16em; text-transform: uppercase; color: var(--accent); }
+h1 { margin: 0; font: 700 calc(var(--u) * 4.6)/1.04 var(--display); letter-spacing: -.015em; text-wrap: balance; }
+.lede { margin: 0; max-width: 34em; font-size: calc(var(--u) * 1.75); line-height: 1.45; color: var(--muted); }
+.lede strong { color: var(--fg); font-weight: 600; }
+
+/* entrance: children rise in once the slide is on */
+.slide .copy > * { opacity: 0; transform: translateY(calc(var(--u) * 1.4)); }
+.slide.on .copy > * { opacity: 1; transform: none; transition: opacity .9s ease, transform .9s ease; }
+.slide.on .copy > :nth-child(2) { transition-delay: .15s; }
+.slide.on .copy > :nth-child(3) { transition-delay: .3s; }
+.slide.on .copy > :nth-child(4) { transition-delay: .45s; }
+.slide.on .copy > :nth-child(5) { transition-delay: .6s; }
+
+/* slide 1: count → trend → index → decision */
+.chain { list-style: none; margin: calc(var(--u) * 1) 0 0; padding: 0; display: grid; grid-template-columns: repeat(4, 1fr); gap: calc(var(--u) * 1.6); }
+.chain li { position: relative; padding-top: calc(var(--u) * 1.4); border-top: 2px solid var(--line); }
+.chain li::before { content: ""; position: absolute; top: -2px; left: 0; width: calc(var(--u) * 2.6); height: 2px; background: var(--accent); }
+.chain b { display: block; font: 700 calc(var(--u) * 1.9)/1.1 var(--display); }
+.chain span { display: block; margin-top: calc(var(--u) * .6); font-size: calc(var(--u) * 1.22); line-height: 1.35; color: var(--muted); }
+
+/* slide 2: three steps */
+.steps { list-style: none; margin: 0; padding: 0; display: grid; gap: calc(var(--u) * 1.6); }
+.steps li { display: grid; grid-template-columns: calc(var(--u) * 4) 1fr; column-gap: calc(var(--u) * 1.6); align-items: start; }
+.num { width: calc(var(--u) * 4); height: calc(var(--u) * 4); border-radius: 50%; border: 2px solid var(--accent); color: var(--accent); display: grid; place-items: center; font: 700 calc(var(--u) * 1.7)/1 var(--display); font-variant-numeric: tabular-nums; }
+.steps b { display: block; font: 700 calc(var(--u) * 2.15)/1.15 var(--display); }
+.steps p { margin: calc(var(--u) * .5) 0 0; font-size: calc(var(--u) * 1.4); line-height: 1.42; color: var(--muted); }
+.protect { display: grid; grid-template-columns: 1fr calc(var(--u) * 10); gap: calc(var(--u) * 1.8); align-items: start; }
+.clip { margin: 0; }
+.clip video { display: block; width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: calc(var(--u) * 1.2); border: 1px solid var(--line); background: #0c1a24; }
+.clip figcaption { margin-top: calc(var(--u) * .5); font-size: calc(var(--u) * .95); color: var(--muted); text-align: center; }
+
+/* slide 3: the numbers */
+.stats { margin: calc(var(--u) * .6) 0 0; display: grid; grid-template-columns: repeat(3, 1fr); gap: calc(var(--u) * 2.4); }
+.stats div { min-width: 0; }
+.stats dt { font: 700 calc(var(--u) * 5.4)/1 var(--display); color: var(--accent); font-variant-numeric: tabular-nums; letter-spacing: -.02em; white-space: nowrap; }
+.stats dd { margin: calc(var(--u) * .9) 0 0; font-size: calc(var(--u) * 1.35); line-height: 1.38; color: var(--muted); }
+.close { margin: 0; padding: calc(var(--u) * 1.5) calc(var(--u) * 1.9); max-width: 36em; background: var(--panel); border: 1px solid var(--line); border-radius: calc(var(--u) * 1.1); font: 500 calc(var(--u) * 1.75)/1.35 var(--display); }
+.close em { font-style: normal; color: var(--accent); }
+
+/* chrome */
+.brand { position: absolute; z-index: 3; top: max(calc(var(--u) * 3.4), env(safe-area-inset-top, 0px)); left: max(var(--gut), env(safe-area-inset-left, 0px)); display: flex; align-items: baseline; gap: calc(var(--u) * 1.3); }
+.brand b { font: 700 calc(var(--u) * 2.3)/1 var(--display); letter-spacing: -.01em; }
+.brand b i { font-style: normal; color: var(--accent); }
+.brand span { font-size: calc(var(--u) * 1.02); letter-spacing: .14em; text-transform: uppercase; color: var(--muted); }
+
+.credit { position: absolute; z-index: 2; bottom: calc(var(--u) * 5.2); font-size: calc(var(--u) * 1.02); color: var(--fg); background: var(--panel); border: 1px solid var(--line); padding: calc(var(--u) * .55) calc(var(--u) * 1.1); border-radius: 99px; backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); }
+.credit small { font-size: inherit; color: var(--muted); }
+.text-left .credit { right: max(var(--gut), env(safe-area-inset-right, 0px)); }
+.text-right .credit { left: max(var(--gut), env(safe-area-inset-left, 0px)); }
+.sources { margin: 0; font-size: calc(var(--u) * .98); color: var(--muted); }
+
+.bar { position: absolute; z-index: 3; left: 0; right: 0; bottom: 0; display: flex; align-items: center; gap: calc(var(--u) * 1); padding: calc(var(--u) * 1.8) max(var(--gut), env(safe-area-inset-right, 0px)) max(calc(var(--u) * 2), env(safe-area-inset-bottom, 0px)) max(var(--gut), env(safe-area-inset-left, 0px)); }
+.seg { flex: 1; height: calc(var(--u) * 2.4); min-height: 20px; padding: 0; border: 0; background: none; cursor: pointer; display: flex; align-items: center; }
+.seg::before { content: ""; display: block; width: 100%; height: 3px; border-radius: 3px; background: linear-gradient(90deg, var(--accent) calc(var(--p, 0) * 100%), var(--line) 0); }
+.seg:focus-visible, .pause:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
+.pause { flex: none; min-width: 6.5em; height: calc(var(--u) * 2.6); min-height: 24px; padding: 0 calc(var(--u) * 1); border: 1px solid var(--line); border-radius: 99px; background: var(--panel); color: var(--fg); font: 500 max(calc(var(--u) * 1), 11px)/1 var(--body); cursor: pointer; }
+
+/* portrait and narrow screens: photo on top, text below */
+@media (max-aspect-ratio: 1/1) {
+  :root { --u: min(2.35vw, 1.22vh); }
+  .photo { height: 36%; }
+  h1 { font-size: calc(var(--u) * 4.3); }
+  .protect { display: block; }
+  .clip { display: none; }
+  .slide .scrim { background: linear-gradient(180deg, rgba(10,17,15,.55) 0%, rgba(10,17,15,0) 12%, rgba(10,17,15,0) 22%, var(--bg) 36%); }
+  .text-left .copy, .text-right .copy { left: 0; right: 0; width: auto; top: 31%; justify-content: flex-start; padding-block: 0 calc(var(--u) * 7);
+    padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); overflow: hidden; }
+  .text-left .credit, .text-right .credit { left: auto; right: max(16px, env(safe-area-inset-right, 0px)); top: calc(36% - var(--u) * 10); bottom: auto; }
+  .brand { left: max(16px, env(safe-area-inset-left, 0px)); }
+  .chain { grid-template-columns: repeat(2, 1fr); }
+  .stats dt { font-size: calc(var(--u) * 4.6); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .slide.on .photo { animation: none; }
+  .slide, .slide.on { transition: opacity .01s; }
+  .slide .copy > *, .slide.on .copy > * { transform: none; transition: none; }
+}
+</style>
+
+<main class="show" id="show" aria-roledescription="carousel" aria-label="BirdAI slideshow">
+
+  <div class="brand"><b>Bird<i>AI</i></b><span>Team RBC · Junction 2026</span></div>
+
+  <section class="slide text-left on" aria-roledescription="slide" aria-label="1 of 3: Why BirdAI matters">
+    <img class="photo" src="img/great-tits.jpg" alt="Five great tits feeding on a hanging fat-ball feeder" style="object-position: 72% 50%">
+    <div class="scrim"></div>
+    <div class="copy">
+      <p class="eyebrow">Why BirdAI matters</p>
+      <h1>Birds tell us how nature is doing</h1>
+      <p class="lede">Birds are a <strong>bioindicator species</strong>. They react quickly and predictably when their surroundings change, so a change in the birds is an early sign of a change in the nature around them.</p>
+      <ol class="chain" aria-label="From a count to a decision">
+        <li><b>Count</b><span>Most birds of each species seen at once</span></li>
+        <li><b>Trend</b><span>The same count, winter after winter</span></li>
+        <li><b>Index</b><span>Many sites combined into a bird indicator</span></li>
+        <li><b>Decision</b><span>Land-use and conservation policy</span></li>
+      </ol>
+    </div>
+    <p class="credit">Great tit · <i>talitiainen</i></p>
+  </section>
+
+  <section class="slide text-right" aria-roledescription="slide" aria-label="2 of 3: How it works">
+    <img class="photo" src="img/tree-sparrow.jpg" alt="A tree sparrow perched on a snowy twig" style="object-position: 20% 50%">
+    <div class="scrim"></div>
+    <div class="copy">
+      <p class="eyebrow">How it works</p>
+      <h1>A feeder that counts its own visitors</h1>
+      <ol class="steps">
+        <li><span class="num">1</span><div><b>Watches</b><p>A camera under the roof photographs the feeding tray every 5 seconds.</p></div></li>
+        <li><span class="num">2</span><div><b>Counts</b><p>A small AI model on the Arduino UNO Q names and counts each bird at the feeder itself, in about half a second. No internet needed.</p></div></li>
+        <li><span class="num">3</span><div class="protect"><div><b>Protects</b><p>When a squirrel shows up, a latch closes the feeder. It opens again once the squirrel has left.</p></div>
+          <figure class="clip"><video src="img/squirrel-latch.mp4" muted loop playsinline preload="auto" aria-label="3D animation: the camera spots a squirrel and the feeder closes"></video><figcaption>3D animation of the latch</figcaption></figure></div></li>
+      </ol>
+    </div>
+    <p class="credit">Tree sparrow · <i>pikkuvarpunen</i> <small>· Photo: Micha Fager</small></p>
+  </section>
+
+  <section class="slide text-left" aria-roledescription="slide" aria-label="3 of 3: Winter is the blind spot">
+    <img class="photo" src="img/crested-tit.jpg" alt="A crested tit clinging to a reed stem in winter" style="object-position: 80% 50%">
+    <div class="scrim"></div>
+    <div class="copy">
+      <p class="eyebrow">The gap we fill</p>
+      <h1>Winter is the blind spot</h1>
+      <dl class="stats">
+        <div><dt>−41%</dt><dd>Farmland birds in the EU since 1990</dd></div>
+        <div><dt>80%+</dt><dd>of bird indicators use breeding-season data only</dd></div>
+        <div><dt>200+</dt><dd>Finnish winter feeding stations, each counted by hand by a volunteer</dd></div>
+      </dl>
+      <p class="close">A volunteer counts when they have time. <em>BirdAI counts every daylight hour.</em></p>
+      <p class="sources">Sources: Eurostat 2026 · Fraixedas et al. 2020, Ecological Indicators · Luomus feeding-station monitoring</p>
+    </div>
+    <p class="credit">Crested tit · <i>töyhtötiainen</i> <small>· Photo: Petri Vainio</small></p>
+  </section>
+
+  <nav class="bar" aria-label="Slides">
+    <button class="seg" type="button" id="seg-1" aria-label="Go to slide 1"></button>
+    <button class="seg" type="button" id="seg-2" aria-label="Go to slide 2"></button>
+    <button class="seg" type="button" id="seg-3" aria-label="Go to slide 3"></button>
+    <button class="pause" type="button" id="pause" aria-pressed="false">Pause</button>
+  </nav>
+</main>
+
+<script>
+(function () {
+  var SLIDE_MS = 15000; // each slide stays up for 15 seconds
+  var slides = [].slice.call(document.querySelectorAll('.slide'));
+  var segs = [].slice.call(document.querySelectorAll('.seg'));
+  var pauseBtn = document.getElementById('pause');
+  var current = 0, elapsed = 0, last = performance.now(), paused = false;
+
+  function show(i) {
+    current = (i + slides.length) % slides.length;
+    elapsed = 0;
+    slides.forEach(function (s, n) {
+      var on = n === current;
+      s.classList.toggle('on', on);
+      s.setAttribute('aria-hidden', on ? 'false' : 'true');
+      var v = s.querySelector('video');
+      if (v) {
+        if (on) { v.currentTime = 0; var p = v.play(); if (p && p.catch) p.catch(function () {}); }
+        else v.pause();
+      }
+    });
+    paint();
+  }
+  function paint() {
+    segs.forEach(function (s, n) {
+      s.style.setProperty('--p', n < current ? 1 : n === current ? Math.min(elapsed / SLIDE_MS, 1) : 0);
+      if (n === current) s.setAttribute('aria-current', 'true'); else s.removeAttribute('aria-current');
+    });
+  }
+  function setPaused(p) {
+    paused = p;
+    pauseBtn.textContent = p ? 'Play' : 'Pause';
+    pauseBtn.setAttribute('aria-pressed', p ? 'true' : 'false');
+  }
+  // setInterval rather than requestAnimationFrame so the show keeps rolling on an unattended screen
+  setInterval(function () {
+    var now = performance.now(), dt = Math.min(now - last, 1000);
+    last = now;
+    if (paused) return;
+    elapsed += dt;
+    if (elapsed >= SLIDE_MS) show(current + 1); else paint();
+  }, 100);
+
+  segs.forEach(function (s, n) { s.addEventListener('click', function () { show(n); }); });
+  pauseBtn.addEventListener('click', function () { setPaused(!paused); });
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'ArrowRight' || e.key === 'PageDown') show(current + 1);
+    else if (e.key === 'ArrowLeft' || e.key === 'PageUp') show(current - 1);
+    else if (e.key === ' ' && e.target === document.body) { e.preventDefault(); setPaused(!paused); }
+    else if (e.key === 'f' && document.documentElement.requestFullscreen) {
+      var r = document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen();
+      if (r && r.catch) r.catch(function () {});
+    }
+  });
+  show(0);
+})();
+</script>
+<!--/PAGE-->
+</body>
+</html>
