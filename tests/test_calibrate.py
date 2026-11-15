@@ -44,10 +44,10 @@ def served(tmp_path):
     thread.join(5)
 
 
-def request(base, path, body=None, raw=None):
+def request(base, path, body=None, raw=None, content_type="application/json"):
     data = raw if raw is not None else (None if body is None else json.dumps(body).encode())
     req = urllib.request.Request(base + path, data=data, method="GET" if data is None else "POST",
-                                 headers={"Content-Type": "application/json"})
+                                 headers={"Content-Type": content_type})
     try:
         with urllib.request.urlopen(req, timeout=5) as r:
             return r.status, r.read()
@@ -55,8 +55,8 @@ def request(base, path, body=None, raw=None):
         return e.code, e.read()
 
 
-def call(base, path, body=None, raw=None):
-    status, data = request(base, path, body, raw)
+def call(base, path, body=None, raw=None, content_type="application/json"):
+    status, data = request(base, path, body, raw, content_type)
     return status, json.loads(data)
 
 
@@ -173,6 +173,51 @@ def test_a_failed_set_limits_on_save_is_a_502(served):
     status, reply = call(base, "/save", {"which": "open"})
     assert status == 502 and "set_limits" in reply["error"]
     assert call(base, "/state")[0] == 200
+
+
+def test_a_test_moves_the_current_angle_to_the_limit_it_used(served):
+    base, board, angles = served
+    call(base, "/angle", {"degrees": 25})
+    call(base, "/save", {"which": "open"})
+    call(base, "/angle", {"degrees": 140})
+    call(base, "/save", {"which": "closed"})
+    call(base, "/angle", {"degrees": 77})  # a hand-set angle, not a saved one
+    assert call(base, "/test", {"closed": True}) == (200, {"closed": True, "angle": 140})
+    assert call(base, "/state")[1]["angle"] == 140
+    assert call(base, "/test", {"closed": False})[1]["angle"] == 25
+    assert call(base, "/state")[1]["angle"] == 25
+    assert call(base, "/test", {"closed": True})[0] == 200
+    assert call(base, "/save", {"which": "open"})[0] == 200  # saves where the servo is, the closed angle
+    assert json.loads(angles.read_text()) == {"open": 140, "closed": 140}
+
+
+def test_a_failed_test_leaves_the_current_angle_alone(served):
+    base, board, _ = served
+    call(base, "/angle", {"degrees": 77})
+    board.fail = "no answer"
+    assert call(base, "/test", {"closed": True})[0] == 502
+    assert call(base, "/state")[1]["angle"] == 77
+
+
+@pytest.mark.parametrize("content_type", ["text/plain", "application/x-www-form-urlencoded", "text/plain;charset=UTF-8"])
+@pytest.mark.parametrize("path, body", [("/angle", {"degrees": 50}), ("/save", {"which": "open"}),
+                                        ("/test", {"closed": True})])
+def test_posts_that_are_not_json_are_refused_with_415(served, path, body, content_type):
+    base, board, angles = served
+    status, reply = call(base, path, body, content_type=content_type)
+    assert status == 415 and "application/json" in reply["error"]
+    assert board.calls == [] and not angles.exists()
+
+
+def test_json_content_type_may_carry_a_charset(served):
+    base, board, _ = served
+    assert call(base, "/angle", {"degrees": 50}, content_type="application/json; charset=utf-8")[0] == 200
+    assert board.calls == [("set_angle", 50)]
+
+
+def test_the_page_says_a_hand_set_angle_is_reopened_after_ten_minutes(served):
+    html = request(served[0], "/")[1].decode()
+    assert "10 minutes" in html and "reopens a test close by itself after 30 s" not in html
 
 
 def test_unknown_paths_are_404(served):

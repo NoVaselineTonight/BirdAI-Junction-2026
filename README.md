@@ -69,7 +69,7 @@ adb shell "cd /home/arduino/feeder-census && .venv/bin/python -m feeder_census.l
 board/run.sh --latch router
 ```
 
-The link between the program and the sketch follows Arduino's documentation for the router bridge; it has not yet been tried on our board.
+The link between the program and the sketch follows Arduino's documentation for the router bridge; the link was used on the board on 14 and 15 November 2026 and the board confirmed every command; whether the servo arm really moves is not yet confirmed.
 
 ### Calibrating the angles
 
@@ -81,7 +81,7 @@ arduino-cli upload -b arduino:zephyr:unoq -p /dev/ttyACM0 board/latch
 board/calibrate.sh          # then open http://localhost:8090 ; stop it with: board/calibrate.sh --stop
 ```
 
-The page shows the servo angle in big digits. Move the slider or press -10, -1, +1 or +10 and the servo follows. When the latch is where you want it open, press "Save as OPEN". Do the same for "Save as CLOSED". "Test: open" and "Test: close" run the latch with the saved angles. The angles are kept on the board in `data/latch_angles.json`. The microcontroller forgets them at a restart, so the demo sends them again at its start (`board/run.sh --latch router`). To make them the sketch's own start values, put the two numbers into the sketch. Stop the demo first (`board/run.sh --stop`) if it runs with `--latch router`: both would command the servo. From the board's shell, `python -m feeder_census.latch angle 90` also turns the servo to one angle.
+The page shows the servo angle in big digits. Move the slider or press -10, -1, +1 or +10 and the servo follows. When the latch is where you want it open, press "Save as OPEN". Do the same for "Save as CLOSED". "Test: open" and "Test: close" run the latch with the saved angles. The angles are kept on the board in `data/latch_angles.json`. The microcontroller forgets them at a restart, so the demo sends them again at its start (`board/run.sh --latch router`). To make them the sketch's own start values, put the two numbers into the sketch. An angle turned by hand goes back to the open angle by itself 10 minutes after the last change, so the feeder never stays shut for good. The sketch is written to reopen a test close after 30 seconds. On 15 November 2026 the board confirmed the new calls and every command of the page. Nobody has yet reported watching the servo arm move to the saved angles. Stop the demo first (`board/run.sh --stop`) if it runs with `--latch router`: both would command the servo. From the board's shell, `python -m feeder_census.latch angle 90` also turns the servo to one angle.
 
 ## Measured speed
 

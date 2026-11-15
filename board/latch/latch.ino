@@ -31,7 +31,10 @@
   without editing this file (the page python -m feeder_census.calibrate uses them):
   - set_angle(degrees): clamps to 0..180, turns the servo there at once and returns the angle used. The servo
     is then in a "hand-set" position: the 30 s fail-safe does not reopen it (calibration needs it to stay),
-    and the next set_latch moves it even when the latch is already in that state.
+    but a hand-set angle goes back to the open angle by itself HAND_SET_TIMEOUT_MS (10 minutes) after the
+    last set_angle call, and the latch is then open. So the feeder never stays shut for good, even when a
+    person sets a closed angle and walks away. The next set_latch also moves a hand-set servo, even when the
+    latch is already in that state.
   - get_angle(): the last angle written to the servo.
   - set_limits(open_degrees, closed_degrees): clamps both to 0..180 and stores them as the open and closed
     angles. Unless the servo is in a hand-set position it moves to the new angle of its current state.
@@ -49,12 +52,14 @@ int servoOpen = 10;
 int servoClosed = 100;
 
 const unsigned long REOPEN_AFTER_MS = 30000;  // fail-safe: open when no close command came for 30 s
+const unsigned long HAND_SET_TIMEOUT_MS = 600000;  // a hand-set angle goes back to open 10 minutes after the last set_angle
 
 Servo servo;
 
 volatile bool latchClosed = false;
 volatile bool handSet = false;  // the servo was turned by set_angle and has not been moved by set_latch since
 volatile unsigned long lastCloseMs = 0;
+volatile unsigned long handSetMs = 0;  // when set_angle was last called
 int lastAngle = 10;
 
 int clampAngle(int degrees) {
@@ -94,6 +99,7 @@ int set_angle(int degrees) {
   int used = clampAngle(degrees);
   writeAngle(used);
   handSet = true;
+  handSetMs = millis();
   return used;
 }
 
@@ -125,7 +131,11 @@ void setup() {
 }
 
 void loop() {
-  if (latchClosed && !handSet && millis() - lastCloseMs >= REOPEN_AFTER_MS) {
+  if (handSet) {
+    if (millis() - handSetMs >= HAND_SET_TIMEOUT_MS) {
+      moveLatch(false);  // moves although the latch is "open": it clears the hand-set mark and writes the open angle
+    }
+  } else if (latchClosed && millis() - lastCloseMs >= REOPEN_AFTER_MS) {
     moveLatch(false);
   }
   delay(10);

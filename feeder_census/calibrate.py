@@ -82,7 +82,8 @@ class Calibration:
             raise _BadRequest("closed must be true or false")
         with self._lock:
             self._board_call(self.board.set, closed)
-            return {"closed": closed}
+            self.angle = self.closed if closed else self.open  # where the servo went, so a following save is true
+            return {"closed": closed, "angle": self.angle}
 
     def _board_call(self, method, *args):
         try:
@@ -135,6 +136,11 @@ def _handler(cal: Calibration) -> type[BaseHTTPRequestHandler]:
             raw = self.rfile.read(length)  # always read it, so the connection stays in step
             if action is None:
                 self._send(404, {"error": "not found"})
+                return
+            # a web page in the laptop's browser can only send a "simple" POST (text/plain, form data) to this
+            # address without asking first; JSON needs the ask, which this server does not answer
+            if self.headers.get_content_type() != "application/json":
+                self._send(415, {"error": "send the body as application/json"})
                 return
             try:
                 body = json.loads(raw or b"null")
@@ -234,7 +240,8 @@ PAGE = """<!doctype html>
 </div>
 <div id="status" role="status">Loading...</div>
 <p class="note">The saved angles are kept on the board in data/latch_angles.json and the demo uses them at its next
-start. To make them the sketch's own defaults, put the two numbers into the sketch.</p>
+start. To make them the sketch's own defaults, put the two numbers into the sketch. An angle turned by hand
+goes back to the open angle by itself 10 minutes after the last change, so the feeder does not stay shut.</p>
 <script>
 const slider = document.getElementById("slider"), big = document.getElementById("angle"), statusEl = document.getElementById("status");
 let current = null;
@@ -265,9 +272,9 @@ async function refresh(message) {
 }
 async function turn(degrees) {
   degrees = Math.max(0, Math.min(180, degrees));
-  slider.value = degrees; show(degrees);
   const data = await post("/angle", {degrees});
   if (data) { current = data.angle; slider.value = current; show(current); say("Turned the servo to " + current + " degrees.", false); }
+  else { show(current); if (current !== null) slider.value = current; }  // not confirmed: back to the last confirmed angle
 }
 slider.addEventListener("input", () => show(Number(slider.value)));  // only the number while dragging
 slider.addEventListener("change", () => turn(Number(slider.value)));  // the servo follows on release
@@ -281,7 +288,10 @@ document.getElementById("save-open").addEventListener("click", () => save("open"
 document.getElementById("save-closed").addEventListener("click", () => save("closed"));
 async function testLatch(closed) {
   const data = await post("/test", {closed});
-  if (data) say("Test: the latch " + (closed ? "closed" : "opened") + " with the saved angles. The sketch reopens a test close by itself after 30 s.", false);
+  if (data) {
+    current = data.angle; slider.value = current; show(current);
+    say("Test: the latch " + (closed ? "closed" : "opened") + " with the saved angles (" + current + " degrees). The sketch is written to reopen a test close by itself after 30 s.", false);
+  }
 }
 document.getElementById("test-open").addEventListener("click", () => testLatch(false));
 document.getElementById("test-close").addEventListener("click", () => testLatch(true));
