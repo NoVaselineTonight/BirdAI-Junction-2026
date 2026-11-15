@@ -57,17 +57,17 @@ footer{color:var(--muted);font-size:13.5px;border-top:1px solid var(--line);padd
   <span class="eyebrow">Feeder Census · Junction 2026 · Arduino UNO Q</span>
   <h1>How Feeder Census works</h1>
   <p class="lede">A camera watches a winter bird feeder. A small model on an Arduino UNO Q names the birds in each photo and counts every species by the rule Finnish feeder monitoring already uses: the largest number seen at the same time. The counts stay on the device as open data, and a latch closes the feeder when a squirrel shows up.</p>
-  <p class="muted small">Accuracy numbers on this page were measured on 15 November 2026, board timings on 14 November 2026. The demo plays recorded footage of one feeder camera; no frame of it is shown here.</p>
+  <p class="muted small">The model described here ships since about 06:15 on 15 November 2026. Accuracy numbers and the student board timings on this page were measured on 15 November 2026, the off-the-shelf detector's timing on 14 November 2026. The demo plays recorded footage of one feeder camera or a live USB webcam; no frame of either is shown here.</p>
 </header>
 
 <section>
   <h2>What it consists of</h2>
   <div class="parts">
-    <div class="part"><span class="where">Input</span><h3>Camera</h3><p>A USB camera aimed at the feeder. In the demo, recorded footage of a public feeder stream (1920 × 1080) stands in for it.</p></div>
-    <div class="part"><span class="where">UNO Q, Linux side</span><h3>Detector model</h3><p>One small neural network (YOLO26 nano, about 10 MB, ONNX). It finds each bird and names it in a single pass: 13 species plus "unidentified". Runs on the board's processor, no graphics card, no internet.</p></div>
-    <div class="part"><span class="where">UNO Q, Linux side</span><h3>Counting rule</h3><p>Only birds named with at least 50 % confidence, seen in two photos in a row, are counted. The count for a species is the largest number in one photo, per hour, day and half-month.</p></div>
+    <div class="part"><span class="where">Input</span><h3>Camera</h3><p>A USB camera aimed at the feeder. In the demo, recorded footage of a public feeder stream (1920 × 1080) stands in for it. At the hackathon stand a USB webcam looks at a wooden model feeder in a room; the model only knows the one feeder camera it was trained on.</p></div>
+    <div class="part"><span class="where">UNO Q, Linux side</span><h3>Detector model</h3><p>One small neural network (YOLO26 nano, 960 × 960 px input, 2,540,204 parameters, about 10 MB, ONNX). The page calls it "BC 960". It finds each bird and names it in a single pass: 13 species plus "unidentified". Runs on the board's processor, no graphics card, no internet.</p></div>
+    <div class="part"><span class="where">UNO Q, Linux side</span><h3>Counting rule</h3><p>Only birds named with at least 0.25 confidence (the cut-off), seen in two photos in a row, are counted. The count for a species is the largest number in one photo, per hour, day and half-month.</p></div>
     <div class="part"><span class="where">UNO Q, Linux side</span><h3>Store and page</h3><p>A small database on the board, and a local web page: the latest photo with boxes, counts, visits, hours watched, one evidence photo per species per day, CSV export.</p></div>
-    <div class="part"><span class="where">UNO Q, microcontroller side</span><h3>Latch</h3><p>One servo on pin D9. The Linux side tells the microcontroller to close when a red squirrel is seen in two photos in a row. If the commands stop, the latch reopens by itself after 30 s.</p></div>
+    <div class="part"><span class="where">UNO Q, microcontroller side</span><h3>Latch</h3><p>One servo on pin D9. The Linux side tells the microcontroller to close when a red squirrel is seen in photos in a row: by default two, with at least 0.5 confidence; at the stand three, with at least 0.8. If the commands stop, the latch reopens by itself after 30 s.</p></div>
     <div class="part"><span class="where">Off the device, once</span><h3>Training pipeline</h3><p>Large "teacher" models on rented GPUs labelled hours of feeder footage; the small "student" model learned from those labels. Only the student goes on the board.</p></div>
   </div>
 </section>
@@ -76,23 +76,23 @@ footer{color:var(--muted);font-size:13.5px;border-top:1px solid var(--line);padd
   <h2>What happens every 5 seconds</h2>
   <ol class="steps">
     <li><div><b>Take one photo.</b><span>One frame from the camera (in the demo, from the recording).</span></div></li>
-    <li><div><b>Shrink it to 640 pixels wide and run the detector.</b><span>About 0.5 s on the board. Out come boxes, each with a species name and a confidence.</span></div></li>
-    <li><div><b>Keep the sure ones.</b><span>A name with confidence under 0.50 is shown as "unidentified" and is not counted.</span></div></li>
+    <li><div><b>Shrink it to 960 pixels and run the detector.</b><span>About 1.1 s on the board in the benchmark; about 2.0 s per photo at the stand, where the board also runs the camera and a full-screen browser. Out come boxes, each with a species name and a confidence.</span></div></li>
+    <li><div><b>Keep the sure ones.</b><span>A name with confidence under the cut-off, 0.25, is shown as "unidentified" and is not counted. 0.25 is also the detector's own floor.</span></div></li>
     <li><div><b>Confirm and count.</b><span>A bird counts when it is there in two photos in a row. The largest number seen at once becomes the count for that hour, day and half-month.</span></div></li>
     <li><div><b>Save and show.</b><span>Counts, visits and an evidence photo go to the database; the page shows the photo with its boxes until the next one replaces it.</span></div></li>
-    <li><div><b>Check for a squirrel.</b><span>Two photos in a row with a red squirrel close the latch; five clear photos open it again.</span></div></li>
+    <li><div><b>Check for a squirrel.</b><span>Photos in a row with a red squirrel close the latch (two by default, three at the stand, where the squirrel must also have at least 0.8 confidence); five clear photos open it again.</span></div></li>
   </ol>
 </section>
 
 <section>
   <h2>How the model was made</h2>
   <ol class="steps">
-    <li><div><b>Collect footage.</b><span>25 days of one feeder camera's stream (October and November 2026, plus two days from earlier winters), two videos of forest feeders, and squirrel material: 400 Creative Commons photos, frames of one documentary, and cut-outs pasted into feeder frames.</span></div></li>
-    <li><div><b>Pick the frames with birds.</b><span>Long streams are mostly an empty feeder. A miner keeps the moments where something moves. With the squirrel material and the blurred copies, the 25-day training set has 62,183 frames. The feeder-camera frames went through the label check; 490 frames were left out after it, so the student trained on 61,693 frames.</span></div></li>
+    <li><div><b>Collect footage.</b><span>38 days of one feeder camera's stream (October and November 2026, plus two days from earlier winters), two videos of forest feeders, and squirrel material: 400 Creative Commons photos, frames of one documentary, and cut-outs pasted into feeder frames.</span></div></li>
+    <li><div><b>Pick the frames with birds.</b><span>Long streams are mostly an empty feeder. A miner keeps the moments where something moves. With the squirrel material and the blurred copies, the 38-day training set has 103,798 frames.</span></div></li>
     <li><div><b>Let big models label them.</b><span>A large detector and two detectors tuned to this camera draw the boxes. Two bird classifiers (BioCLIP 2 and an iNaturalist classifier) give the names.</span></div></li>
-    <li><div><b>Check the labels with a second AI model.</b><span>Boxes from the old labels, three earlier students and a camera-tuned teacher are pooled into one candidate per bird. An open vision-language model (Qwen3-VL-8B-Instruct) looks at a crop of each candidate. Where all five sources already agreed, it named the same species in 96.5 % of cases, too weak to judge alone, so a bird is kept only when two votes agree on its species. Unclear cases become ignore zones, blurred out of training frames. "No animal" is dropped, except when the old label, the teacher and at least two earlier students all saw a bird there; then it becomes an ignore zone. No person checked the result. Result: 63,466 labelled training boxes.</span></div></li>
-    <li><div><b>Train the small model on those labels.</b><span>The earlier 25-day student trained 8 more epochs on the checked labels, which have no "unidentified" examples. On the test day the new student itself answered "unidentified" 0 times in 2,309 detections (the earlier one 427 times in 2,475); a bird it names with less than 50 % confidence is still shown as "unidentified" on the page. One training frame in four also has a blurred, noisy copy so a worse camera does not throw it off.</span></div></li>
-    <li><div><b>Measure on a day it never saw, time it on the board, choose by a fixed rule.</b><span>The cut-off (0.50) is picked on held-back training footage, never on the test day. A model ships only if it runs in under 1.5 s on the board.</span></div></li>
+    <li><div><b>Check the labels with a second AI model.</b><span>Boxes from the old labels, three earlier students and a camera-tuned teacher are pooled into one candidate per bird. An open vision-language model (Qwen3-VL-8B-Instruct) looks at a crop of each candidate. Where all five sources already agreed, it named the same species in 96.5 % of cases, too weak to judge alone, so a bird is kept only when two votes agree on its species. Unclear cases become ignore zones, blurred out of training frames. "No animal" is dropped, except when the old label, the teacher and at least two earlier students all saw a bird there; then it becomes an ignore zone. No person checked the result. The 13 days added last were checked the same way (53,803 candidates judged, 42,105 checked frames added). The shipped model trained on 102,142 labelled boxes; great tit 45,223 of them, willow tit 39.</span></div></li>
+    <li><div><b>Train the small model on those labels.</b><span>The 960 px student that had been trained on the 25 checked days trained 8 more epochs on all 38 days. The checked labels have no "unidentified" examples; a bird it names under the cut-off is still shown as "unidentified" on the page. One training frame in four also has a blurred, noisy copy so a worse camera does not throw it off.</span></div></li>
+    <li><div><b>Measure on a day it never saw, time it on the board, choose by a fixed rule.</b><span>The cut-off (0.25, the lowest value of the grid) is picked on 7,599 frames of 13 October days, never on the test day. The model later trained on other frames of those same days, so the cut-off is picked on days it has seen. A model ships only if it runs in under 1.5 s on the board.</span></div></li>
   </ol>
   <p class="muted small">Species the model can name: great tit, blue tit, bullfinch, jay, magpie, tree sparrow, nuthatch, house sparrow, great spotted woodpecker, crested tit, coal tit, willow tit, and red squirrel.</p>
 </section>
@@ -100,67 +100,72 @@ footer{color:var(--muted);font-size:13.5px;border-top:1px solid var(--line);padd
 <section>
   <span class="eyebrow">Accuracy</span>
   <h2>Measured on a day the model never saw</h2>
-  <p>The test is 12 November 2026: 899 frames from the same feeder camera, a day no model and no teacher was trained on. The truth labels were made by the same automatic check as the training labels, so the table measures agreement with that check. The fair comparison is the earlier student scored on the same labels (first row). 392 of the 2,256 candidates that day (17 %) are ignore zones and are not scored.</p>
+  <p>The test is 12 November 2026: 899 frames from the same feeder camera, a day no model and no teacher was trained on. The truth labels were made by the same automatic check as the training labels, so the table measures agreement with that check. 392 of the 2,256 candidates that day (17 %) are ignore zones and are not scored.</p>
   <div class="scroll"><table>
-    <tr><th>Model, scored against the checked labels</th><th>Named birds right</th><th>Birds found</th><th>Frames counted exactly right</th></tr>
-    <tr><td>earlier student, 640 px, trained on the old labels</td><td>0.940</td><td>0.811</td><td>0.751</td></tr>
-    <tr class="ship"><td>new student, 640 px</td><td>0.942</td><td>0.891</td><td>0.831</td></tr>
-    <tr><td>new student, 960 px</td><td>0.949</td><td>0.899</td><td>0.831</td></tr>
+    <tr><th>Model, scored against the checked labels</th><th>Cut-off</th><th>Birds found</th><th>Frames counted exactly right</th></tr>
+    <tr><td>Off-the-shelf detector plus classifier</td><td>0.60</td><td>0.001</td><td>0.171</td></tr>
+    <tr><td>Our student, nano 640 px, 38 days</td><td>0.25</td><td>0.919</td><td>0.855</td></tr>
+    <tr class="ship"><td>Our student, nano 960 px, 38 days ("BC 960")</td><td>0.25</td><td>0.954</td><td>0.909</td></tr>
   </table></div>
-  <p class="muted small">Cut-off 0.50. Named right and found come from an ad-hoc scorer; frames counted exactly right for the new students match the evaluation file in the repository. The two new students tie (747 of 899 frames each); the 640 px one ships because it takes half the time on the board and made no false squirrel detection on the test day. Scored against the old labels instead (double boxes merged, oversized boxes ignored), the new 640 px student finds more birds (0.868 against 0.841), but named right falls from 0.901 to 0.848 and frames exactly right from 0.746 to 0.709, because it now detects birds the old labels do not contain.</p>
+  <p class="muted small">All numbers from the evaluation file written by the repository's evaluation tool (<code>models/eval.json</code>). Birds found is pooled over all species: per-species recall times the birds of that species, summed, out of 1,856. For a fair comparison on the same checked labels: at cut-off 0.50, the earlier 640 px student trained on the old labels counted 0.751 of frames exactly right (ad-hoc scorer), and the 640 px student trained on 25 checked days that shipped before this one counted 0.831.</p>
 
   <h3>What happens to 1,856 birds</h3>
-  <div class="bar" role="img" aria-label="Of 1,856 checked birds: 89 percent counted under the right name, 11 percent missed, unsure or wrongly named">
-    <i style="width:89.06%;background:var(--ok)"></i><i style="width:10.94%;background:var(--idle)"></i>
+  <div class="bar" role="img" aria-label="Of 1,856 checked birds: 95 percent found under the right name, 5 percent missed or wrongly named">
+    <i style="width:95.42%;background:var(--ok)"></i><i style="width:4.58%;background:var(--idle)"></i>
   </div>
   <div class="legend">
-    <div><span class="sw" style="background:var(--ok)"></span><span><b>89 %</b> counted under the right name (1,653)</span></div>
-    <div><span class="sw" style="background:var(--idle)"></span><span><b>11 %</b> missed, unsure or wrongly named (203)</span></div>
+    <div><span class="sw" style="background:var(--ok)"></span><span><b>95 %</b> found under the right name (1,771)</span></div>
+    <div><span class="sw" style="background:var(--idle)"></span><span><b>5 %</b> missed or wrongly named (85)</span></div>
   </div>
-  <p class="muted small">The checked labels of the test day have 1,856 birds; the shipped student counts 1,653 under the right name. This run did not split the remaining 203 into missed, unsure and wrongly named.</p>
+  <p class="muted small">The checked labels of the test day have 1,856 birds; at cut-off 0.25 the shipped student finds 1,771 of them under the right name. This run did not split the remaining 85 into missed and wrongly named.</p>
 
   <h3>By species</h3>
   <div class="scroll"><table>
     <tr><th>Species</th><th>Named right</th><th>Found</th><th>Birds on the test day</th></tr>
-    <tr><td>Great tit</td><td>0.95</td><td>0.90</td><td>1,460</td></tr>
-    <tr><td>Blue tit</td><td>0.92</td><td>0.87</td><td>258</td></tr>
-    <tr><td>Magpie</td><td>0.97</td><td>0.92</td><td>90</td></tr>
-    <tr><td>Bullfinch</td><td>0.91</td><td>0.67</td><td>30</td></tr>
-    <tr><td>Great spotted woodpecker</td><td>0.89</td><td>1.00</td><td>16</td></tr>
+    <tr><td>Great tit</td><td>0.952</td><td>0.960</td><td>1,460</td></tr>
+    <tr><td>Blue tit</td><td>0.909</td><td>0.934</td><td>258</td></tr>
+    <tr><td>Magpie</td><td>0.978</td><td>0.978</td><td>90</td></tr>
+    <tr><td>Bullfinch</td><td>0.879</td><td>0.967</td><td>30</td></tr>
+    <tr><td>Great spotted woodpecker</td><td>1.00</td><td>0.625</td><td>16</td></tr>
   </table></div>
-  <p class="muted small">The shipped 640 px student, scored against the checked labels. Tree sparrow and house sparrow had one bird each on the test day; that is too few to say anything. Bullfinch and woodpecker numbers rest on few birds too.</p>
+  <p class="muted small">The shipped 960 px student at cut-off 0.25, scored against the checked labels. Tree sparrow and house sparrow had one bird each on the test day; that is too few to say anything. Bullfinch and woodpecker numbers rest on few birds too.</p>
 
   <h3>Speed on the Arduino UNO Q</h3>
   <div class="scroll"><table>
     <tr><th>Detector</th><th>Median per photo</th><th>Slow case (p90)</th><th>Birds found</th></tr>
-    <tr class="ship"><td>Our student, 640 px</td><td>507 ms</td><td>520 ms</td><td>0.891</td></tr>
-    <tr><td>Our student, 960 px</td><td>1,109 ms</td><td>1,128 ms</td><td>0.899</td></tr>
-    <tr><td>Off-the-shelf detector plus classifier</td><td>170 ms</td><td>172 ms</td><td>0.00</td></tr>
+    <tr class="ship"><td>Our student, nano 960 px</td><td>1,111 ms</td><td>1,138 ms</td><td>0.954</td></tr>
+    <tr><td>Our student, nano 640 px</td><td>511 ms</td><td>not recorded</td><td>0.919</td></tr>
+    <tr><td>Our student, small 640 px (YOLO26s)</td><td>1,479 ms</td><td>1,505 ms</td><td>not given</td></tr>
+    <tr><td>Off-the-shelf detector plus classifier</td><td>170 ms</td><td>172 ms</td><td>0.001</td></tr>
   </table></div>
-  <p class="muted small">The budget is 1.5 s; the demo takes a photo every 5 s. The timings are of the earlier students with the same architecture and input size; they were not measured again for the new weights. The off-the-shelf pair is fast but finds almost no birds on this camera (1 of 1,856), which is why we trained our own.</p>
+  <p class="muted small">30 frames of real feeder footage, timed on the board on 15 November 2026 (the off-the-shelf pair on 14 November 2026). The budget is 1.5 s; the demo takes a photo every 5 s. The 960 px timing is of the 25-day weights; the shipped 38-day weights have the same architecture and input size and were not timed again. At the stand, with the board also running the webcam and a full-screen browser, the demo reported about 2.0 s per analysed photo (median over five minutes), with about 540 MB of memory free. The off-the-shelf pair is fast but finds almost no birds on this camera (1 of 1,856), which is why we trained our own.</p>
 
   <h3>Squirrel and latch</h3>
   <ul>
-    <li>The test day has no squirrel. On held-back training footage the model named squirrels right 0.953 of the time and found 0.865 of them (517 boxes); that figure is optimistic for this feeder.</li>
-    <li>In 899 test frames the shipped model called nothing a squirrel that was not one. The 960 px student did so once.</li>
-    <li>In the demo reel the simulated latch closed on the squirrel clip. That clip was kept out of training, but the model has seen the same squirrel on other visits: after the label check, 936 boxes, nearly all from 8, 22 (its second visit that day) and 31 October and 6 and 11 November 2026.</li>
+    <li>The test day has no squirrel. Even so, the shipped model drew at least one squirrel box on it.</li>
+    <li>The real squirrel in the held-out clip of 22 October 2026 scores 0.86 on average (0.34 to 0.96) when it is in clear view. That clip was kept out of training, but the model has seen the same squirrel on other visits: in the first 25 training days, after the label check, 936 boxes, nearly all from 8, 22 (its second visit that day) and 31 October and 6 and 11 November 2026.</li>
+    <li>At the stand the webcam looks at a wooden model feeder in a room. There the model drew "Red squirrel" boxes on a person and on the wooden box at 0.55 to 0.60 confidence, and the hatch went up and down. Since then the board needs three photos in a row at 0.8 or more. After that change the hatch closed once in the first five minutes and not at all in the next four; what set off that one closing is not known. This is not solved.</li>
     <li>The model has no rat class, so the latch reacts to squirrels only.</li>
   </ul>
 </section>
 
 <section>
-  <h2>What we tried, and what stopped helping</h2>
+  <h2>What we tried, and what helped</h2>
+  <p>Five more days of the same camera that no model trained on (3, 9, 14, 19 and 25 October 2026, 2,808 frames, same automatic labels) served as exam days. They were scored with an ad-hoc scorer that picks its cut-off on the scored frames themselves (0.30 to 0.90), so the numbers run a little high and are only good for comparing models with each other. They were used to choose what to train next, so they are not an untouched test either.</p>
   <div class="scroll"><table>
-    <tr><th>Student</th><th>Named birds right</th><th>Birds found</th><th>Frames exactly right</th></tr>
-    <tr><td>Earlier student, 640 px, old labels</td><td>0.940</td><td>0.811</td><td>0.751</td></tr>
-    <tr><td>Earlier student, 960 px, old labels</td><td>0.950</td><td>0.822</td><td>0.745</td></tr>
-    <tr><td>From scratch on the checked labels, 640 px</td><td>0.956</td><td>0.826</td><td>0.758</td></tr>
-    <tr><td>From scratch on the checked labels, 960 px</td><td>0.961</td><td>0.880</td><td>0.803</td></tr>
-    <tr class="ship"><td>Earlier 640 px student, 8 more epochs on the checked labels</td><td>0.942</td><td>0.891</td><td>0.831</td></tr>
-    <tr><td>Earlier 960 px student, 6 more epochs on the checked labels</td><td>0.949</td><td>0.899</td><td>0.831</td></tr>
+    <tr><th>Student</th><th>Exam days</th><th>12 Nov, ad-hoc scorer</th></tr>
+    <tr><td>nano 960 px, 25 days</td><td>0.915</td><td>0.854</td></tr>
+    <tr class="ship"><td>nano 960 px, 38 days, 8 epochs</td><td>0.922</td><td>0.887</td></tr>
+    <tr><td>same, second run with another random seed</td><td>0.923</td><td>0.875</td></tr>
+    <tr><td>same, 14 epochs</td><td>0.920</td><td>0.881</td></tr>
+    <tr><td>control: nano 960 px, 25 days, 8 more epochs</td><td>0.916</td><td>0.853</td></tr>
+    <tr><td>nano 640 px, 38 days</td><td>0.914</td><td>0.839</td></tr>
+    <tr><td>small 640 px, 25 days, 30 epochs</td><td>0.922</td><td>0.879</td></tr>
+    <tr><td>small 640 px, then 8 epochs on 38 days</td><td>0.921</td><td>0.861</td></tr>
+    <tr><td>nano 960 px, 38 days + 2,948 frames of other feeders</td><td>0.917</td><td>0.855</td></tr>
   </table></div>
-  <p class="muted small">All rows: same test day, checked labels, cut-off 0.50, ad-hoc scorer.</p>
-  <p class="note">19 more days of the same camera changed nothing measurable. Removing double boxes and oversized boxes from the old training labels by rule and re-training did not help either. Training the earlier students further on the checked labels gave the most frames counted exactly right; students trained from scratch on the same labels scored lower. Part of that gain is agreeing with the check itself, because the test labels come from the same check.</p>
+  <p class="muted small">Frames counted exactly right. On 12 November the ad-hoc scorer gives lower numbers than the official evaluation (0.887 against 0.909 for the shipped model); its grid starts at 0.30, while the official cut-off is 0.25. The small 640 px student scored 0.887 officially, at cut-off 0.30.</p>
+  <p class="note">What helped: reading 960 px instead of 640 px, and 13 more checked days of the same camera (about +3 points on 12 November, seen again in a second training run; under one point on the exam days). What did not help: an automatic search over training settings (16 variants per generation, 18 generations; 0.926 on the days it was tuned on, 0.906 on the exam days); a bigger model (same accuracy, 1,479 ms on the board against 1,111 ms); longer training; and 2,948 checked frames from other feeders' Creative Commons streams (Finland, Russia, the UK, Germany, Poland). An earlier test with 19 more days of uncleaned labels changed nothing; with checked labels, more days did help. Only two 2026 stream days of this camera remain unused.</p>
 </section>
 
 <section>
@@ -171,7 +176,8 @@ footer{color:var(--muted);font-size:13.5px;border-top:1px solid var(--line);padd
     <li>The test labels and the training labels come from the same automatic check, so the test rewards agreeing with that check. The fair comparison is the earlier student scored on the same checked labels.</li>
     <li>392 of the 2,256 candidates on the test day (17 %) are ignore zones: cut-off birds, blurred flight, sources that disagree. They are not scored, so the test is easier than counting every bird.</li>
     <li>We do not claim it names species better than a skilled volunteer.</li>
-    <li>The demo footage is recorded, not live. It belongs to the stream's uploader and is not in our repository.</li>
+    <li>Only 12 November 2026 and the five exam days are days the shipped model never trained on. Its cut-off was picked on frames of days it did train on (other frames of them).</li>
+    <li>The demo reel is recorded, not live. It belongs to the stream's uploader and is not in our repository. With the live webcam at the stand the model sees a wooden model feeder in a room, which is not the camera it was trained on.</li>
   </ul>
 </section>
 
