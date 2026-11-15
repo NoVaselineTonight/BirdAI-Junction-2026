@@ -1,19 +1,25 @@
-/* A census sheet beside a hide window: overcast snow ground, spruce ink, one bullfinch red. */
+/* A hide and its census sheet. The pictures sit in dark hide windows on the left, the counts on pale census
+   paper on the right, under a spruce band. Bullfinch red only for what must stop a passer-by: the latch
+   closed, the counter stopped. One screen on the stand's TV; the rest of the record scrolls below. */
 :root {
-  --snow: #e9eef1;
-  --sheet: #f7f9fa;
+  --snow: #e6ecef;
+  --sheet: #f8fafb;
   --ink: #13222a;
-  --ink-2: #364952;
+  --ink-2: #3a4d56;
   --rule: #b9c6cd;
-  --rule-soft: #d6dee2;
-  --hide: #0c1317;
-  --hide-ink: #c9d5db;
-  --spruce: #2e5a4f;
+  --rule-soft: #d8e0e4;
+  --hide: #0d1519;
+  --hide-2: #16222a;
+  --hide-ink: #dfe8ec;
+  --hide-ink-2: #a9bac2;
+  --spruce: #24483f;
+  --spruce-ink: #eef4f1;
+  --spruce-ink-2: #bcd2c9;
+  --moss: #3f9b6a;
   --bullfinch: #b3313b;
-  --bullfinch-soft: #f4dcdc;
-  --gap: clamp(14px, 1.4vw, 28px);
+  --gap: clamp(10px, 0.9vw, 20px);
   --sans: "Segoe UI", system-ui, -apple-system, "Helvetica Neue", "Noto Sans", "DejaVu Sans", Arial, sans-serif;
-  font-size: clamp(16px, 1.05vw, 21px);
+  font-size: clamp(14px, min(1.1vw, 2vh), 22px);
 }
 
 * { box-sizing: border-box; }
@@ -23,56 +29,99 @@ html { background: var(--snow); color: var(--ink); }
 
 body {
   margin: 0;
+  background: var(--snow);
   font-family: var(--sans);
-  line-height: 1.35;
+  line-height: 1.3;
   font-variant-numeric: tabular-nums lining-nums;
 }
 
-::selection { background: var(--spruce); color: var(--sheet); }
+::selection { background: var(--spruce); color: var(--spruce-ink); }
 
 h1, h2, p, figure, ul, dl, dd { margin: 0; }
 h2 { font-size: 1.3rem; font-weight: 650; letter-spacing: -0.01em; }
 .sub { font-weight: 400; color: var(--ink-2); }
 
-/* Masthead: title left, simulated clock right */
+/* ---------- masthead: name, latch, clock ---------- */
 .masthead {
   display: flex;
-  align-items: baseline;
-  gap: 0 1.5rem;
   flex-wrap: wrap;
-  padding: calc(var(--gap) * 0.7) var(--gap);
-  border-bottom: 2px solid var(--ink);
+  align-items: center;
+  gap: 0.5rem 2rem;
+  padding: 0.55rem var(--gap);
+  background: var(--spruce);
+  color: var(--spruce-ink);
 }
-.masthead h1 { font-size: 1.75rem; font-weight: 700; letter-spacing: -0.02em; }
-.where { color: var(--ink-2); font-size: 1.05rem; }
-.clock { margin-left: auto; font-size: 1.3rem; color: var(--ink-2); }
-.clock strong { font-size: 2.1rem; color: var(--ink); font-weight: 650; margin-left: 0.4rem; }
+.brand { display: flex; align-items: baseline; gap: 0.75rem; flex-wrap: wrap; line-height: 1; }
+.brand-name { font-size: 2.3rem; font-weight: 800; letter-spacing: -0.03em; }
+.brand-tag { font-size: 1.1rem; font-weight: 500; color: var(--spruce-ink-2); }
+
+.clock-block { margin-left: auto; text-align: right; }
+.clock { font-size: 1.15rem; color: var(--spruce-ink-2); line-height: 1.1; }
+.clock strong { font-size: 2rem; color: var(--spruce-ink); font-weight: 700; margin-left: 0.4rem; letter-spacing: -0.01em; }
+.demo-clock { font-size: 0.9rem; color: var(--spruce-ink-2); margin-top: 0.15rem; }
+
+/* Latch: a quiet mark while open; solid bullfinch red when closed, to be read from across the hall */
+.latch { display: flex; flex-wrap: wrap; align-items: center; gap: 0.3rem 0.9rem; max-width: 42rem; }
+.latch-detail { flex: 1 1 16rem; }
+.latch-state {
+  display: inline-flex; align-items: center; gap: 0.5rem; flex: none; white-space: nowrap;
+  padding: 0.25rem 0.85rem 0.25rem 0.7rem;
+  border-radius: 999px;
+  background: var(--spruce-ink); color: var(--spruce);
+  font-size: 1.25rem; font-weight: 750; line-height: 1.2;
+}
+.latch-dot { width: 0.7rem; height: 0.7rem; border-radius: 50%; background: var(--moss); flex: none; }
+.latch.closed .latch-state { background: var(--bullfinch); color: #fff; font-size: 1.45rem; }
+.latch.closed .latch-dot { background: #fff; }
+.latch.not-answering .latch-state { background: transparent; color: var(--spruce-ink); box-shadow: inset 0 0 0 2px var(--spruce-ink-2); }
+.latch.not-answering .latch-dot { background: transparent; box-shadow: inset 0 0 0 2px var(--spruce-ink-2); }
+.latch-detail { display: grid; font-size: 0.9rem; color: var(--spruce-ink-2); line-height: 1.25; overflow-wrap: anywhere; }
+.latch-detail > span:not([hidden]) { display: block; }
+.latch-detail:not(:has(> span:not([hidden]))) { display: none; }
+.latch-who { font-weight: 650; color: var(--spruce-ink); }
+.latch.closed .latch-who { font-size: 1.05rem; }
+.latch-error { font-weight: 650; color: #ffd9d9; }
 
 .stopped {
-  padding: 0.8rem var(--gap);
+  padding: 0.65rem var(--gap);
   background: var(--bullfinch);
   color: #fff;
   font-size: 1.2rem;
 }
 
-main { padding: var(--gap); display: grid; gap: calc(var(--gap) * 1.6); }
-
-/* First viewport: the hide window and the sheet */
-.now {
+/* ---------- the board: AI and Live on the left, stats and specs on the right ---------- */
+.board-wrap { padding: var(--gap); }
+.board {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(24rem, 34rem);
   gap: var(--gap);
-  align-items: start;
+  grid-template-columns: minmax(0, 1fr);
 }
+
+.pane {
+  background: var(--hide);
+  color: var(--hide-ink);
+  border-radius: 4px;
+  padding: 0.5rem 0.6rem 0.6rem;
+  display: flex; flex-direction: column; gap: 0.4rem;
+  min-width: 0; min-height: 0;
+}
+.pane-head { display: grid; gap: 0.1rem; }
+.pane-title {
+  font-size: 1.2rem; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; line-height: 1.2;
+}
+.pane-sub { margin-left: 0.5rem; font-size: 0.85rem; font-weight: 500; letter-spacing: 0; text-transform: none; color: var(--hide-ink-2); }
+.pane-live .pane-title::before {
+  content: ""; display: inline-block; width: 0.6rem; height: 0.6rem; margin: 0 0.5rem 0.1rem 0;
+  border-radius: 50%; background: var(--bullfinch); vertical-align: middle;
+}
+.pane-note { font-size: 0.9rem; color: var(--hide-ink-2); line-height: 1.25; }
+.pane-note .footage-note { margin-left: 0.3rem; color: var(--hide-ink); }
 
 .window {
   position: relative;
-  background: var(--hide);
+  background: #000;
   aspect-ratio: 16 / 9;
-  max-height: calc(100vh - 13.5rem);
-  margin-inline: auto;
-  border-radius: 3px;
-  box-shadow: 0 6px 22px rgba(12, 19, 23, 0.25);
+  border-radius: 2px;
   overflow: hidden;
 }
 .window img { display: block; width: 100%; height: 100%; object-fit: contain; }
@@ -80,97 +129,139 @@ main { padding: var(--gap); display: grid; gap: calc(var(--gap) * 1.6); }
 .waiting {
   position: absolute; inset: 0;
   display: grid; place-items: center;
-  color: var(--hide-ink); font-size: 1.2rem;
+  color: var(--hide-ink-2); font-size: 1.1rem;
 }
 
-/* Photo mode: the live picture and the analysed photo, the same width; side by side from 900 px, stacked below */
-.feeds { display: grid; gap: var(--gap); }
-.pane { display: grid; gap: 0.4rem; align-content: start; min-width: 0; }
-.pane-title { margin: 0; font-size: 1.15rem; font-weight: 650; letter-spacing: -0.01em; }
-.pane-note { color: var(--ink-2); font-size: 1rem; }
-.pane .window { width: 100%; } /* a grid item with auto margins would shrink; fill the pane as before */
-@media (min-width: 900px) {
-  .feeds.two { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-}
-
-.honesty {
-  display: flex; flex-wrap: wrap; gap: 0.2rem 2rem;
-  padding-top: 0.7rem;
-  font-size: 1.12rem;
-  font-weight: 550;
-}
-.footage-note { display: inline-block; } /* wraps as a whole, never mid-sentence */
-
-.sheet {
+/* census paper */
+.panel {
   background: var(--sheet);
   border: 1px solid var(--rule);
   border-top: 4px solid var(--ink);
-  padding: 1rem 1.2rem 1.1rem;
-  display: grid;
-  gap: 0.5rem;
+  border-radius: 2px;
+  padding: 0.6rem 1rem 0.7rem;
+  display: flex; flex-direction: column; gap: 0.45rem;
+  min-width: 0; min-height: 0;
+  container-type: inline-size;
 }
-.rule-line { font-size: 1.08rem; font-weight: 550; }
+.panel-head { display: flex; align-items: baseline; gap: 0.25rem 1rem; flex-wrap: wrap; }
+.panel-head .rule-line { margin-left: auto; }
+.panel-title { font-size: 1.2rem; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; line-height: 1.2; }
+.panel-sub { font-size: 1.1rem; color: var(--ink-2); }
+.panel-sub span { color: var(--ink); font-weight: 600; }
 
-/* Latch: a quiet line while open; a full red band when closed, to be read from the back of the room */
-.latch { display: grid; gap: 0.1rem; }
-.latch-state { font-size: 1.2rem; font-weight: 700; line-height: 1.2; color: var(--spruce); }
-.latch.closed .latch-state {
-  margin: -0.15rem -0.5rem 0.1rem; padding: 0.2rem 0.5rem;
-  background: var(--bullfinch); color: #fff; font-size: 1.3rem;
-}
-.latch.not-answering .latch-state { color: var(--ink); } /* neutral: neither open nor closed */
-.latch.not-answering .latch-who { font-size: 0.8em; font-weight: 600; color: var(--ink-2); }
-.latch-rule { font-size: 0.9rem; color: var(--ink-2); line-height: 1.2; }
-.latch-sim { display: inline-block; font-weight: 600; color: var(--ink); } /* wraps as a whole */
-.latch-error { font-weight: 650; color: var(--bullfinch); overflow-wrap: break-word; } /* runs on after the rule */
-/* The latch block costs about 100 px: with it showing, the sheet's spacing tightens so the worst case
-   (eight rows, an unidentified line, twenty nameable species) still fits 1920x1080. Type sizes stay. */
-.sheet.with-latch { padding: 0.9rem 1.2rem 1rem; gap: 0.4rem; }
-.with-latch .tally tbody th { padding: 0.15rem 0 0; line-height: 1.15; }
-.with-latch .tally td.in-frame, .with-latch .tally td.visits { line-height: 1; }
-.with-latch .tally td.max { line-height: 1; }
-.with-latch .visits-note, .with-latch .can-name { line-height: 1.2; }
-.with-latch .facts { gap: 0.15rem; }
-.with-latch h2 { line-height: 1.15; }
-
-/* Tally: "Most at once" is the census number; visits sit apart, small and muted */
+/* Bird stats: the census number (most at once) is the headline, set largest; visits sit apart, small */
+.rule-line { font-size: 0.9rem; color: var(--ink-2); font-weight: 550; }
+/* plain flow, not grid: a grid would squeeze its rows and hide an overflow from the fitting script */
+.tally-box { display: block; min-height: 0; }
+.tally-box > * + * { margin-top: 0.4rem; }
 .tally { width: 100%; border-collapse: collapse; }
 .tally thead th {
-  text-align: left; font-weight: 500; font-size: 1rem; color: var(--ink-2); line-height: 1.15;
-  padding: 0 0 0.3rem; border-bottom: 1px solid var(--rule); vertical-align: bottom;
+  text-align: left; font-weight: 600; font-size: 0.85rem; color: var(--ink-2); line-height: 1.15;
+  padding: 0 0 0.3rem; border-bottom: 2px solid var(--ink); vertical-align: bottom;
 }
-.tally thead th.num { text-align: right; padding-left: 0.45rem; white-space: nowrap; }
+.tally thead th.num { text-align: right; padding-left: 0.8rem; white-space: nowrap; }
+.tally thead th.max { color: var(--ink); font-size: 0.95rem; }
+.th-sub { display: block; font-weight: 500; font-size: 0.8rem; color: var(--ink-2); }
 .tally tbody th { text-align: left; font-weight: 400; padding: 0.15rem 0; }
 .tally th, .tally td { border-bottom: 1px solid var(--rule-soft); vertical-align: baseline; }
-.tally .num, .grid .num { text-align: right; }
-.tally td.num { padding-left: 0.45rem; white-space: nowrap; }
-.tally td.in-frame { font-size: 1.45rem; font-weight: 500; color: var(--ink-2); }
-.tally .max { padding-right: 0.55rem; }
-.tally td.max { font-size: 2.1rem; font-weight: 700; color: var(--ink); line-height: 1.05; }
+.tally td.num { text-align: right; padding-left: 0.8rem; white-space: nowrap; }
+.tally td.in-frame { font-size: 1.6rem; font-weight: 500; color: var(--ink-2); }
+.tally td.max { font-size: 2.6rem; font-weight: 800; color: var(--ink); line-height: 1.05; letter-spacing: -0.02em; }
 .tally .visits { border-left: 1px dotted var(--rule); }
-.tally thead th.visits { padding-left: 0.55rem; }
-.tally td.visits { font-size: 1.1rem; font-weight: 400; color: var(--ink-2); padding-left: 0.55rem; }
-.tally .fi { display: inline; margin-left: 0.15rem; font-size: 0.92rem; }
-.name { font-size: 1.15rem; font-weight: 600; }
-.fi { display: block; font-weight: 400; color: var(--ink-2); font-size: 0.98rem; }
+.tally td.visits { font-size: 1.2rem; color: var(--ink-2); padding-left: 0.8rem; }
+.tally .name { font-size: 1.3rem; font-weight: 650; }
+.tally .fi { margin-left: 0.3rem; font-size: 0.95rem; color: var(--ink-2); }
+.also, .unseen { color: var(--ink-2); font-size: 0.95rem; }
+.also .lead, .unseen .lead { font-weight: 650; color: var(--ink); }
 
-.unseen { color: var(--ink-2); }
-.unseen .lead { font-weight: 600; }
-.visits-note { color: var(--ink-2); font-size: 0.95rem; }
-.unidentified { color: var(--ink-2); }
-.facts { display: grid; gap: 0.25rem; }
-.facts div { display: flex; justify-content: space-between; gap: 1rem; border-bottom: 1px dotted var(--rule); padding-bottom: 0.2rem; }
-.facts dt { color: var(--ink-2); }
-.facts dd { font-weight: 600; text-align: right; }
+.stats-foot { display: grid; gap: 0.3rem; margin-top: auto; }
+.foot-facts { display: flex; flex-wrap: wrap; gap: 0.2rem 2rem; }
+.foot-facts div { display: flex; align-items: baseline; gap: 0.5rem; }
+.foot-facts dt { color: var(--ink-2); }
+.foot-facts dd { font-size: 1.3rem; font-weight: 750; }
+.visits-note { color: var(--ink-2); font-size: 0.85rem; }
+
+/* Tech specs: label-value rows, two columns when the panel is wide */
+.spec-rows { display: grid; gap: 0 1.6rem; align-content: start; }
+.spec-rows div {
+  display: flex; justify-content: space-between; align-items: baseline; gap: 1rem;
+  padding: 0.3rem 0; border-bottom: 1px dotted var(--rule);
+}
+.spec-rows dt { color: var(--ink-2); font-size: 0.95rem; }
+.spec-rows dd { font-weight: 650; text-align: right; font-size: 1.05rem; overflow-wrap: anywhere; }
+.dd-sub { display: block; font-size: 0.8rem; font-weight: 500; color: var(--ink-2); }
+@container (min-width: 28rem) {
+  .spec-rows { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+/* a medium-width panel: each cell sets its label over its value, so values never break mid-phrase */
+@container (min-width: 28rem) and (max-width: 44rem) {
+  .spec-rows div { display: block; padding: 0.25rem 0; }
+  .spec-rows dt { font-size: 0.85rem !important; line-height: 1.15; }
+  .spec-rows dd { text-align: left; }
+}
 .accuracy { font-weight: 550; }
-/* up to twenty names: reference, not a headline, so it is set smaller and muted to leave the panel room */
-.can-name { font-size: 0.92rem; color: var(--ink-2); line-height: 1.3; }
+.specs .accuracy { font-size: 0.9rem; color: var(--ink-2); }
 
-/* Ledger: the census tables */
+/* ---------- one screen: header plus a 2 x 2 board, no scrolling of the first screen ---------- */
+@media (min-width: 900px) and (min-height: 560px) {
+  /* the kiosk cannot scroll; a laptop still scrolls to the tables below with wheel or keys */
+  html { scrollbar-width: none; }
+  html::-webkit-scrollbar { display: none; }
+
+  .screen { height: 100vh; height: 100dvh; display: flex; flex-direction: column; overflow: hidden; }
+  .board-wrap { flex: 1; min-height: 0; container-type: size; }
+  .board {
+    /* the left column is as wide as a 16:9 picture that fills its pane's height, so no side bars */
+    --pane-chrome: 4.6rem;
+    --pic-w: min(calc(((100cqh - var(--gap)) / 2 - var(--pane-chrome)) * 16 / 9 + 1.2rem), 58cqw);
+    height: 100%;
+    grid-template-columns: var(--pic-w) minmax(0, 1fr);
+    /* the pictures split the left column in half; on the right the stats get more room than the specs */
+    grid-template-rows: minmax(0, 50fr) minmax(0, 8fr) minmax(0, 42fr);
+    grid-template-areas: "ai stats" "live stats" "live specs";
+  }
+  .board:not(.two) {
+    --pic-w: min(calc((100cqh - var(--pane-chrome)) * 16 / 9 + 1.2rem), 52cqw);
+    grid-template-areas: "ai stats" "ai specs" "ai specs";
+  }
+  .pane-ai { grid-area: ai; }
+  .pane-live { grid-area: live; }
+  .stats { grid-area: stats; }
+  .specs { grid-area: specs; }
+  .window { flex: 1; min-height: 0; aspect-ratio: auto; }
+  .tally-box { flex: 1; overflow: hidden; }
+  /* the pictures are bound by the height, so the paper gets the room: larger type for the far viewer */
+  .tally .name { font-size: 1.45rem; }
+  .tally .fi { font-size: 1.05rem; }
+  .tally td.in-frame { font-size: 1.8rem; line-height: 1.1; }
+  .tally td.max { font-size: 2.8rem; line-height: 1; }
+  .tally td.visits { font-size: 1.35rem; }
+  .tally thead th { font-size: 0.95rem; }
+  .tally thead th.max { font-size: 1.05rem; }
+  .spec-rows div { padding: 0.4rem 0; }
+  .spec-rows dt { font-size: 1.02rem; }
+  .spec-rows dd { font-size: 1.2rem; }
+  .specs .accuracy { font-size: 0.95rem; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { transition: none !important; animation: none !important; scroll-behavior: auto !important; }
+}
+
+/* ---------- below the first screen: the record ---------- */
+.below {
+  padding: calc(var(--gap) * 2) var(--gap) var(--gap);
+  display: grid;
+  gap: calc(var(--gap) * 2.4);
+  border-top: 2px solid var(--ink);
+  grid-template-columns: minmax(0, 1fr);
+}
+.below > *, .block { min-width: 0; }
+
 .ledger {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: calc(var(--gap) * 1.4) calc(var(--gap) * 1.6);
+  gap: calc(var(--gap) * 2) calc(var(--gap) * 2.4);
 }
 /* more than four species columns: every block takes the full width, so no column is cut off */
 .ledger.wide { grid-template-columns: minmax(0, 1fr); }
@@ -178,31 +269,30 @@ main { padding: var(--gap); display: grid; gap: calc(var(--gap) * 1.6); }
 .block { display: grid; gap: 0.6rem; align-content: start; }
 .scroll { overflow-x: auto; }
 
-.grid { width: 100%; border-collapse: collapse; font-size: 1.05rem; }
+.grid { width: 100%; border-collapse: collapse; font-size: 1.05rem; background: var(--sheet); }
 .grid th, .grid td { padding: 0.35rem 0.6rem; border-bottom: 1px solid var(--rule-soft); white-space: nowrap; }
 .grid thead th { text-align: right; vertical-align: bottom; font-weight: 600; border-bottom: 2px solid var(--ink); line-height: 1.15; }
 .grid thead th:first-child, .grid tbody th { text-align: left; }
-.grid thead th .fi { font-size: 0.85rem; }
+.grid .name { display: block; }
+.grid .fi { display: block; font-weight: 400; color: var(--ink-2); font-size: 0.85rem; }
 .grid tbody th { font-weight: 600; }
 .grid td { text-align: right; }
-.grid td.watched { color: var(--ink-2); }
-.grid td.zero { color: var(--ink-2); }
-.grid tr.current th, .grid tr.current td { background: var(--sheet); }
+.grid td.watched, .grid td.zero { color: var(--ink-2); }
+.grid tr.current th, .grid tr.current td { background: #eef3f1; }
 .grid tr.current th { box-shadow: inset 3px 0 0 var(--bullfinch); }
-.grid caption { caption-side: bottom; text-align: left; padding-top: 0.4rem; color: var(--ink-2); }
-.none { color: var(--ink-2); }
+.grid caption { caption-side: bottom; text-align: left; padding-top: 0.4rem; color: var(--ink-2); background: var(--snow); }
 
 .export {
   justify-self: start;
   margin-top: 0.4rem;
   padding: 0.6rem 1.1rem;
-  background: var(--ink);
-  color: var(--sheet);
+  background: var(--spruce);
+  color: var(--spruce-ink);
   font-weight: 600;
   text-decoration: none;
   border-radius: 3px;
 }
-.export:hover { background: var(--spruce); }
+.export:hover { background: var(--ink); }
 a:focus-visible { outline: 3px solid var(--bullfinch); outline-offset: 3px; }
 
 .caveat { font-weight: 550; }
@@ -214,7 +304,6 @@ a:focus-visible { outline: 3px solid var(--bullfinch); outline-offset: 3px; }
 .habitats .bar span { display: block; height: 100%; background: var(--spruce); }
 .habitats .members { grid-column: 3; color: var(--ink-2); font-size: 0.95rem; }
 
-/* Evidence */
 .evidence { display: grid; gap: 0.8rem; }
 .photos {
   list-style: none; padding: 0;
@@ -227,12 +316,32 @@ a:focus-visible { outline: 3px solid var(--bullfinch); outline-offset: 3px; }
 .photos .when { color: var(--ink-2); }
 .empty { color: var(--ink-2); }
 
-/* Model card */
 .model { display: grid; gap: 0.7rem; max-width: 52rem; padding-bottom: var(--gap); }
+.facts { display: grid; gap: 0.25rem; }
+.facts div { display: flex; justify-content: space-between; gap: 1rem; border-bottom: 1px dotted var(--rule); padding-bottom: 0.2rem; }
+.facts dt { color: var(--ink-2); }
+.facts dd { font-weight: 600; text-align: right; }
 .metrics { max-width: 40rem; }
+.can-name { font-size: 0.95rem; color: var(--ink-2); }
+.latch-rule { font-weight: 550; }
 
-@media (max-width: 1100px) {
-  .now { grid-template-columns: 1fr; }
-  .window { max-height: none; }
-  .ledger { grid-template-columns: 1fr; }
+/* ---------- phone and small windows: the four panels stack in reading order and the page scrolls ---------- */
+@media (max-width: 899px), (max-height: 559px) {
+  .masthead { gap: 0.5rem 1rem; }
+  .clock-block { margin-left: 0; text-align: left; flex-basis: 100%; }
+  .brand-name { font-size: 2rem; }
+  .ledger { grid-template-columns: minmax(0, 1fr); }
+  .tally td.max { font-size: 2.2rem; }
+}
+@media (max-width: 480px) {
+  :root { font-size: 16px; }
+  .tally .fi { display: block; margin-left: 0; }
+  .tally .name { font-size: 1.05rem; }
+  .tally thead th.num { white-space: normal; }
+  .tally thead th, .th-sub { font-size: 0.8rem; }
+  .tally thead th.num, .tally td.num { padding-left: 0.45rem; }
+  .tally td.in-frame { font-size: 1.3rem; }
+  .tally td.max { font-size: 1.9rem; }
+  .tally td.visits { font-size: 1.1rem; }
+  .habitats li { grid-template-columns: 7rem 2.5rem minmax(0, 1fr); }
 }

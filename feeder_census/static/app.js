@@ -73,17 +73,20 @@ function renderLive() {
   $("clock-time").textContent = `${pad(t.h)}:${pad(t.mi)}`;
   $("sheet-day").textContent = `${t.da} ${MONTHS[t.mo - 1]}`;
   $("scale-sim").textContent = spanText(live.time_scale);
-  $("model-name").textContent = live.detector;
-  if (!modelCard || !modelCard.name) $("card-name").textContent = live.detector;
+  if (!modelCard || !modelCard.name) {
+    $("card-name").textContent = live.detector;
+    $("model-name").textContent = live.detector;
+  }
   $("model-ms").textContent = msText(live.detect_ms);
   $("card-ms").textContent = `${msText(live.detect_ms)} per frame`;
-  $("unidentified").textContent = `Unidentified in frame: ${live.unidentified}`;
-  $("unidentified").hidden = !live.unidentified;
+  $("unidentified-n").textContent = String(live.unidentified);
   $("footage-note").textContent = live.footage_note || "";
   $("footage-note").hidden = !live.footage_note;
   const photo = typeof live.photo_every_s === "number";
   $("photo-note").textContent = photo ? `One photo every ${live.photo_every_s} s, as the board's camera would take them.` : "";
   $("photo-note").hidden = !photo || live.two_feeds;
+  $("spec-interval").textContent = photo ? `One photo every ${live.photo_every_s} s` : "Photo mode off";
+  $("spec-source").textContent = SPEC_SOURCES[live.source];
   renderFeeds();
 
   renderLatch(live.latch);
@@ -104,16 +107,21 @@ function renderLive() {
 // `headline` is decided by the server: the page never calls the latch open or closed when the board did
 // not confirm the last command ("not_answering", in neutral ink, never the green open or the red band).
 const LATCH_HEADLINES = { off: "", open: "Latch: open", closed: "Latch: closed", not_answering: "Latch: not answering" };
+const LATCH_MODES = { off: "Off", sim: "Shown only, no servo connected", router: "Servo on the board" };
 
 function renderLatch(latch) {
   const block = $("latch");
   const headline = latch.headline in LATCH_HEADLINES ? latch.headline : "off";
+  $("spec-latch").textContent = LATCH_MODES[latch.mode] || LATCH_MODES.off;
+  $("spec-latch-row").hidden = false;
   block.hidden = headline === "off";
-  block.parentElement.classList.toggle("with-latch", !block.hidden);
+  $("latch-rule").hidden = block.hidden;
   if (block.hidden) return;
-  const who = latch.reason_name ? ` · ${latch.reason_name.english} · ${latch.reason_name.finnish} at the feeder` : "";
-  $("latch-state").textContent = LATCH_HEADLINES[headline];
+  const who = latch.reason_name ? `${latch.reason_name.english} · ${latch.reason_name.finnish} at the feeder` : "";
+  // written only on a change: the line is a polite live region and must not repeat itself every second
+  if ($("latch-state").textContent !== LATCH_HEADLINES[headline]) $("latch-state").textContent = LATCH_HEADLINES[headline];
   $("latch-who").textContent = headline === "open" ? "" : who;
+  $("latch-who").hidden = headline === "open" || !who;
   block.classList.toggle("closed", headline === "closed");
   block.classList.toggle("not-answering", headline === "not_answering");
   $("latch-sim").hidden = latch.mode !== "sim";
@@ -121,22 +129,35 @@ function renderLatch(latch) {
   $("latch-error").hidden = !latch.error;
 }
 
-// One row per species seen today or in frame now; the rest share one line, so eight species still fit.
+// One row per species seen today or in frame now, the census number (most at once) deciding the order.
+// The rest share one line. On the one-screen board the panel must not overflow: fitTally() folds what does
+// not fit into a compact line instead of cutting it off.
+let tallyKey = "";
 function renderTally(t) {
   const today = `${t.y}-${pad(t.mo)}-${pad(t.da)}`;
   const maxOf = (sp) => live.day_max[sp.key] ?? 0;
   const nowOf = (sp) => live.now[sp.key] ?? 0;
-  const shown = tables.nameable.filter((sp) => maxOf(sp) > 0 || nowOf(sp) > 0);
+  const visitsOf = (sp) => live.visits_today[sp.key] ?? 0;
+  const shown = tables.nameable.filter((sp) => maxOf(sp) > 0 || nowOf(sp) > 0)
+    .sort((a, b) => maxOf(b) - maxOf(a) || nowOf(b) - nowOf(a) || visitsOf(b) - visitsOf(a));
   // "watched for" = the species the tables give a column (core, or seen this season), as there a zero is stated too
   const unseen = tables.species.filter((sp) => !shown.some((x) => x.key === sp.key));
   // live.sim_time only moves with recorded detections, so a newer day than the tables' was watched
   const watched = shown.length > 0 || tables.day !== today || tables.hours.length > 0;
 
-  $("tally").replaceChildren(...shown.map((sp) => el("tr", {},
+  // the panel is redrawn only when something in it changed, not on every poll
+  const key = JSON.stringify([shown.map((sp) => [sp.key, nowOf(sp), maxOf(sp), visitsOf(sp)]),
+    unseen.map((sp) => sp.key), watched]);
+  if (key === tallyKey) return;
+  tallyKey = key;
+
+  // a folded row keeps its census number; one only in view now (not yet counted) says so
+  const alsoText = (sp) => (maxOf(sp) > 0 ? `${sp.english} ${maxOf(sp)}` : `${sp.english} (in view now)`);
+  $("tally").replaceChildren(...shown.map((sp) => el("tr", { "data-also": alsoText(sp) },
     el("th", { scope: "row" }, el("span", { class: "name" }, sp.english), " ", el("span", { class: "fi" }, sp.finnish)),
     el("td", { class: "num in-frame" }, String(nowOf(sp))),
     el("td", { class: "num max" }, String(maxOf(sp))),
-    el("td", { class: "num visits" }, String(live.visits_today[sp.key] ?? 0)))));
+    el("td", { class: "num visits" }, String(visitsOf(sp))))));
   $("tally-table").hidden = shown.length === 0;
 
   const line = $("unseen");
@@ -147,7 +168,35 @@ function renderTally(t) {
       unseen.map(fullName).join(", "));
   }
   line.dataset.unwatched = watched ? "" : "1";
-  line.hidden = watched && unseen.length === 0;
+  line.dataset.empty = watched && unseen.length === 0 ? "1" : "";
+  fitTally();
+}
+
+// Shows every row, then, while the box overflows, first drops the "none today" line and then folds the
+// lowest rows into one "also today" line with their census numbers. Stacked (phone) layout never overflows.
+function fitTally() {
+  const box = $("tally-box");
+  const rows = [...$("tally").children];
+  const also = $("also");
+  const unseen = $("unseen");
+  rows.forEach((r) => { r.hidden = false; });
+  also.hidden = true;
+  unseen.hidden = unseen.dataset.empty === "1";
+  const over = () => box.scrollHeight > box.clientHeight + 1;
+  if (!over()) return;
+  if (!unseen.dataset.unwatched) unseen.hidden = true;
+  const folded = [];
+  for (let i = rows.length - 1; i > 0 && over(); i--) {
+    rows[i].hidden = true;
+    folded.unshift(rows[i].dataset.also);
+    also.replaceChildren(el("span", { class: "lead" }, "Also today, most at once:"), " ", folded.join(", "));
+    also.hidden = false;
+  }
+}
+// the box changes size with the window and when the "stopped" banner comes or goes
+let fitTimer = 0;
+if ("ResizeObserver" in window) {
+  new ResizeObserver(() => { clearTimeout(fitTimer); fitTimer = setTimeout(fitTally, 150); }).observe($("tally-box"));
 }
 
 async function pollLive() {
@@ -166,7 +215,10 @@ async function pollLive() {
     renderLive();
   } catch {
     // without the counter the page cannot know that today was not watched
-    if ($("unseen").dataset.unwatched) $("unseen").hidden = true;
+    if ($("unseen").dataset.unwatched) {
+      $("unseen").hidden = true;
+      tallyKey = ""; // say it again once the counter answers
+    }
     const s = $("stopped");
     s.dataset.lost = "1";
     $("stopped-msg").textContent = "This page cannot reach the counter.";
@@ -265,6 +317,16 @@ function sentence(text) {
   return t.charAt(0).toUpperCase() + t.slice(1) + (/[.!?]$/.test(t) ? "" : ".");
 }
 
+// "91 % of 899 frames", then the footage it was measured on; only what the card says
+function exactText(m) {
+  if (m.count_exact == null) return "not yet measured";
+  const frames = typeof m.frames === "number" ? ` of ${m.frames} unseen frames` : " of unseen frames";
+  const footage = Array.isArray(m.footage) && m.footage.length ? m.footage.join(", ") : "";
+  const out = el("span", {}, `${pct(m.count_exact)}${frames}`);
+  if (footage) out.append(el("span", { class: "dd-sub" }, `on ${footage}`));
+  return out;
+}
+
 async function loadModel() {
   try { modelCard = await getJSON("/api/model"); } catch { return false; }
   renderModel();
@@ -274,6 +336,11 @@ async function loadModel() {
 function renderModel() {
   if (!modelCard) return;
   $("card-name").textContent = modelCard.name || (live ? live.detector : DASH);
+  $("model-name").textContent = $("card-name").textContent;
+  if (typeof modelCard.imgsz === "number") {
+    $("spec-imgsz").textContent = `${modelCard.imgsz} px`;
+    $("spec-imgsz-row").hidden = false;
+  }
   const m = modelCard.metrics;
   let line = m ? "Measured on footage the model had not seen." : "Accuracy not yet measured on this footage.";
   // `qualified` is false when a student ships although it misses the accuracy bar. The two-stage detector's card
@@ -284,15 +351,19 @@ function renderModel() {
   if (modelCard.board_ms != null) {
     $("card-board").textContent = `${msText(modelCard.board_ms)} per frame`;
     $("card-board-row").hidden = false;
+    $("spec-board").textContent = msText(modelCard.board_ms);
+    $("spec-board-row").hidden = false;
   }
   if (modelCard.count_threshold != null) {
     const source = modelCard.threshold_source ? ` ${sentence(modelCard.threshold_source)}` : "";
     $("card-threshold").textContent = `Counted at confidence ≥ ${modelCard.count_threshold.toFixed(2)}.${source}`;
     $("card-threshold").hidden = false;
+    $("spec-threshold").textContent = `Confidence ≥ ${modelCard.count_threshold.toFixed(2)}`;
   }
   if (!m) return;
   $("card-exact").textContent = pct(m.count_exact);
   $("card-exact-row").hidden = false;
+  $("spec-exact").replaceChildren(exactText(m));
   const per = m.per_species || {};
   const keys = Object.keys(per);
   if (!keys.length) return;
@@ -331,16 +402,19 @@ const LIVE_NOTES = {
   camera: "Live picture from the camera.",
   recorded: "Recorded feeder footage, playing in real time, standing in for the camera.",
 };
+const SPEC_SOURCES = { camera: "Live camera", recorded: "Recorded feeder footage" };
 let liveFeedStarted = false;
 
 function renderFeeds() {
   const two = live.two_feeds;
   $("source-line").textContent = SOURCE_LINES[live.source];
   $("source-line").hidden = two; // each picture has its own caption then
-  $("feeds").classList.toggle("two", two);
+  $("board").classList.toggle("two", two);
   $("live-pane").hidden = !two;
-  $("feed-title").hidden = !two;
   $("feed-note").hidden = !two;
+  // the footage note sits with the picture that shows the footage: the live one when there are two
+  const noteHome = two ? $("live-footage-slot") : $("source-line").parentElement;
+  if ($("footage-note").parentElement !== noteHome) noteHome.append($("footage-note"));
   $("feed").alt = two
     ? "The photo the model analysed, with a box around each bird it found"
     : "Live view of the feeder with a box around each bird the model found";

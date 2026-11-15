@@ -3,77 +3,106 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Feeder Census</title>
+<title>BirdAI · Feeder Census</title>
 <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
-<header class="masthead">
-  <h1>Feeder Census</h1>
-  <p class="where">Winter feeder · counted by the camera</p>
-  <p class="clock" aria-live="off"><span id="clock-day">—</span> <strong id="clock-time">--:--</strong></p>
-</header>
+<div class="screen">
+  <header class="masthead">
+    <h1 class="brand"><span class="brand-name">BirdAI</span> <span class="brand-tag">Feeder Census</span></h1>
 
-<div class="stopped" id="stopped" role="alert" hidden>
-  <strong>The counter has stopped.</strong> <span id="stopped-msg"></span>
-  The tables show what was recorded before it stopped.
+    <div class="latch" id="latch" hidden>
+      <p class="latch-state" aria-live="polite"><span class="latch-dot" aria-hidden="true"></span><span id="latch-state">Latch: open</span></p>
+      <p class="latch-detail"><span class="latch-who" id="latch-who"></span>
+        <span class="latch-sim" id="latch-sim" hidden>Latch not connected: showing what it would do.</span>
+        <span class="latch-error" id="latch-error" hidden>Latch not answering: <span id="latch-error-msg"></span></span></p>
+    </div>
+
+    <div class="clock-block">
+      <p class="clock" aria-live="off"><span id="clock-day">—</span> <strong id="clock-time">--:--</strong></p>
+      <p class="demo-clock" id="demo-clock">Demo clock: <span id="scale-footage">1 second</span> of footage = <span id="scale-sim">1 minute</span>.</p>
+    </div>
+  </header>
+
+  <div class="stopped" id="stopped" role="alert" hidden>
+    <strong>The counter has stopped.</strong> <span id="stopped-msg"></span>
+    The tables show what was recorded before it stopped.
+  </div>
+
+  <main class="board-wrap">
+    <div class="board" id="board">
+      <section class="pane pane-ai" aria-labelledby="feed-title">
+        <div class="pane-head">
+          <h2 class="pane-title" id="feed-title">AI <span class="pane-sub">What the model analysed</span></h2>
+          <p class="pane-note"><span id="source-line">Recorded feeder footage, standing in for the camera.</span><span id="feed-note" hidden></span> <span class="footage-note" id="footage-note" hidden></span> <span class="footage-note" id="photo-note" hidden></span></p>
+        </div>
+        <div class="window">
+          <img id="feed" alt="Live view of the feeder with a box around each bird the model found">
+          <p class="waiting" id="waiting">Waiting for the first frame…</p>
+        </div>
+      </section>
+
+      <section class="pane pane-live" id="live-pane" aria-labelledby="live-title" hidden>
+        <div class="pane-head">
+          <h2 class="pane-title" id="live-title">Live</h2>
+          <p class="pane-note"><span id="live-note"></span> <span id="live-footage-slot"></span></p>
+        </div>
+        <div class="window">
+          <img id="live-feed" alt="Live picture of the feeder as the camera sees it, without boxes">
+          <p class="waiting" id="live-waiting">Waiting for the first frame…</p>
+        </div>
+      </section>
+
+      <section class="panel stats" aria-labelledby="stats-title">
+        <div class="panel-head">
+          <h2 class="panel-title" id="stats-title">Bird stats</h2>
+          <p class="panel-sub">Today <span id="sheet-day"></span></p>
+          <p class="rule-line">Largest number seen at once. Only surely identified birds are counted.</p>
+        </div>
+        <div class="tally-box" id="tally-box">
+          <table class="tally" id="tally-table" hidden>
+            <thead><tr>
+              <th scope="col">Species</th>
+              <th scope="col" class="num now-col">In view now</th>
+              <th scope="col" class="num max">Census<span class="th-sub">most at once today</span></th>
+              <th scope="col" class="num visits">Visits today</th>
+            </tr></thead>
+            <tbody id="tally"></tbody>
+          </table>
+          <p class="also" id="also" hidden></p>
+          <p class="unseen" id="unseen" hidden></p>
+        </div>
+        <div class="stats-foot">
+          <dl class="foot-facts">
+            <div><dt>Unidentified in view</dt><dd id="unidentified-n">0</dd></div>
+            <div><dt>Hours watched today</dt><dd id="watched-today">—</dd></div>
+          </dl>
+          <p class="visits-note">Visits are arrivals at the feeder, not individual birds. The camera cannot tell one bird from another.</p>
+        </div>
+      </section>
+
+      <section class="panel specs" aria-labelledby="specs-title">
+        <div class="panel-head">
+          <h2 class="panel-title" id="specs-title">Tech specs</h2>
+        </div>
+        <dl class="spec-rows">
+          <div><dt>Model</dt><dd id="model-name">—</dd></div>
+          <div id="spec-imgsz-row" hidden><dt>Picture size the model reads</dt><dd id="spec-imgsz"></dd></div>
+          <div><dt>Time per photo, this machine</dt><dd id="model-ms">—</dd></div>
+          <div id="spec-board-row" hidden><dt>Time per photo, on the board</dt><dd id="spec-board"></dd></div>
+          <div><dt>Photo interval</dt><dd id="spec-interval">—</dd></div>
+          <div><dt>Source</dt><dd id="spec-source">—</dd></div>
+          <div><dt>Counts exactly right</dt><dd id="spec-exact">not yet measured</dd></div>
+          <div><dt>Cut-off</dt><dd id="spec-threshold">—</dd></div>
+          <div id="spec-latch-row" hidden><dt>Latch</dt><dd id="spec-latch"></dd></div>
+        </dl>
+        <p class="accuracy" id="accuracy-short">Accuracy not yet measured on this footage.</p>
+      </section>
+    </div>
+  </main>
 </div>
 
-<main>
-  <section class="now" aria-label="Live">
-    <figure class="feed">
-      <div class="feeds" id="feeds">
-        <div class="pane" id="live-pane" hidden>
-          <h3 class="pane-title">Live</h3>
-          <div class="window">
-            <img id="live-feed" alt="Live picture of the feeder as the camera sees it, without boxes">
-            <p class="waiting" id="live-waiting">Waiting for the first frame…</p>
-          </div>
-          <p class="pane-note" id="live-note"></p>
-        </div>
-        <div class="pane">
-          <h3 class="pane-title" id="feed-title" hidden>What the model analysed</h3>
-          <div class="window">
-            <img id="feed" alt="Live view of the feeder with a box around each bird the model found">
-            <p class="waiting" id="waiting">Waiting for the first frame…</p>
-          </div>
-          <p class="pane-note" id="feed-note" hidden></p>
-        </div>
-      </div>
-      <figcaption class="honesty">
-        <p><span id="source-line">Recorded feeder footage, standing in for the camera.</span> <span class="footage-note" id="footage-note" hidden></span> <span class="footage-note" id="photo-note" hidden></span></p>
-        <p id="demo-clock">Demo clock: <span id="scale-footage">1 second</span> of footage = <span id="scale-sim">1 minute</span>.</p>
-      </figcaption>
-    </figure>
-
-    <div class="sheet">
-      <div class="latch" id="latch" hidden>
-        <p class="latch-state" aria-live="polite"><span id="latch-state">Latch: open</span><span class="latch-who" id="latch-who"></span></p>
-        <p class="latch-rule">The latch closes when a squirrel is at the feeder. This model has not learned rats yet. <span class="latch-sim" id="latch-sim" hidden>Latch not connected: showing what it would do.</span>
-          <span class="latch-error" id="latch-error" hidden>Latch not answering: <span id="latch-error-msg"></span></span></p>
-      </div>
-      <h2>Today <span class="sub" id="sheet-day"></span></h2>
-      <p class="rule-line">Largest number seen at once. Only surely identified birds are counted.</p>
-      <table class="tally" id="tally-table" hidden>
-        <thead><tr>
-          <th scope="col">Species</th>
-          <th scope="col" class="num">In frame now</th>
-          <th scope="col" class="num max">Most at once</th>
-          <th scope="col" class="num visits">Visits</th>
-        </tr></thead>
-        <tbody id="tally"></tbody>
-      </table>
-      <p class="unseen" id="unseen" hidden></p>
-      <p class="unidentified" id="unidentified" hidden></p>
-      <p class="visits-note">Visits are arrivals at the feeder, not individual birds. The camera cannot tell one bird from another.</p>
-      <dl class="facts">
-        <div><dt>Hours watched today</dt><dd id="watched-today">—</dd></div>
-        <div><dt>Model</dt><dd><span id="model-name">—</span>, <span id="model-ms">—</span> per frame</dd></div>
-      </dl>
-      <p class="can-name" id="can-name">This model can name: …</p>
-      <p class="accuracy" id="accuracy-short">Accuracy not yet measured on this footage.</p>
-    </div>
-  </section>
-
+<div class="below">
   <section class="ledger" id="ledger" aria-label="Counts">
     <div class="block">
       <h2>Today by hour <span class="sub" id="today-label"></span></h2>
@@ -112,8 +141,10 @@
     <p class="threshold" id="card-threshold" hidden></p>
     <p class="accuracy" id="accuracy-long">Accuracy not yet measured on this footage.</p>
     <table class="grid metrics" id="metrics" hidden></table>
+    <p class="can-name" id="can-name">This model can name: …</p>
+    <p class="latch-rule" id="latch-rule" hidden>The latch closes when a squirrel is at the feeder. This model has not learned rats yet.</p>
   </section>
-</main>
+</div>
 <script src="/static/app.js"></script>
 </body>
 </html>
