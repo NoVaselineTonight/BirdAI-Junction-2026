@@ -123,7 +123,7 @@ uv run python tools/evaluate.py --dataset data/dataset --candidates two_stage st
 - The qualifying rule has no minimum number of boxes per species, so a species with very few held-out boxes can pass on luck. Read the box counts next to every precision and recall.
 - Nothing here claims the model names species better than a skilled volunteer.
 
-Held-out day, 12 November 2026, 899 frames, scored against the checked labels at cut-off 0.50. "Named birds right" is the share of the birds the model named that were named right (precision). "Birds found" is the share of the labelled birds the model found (recall). Both are pooled over all species and come from an ad-hoc scorer run on the same labels, not from `tools/evaluate.py`. "Frames counted exactly right" is from `models/eval.json`, except for the earlier student, where it is from the ad-hoc scorer. The board medians of the students are those of the earlier students (see "Measured speed").
+Held-out day, 12 November 2026, 899 frames, scored against the checked labels at cut-off 0.50. "Named birds right" is the share of the birds the model named that were named right (precision). "Birds found" is the share of the labelled birds the model found (recall). Both are pooled over all species and come from an ad-hoc scorer run on the same labels, not from `tools/evaluate.py`, except the two-stage row, which is from `models/eval.json`. "Frames counted exactly right" is from `models/eval.json`, except for the earlier student, where it is from the ad-hoc scorer. The board medians of the students are those of the earlier students (see "Measured speed").
 
 | Detector | board median | cut-off | named birds right | birds found | frames counted exactly right | held-out frames |
 |---|---|---|---|---|---|---|
