@@ -1,0 +1,9 @@
+# Settings for the standalone demo. Change and run: systemctl restart feeder-census
+ROTATE=180     # 180 when the camera hangs upside down, 0 otherwise
+LATCH=router   # router = move the hatch servo, sim = only show it on the page, off = no latch
+PHOTO=5        # seconds between analysed photos
+PORT=8088
+PEST_THRESHOLD=0.8   # how sure the model must be of a squirrel before it counts for the hatch (0 to 1)
+CLOSE_FRAMES=3       # photos in a row with a squirrel before the hatch closes
+OPEN_FRAMES=5        # photos in a row without one before it opens again
+SOURCE=camera        # camera = the USB webcam (the reel if no webcam answers), reel = the recorded feeder footage
