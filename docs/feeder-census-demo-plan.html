@@ -1,0 +1,253 @@
+<title>Feeder Census Demo Plan</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+/* Layout: one reading column like a field notebook; wide blocks (timeline, tables) scroll inside themselves. */
+:root {
+  --bg: #f1f4f2; --surface: #ffffff; --ink: #14211d; --muted: #586660; --line: #d3dbd7;
+  --tit: #f2c230; --tit-ink: #3a2c00; --spruce: #1c6b50; --spruce-soft: #dcebe4;
+  --rowan: #b23f35; --rowan-soft: #f6e1de; --sky: #2f5f8a; --sky-soft: #dde8f2;
+  --display: "Bricolage Grotesque", "Segoe UI", system-ui, sans-serif;
+  --body: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0e1513; --surface: #162019; --ink: #e5ece8; --muted: #9babA4; --line: #2a3832;
+    --tit: #f2c230; --tit-ink: #2a2000; --spruce: #74c9a6; --spruce-soft: #1b3229;
+    --rowan: #f0897f; --rowan-soft: #3a1f1c; --sky: #8fbce6; --sky-soft: #1a2a3a; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0e1513; --surface: #162019; --ink: #e5ece8; --muted: #9baba4; --line: #2a3832;
+  --tit: #f2c230; --tit-ink: #2a2000; --spruce: #74c9a6; --spruce-soft: #1b3229;
+  --rowan: #f0897f; --rowan-soft: #3a1f1c; --sky: #8fbce6; --sky-soft: #1a2a3a; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--ink); font: 16px/1.6 var(--body); margin: 0; }
+.page { max-width: 62rem; margin: 0 auto; padding-block: 2.5rem 4rem;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  display: flex; flex-direction: column; gap: 2.75rem; }
+h1, h2, h3 { font-family: var(--display); text-wrap: balance; margin: 0; line-height: 1.15; }
+h1 { font-size: clamp(2rem, 5vw, 3rem); font-weight: 700; letter-spacing: -0.02em; }
+h2 { font-size: 1.5rem; font-weight: 700; }
+h3 { font-size: 1.05rem; font-weight: 700; }
+p { margin: 0; max-width: 68ch; }
+a { color: var(--spruce); }
+code { font: 0.86em var(--mono); background: var(--spruce-soft); padding: 0.08em 0.35em; border-radius: 4px; overflow-wrap: anywhere; }
+section { display: flex; flex-direction: column; gap: 1rem; min-width: 0; }
+.eyebrow { font: 500 0.78rem var(--mono); letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+.lede { font-size: 1.15rem; color: var(--ink); }
+.facts { display: flex; flex-wrap: wrap; gap: 0.5rem 1.5rem; font: 0.86rem var(--mono); color: var(--muted); padding-top: 0.5rem; border-top: 1px solid var(--line); }
+.facts b { color: var(--ink); font-weight: 500; }
+.stones { display: grid; grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr)); gap: 1rem; }
+.stone { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 1.1rem 1.2rem; display: flex; flex-direction: column; gap: 0.45rem; }
+.stone .when { font: 500 0.85rem var(--mono); color: var(--spruce); }
+.stone p { font-size: 0.95rem; color: var(--muted); }
+.flow { display: flex; flex-wrap: wrap; align-items: stretch; gap: 0.4rem; }
+.step { flex: 1 1 8.5rem; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 0.7rem 0.8rem; font-size: 0.9rem; min-width: 0; }
+.step b { display: block; font-family: var(--display); font-size: 0.98rem; }
+.step span { color: var(--muted); }
+.step.board { border-color: var(--spruce); background: var(--spruce-soft); }
+.step.cloud { border-color: var(--sky); background: var(--sky-soft); }
+.arrow { align-self: center; color: var(--muted); font-family: var(--mono); }
+.legend { display: flex; flex-wrap: wrap; gap: 1rem; font-size: 0.85rem; color: var(--muted); }
+.legend i { display: inline-block; width: 0.8rem; height: 0.8rem; border-radius: 3px; margin-right: 0.35rem; vertical-align: -0.08rem; border: 1px solid var(--line); }
+.scroll { overflow-x: auto; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
+.gantt { display: grid; grid-template-columns: 7.5rem repeat(24, minmax(2rem, 1fr)); min-width: 58rem; font-size: 0.8rem; }
+.gantt > div { padding: 0.35rem 0.4rem; border-bottom: 1px solid var(--line); }
+.gantt .hour { font: 0.75rem var(--mono); color: var(--muted); grid-column: span 2; border-left: 1px solid var(--line); }
+.gantt .lane { font-weight: 600; grid-column: 1; display: flex; align-items: center; }
+.gantt .bar { border-radius: 6px; margin: 0.3rem 0.1rem; border-bottom: none; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.bar.a { background: var(--spruce-soft); color: var(--ink); border: 1px solid var(--spruce); }
+.bar.b { background: var(--sky-soft); color: var(--ink); border: 1px solid var(--sky); }
+.bar.you { background: var(--tit); color: var(--tit-ink); }
+.bar.gate { background: var(--rowan-soft); color: var(--ink); border: 1px solid var(--rowan); }
+.gantt .fill { border-bottom: 1px solid var(--line); }
+table { border-collapse: collapse; width: 100%; font-size: 0.93rem; font-variant-numeric: tabular-nums; }
+th, td { text-align: left; padding: 0.6rem 0.8rem; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { font: 500 0.75rem var(--mono); letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
+tr:last-child td { border-bottom: none; }
+td.t { font-family: var(--mono); white-space: nowrap; }
+.todo { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.6rem; }
+.todo li { display: grid; grid-template-columns: 5.5rem 1fr; gap: 0.9rem; background: var(--surface); border: 1px solid var(--line); border-left: 5px solid var(--tit); border-radius: 8px; padding: 0.8rem 1rem; }
+.todo .by { font: 500 0.85rem var(--mono); color: var(--muted); }
+.todo b { font-family: var(--display); }
+.todo p { font-size: 0.93rem; color: var(--muted); }
+.note { border-left: 4px solid var(--rowan); background: var(--rowan-soft); padding: 0.8rem 1rem; border-radius: 0 8px 8px 0; }
+.answer { border-left: 4px solid var(--spruce); background: var(--spruce-soft); padding: 0.9rem 1.1rem; border-radius: 0 8px 8px 0; display: flex; flex-direction: column; gap: 0.6rem; }
+ul.plain { margin: 0; padding-left: 1.1rem; display: flex; flex-direction: column; gap: 0.4rem; max-width: 70ch; }
+.tag { font: 500 0.72rem var(--mono); padding: 0.1rem 0.45rem; border-radius: 99px; border: 1px solid var(--line); color: var(--muted); white-space: nowrap; }
+@media (max-width: 30rem) { .todo li { grid-template-columns: 1fr; gap: 0.2rem; } .arrow { display: none; } }
+</style>
+
+<main class="page">
+
+<header style="display:flex;flex-direction:column;gap:0.9rem">
+  <span class="eyebrow">BirdAI · plan for Saturday 14 November 2026</span>
+  <h1>Feeder Census demo plan</h1>
+  <p class="lede">A recorded video of a bird feeder stands in for the camera. A small model on the Arduino UNO Q names and counts Finnish winter birds the way Luomus feeding-station monitoring does, and a local page shows the result. Working by midnight.</p>
+  <div class="facts">
+    <span>Deadline <b>24:00 tonight</b></span>
+    <span>Branch <b>birdai-plan/feeder-census-demo</b></span>
+    <span>Repo <b>NoVaselineTonight/BirdAI-Junction-2026</b></span>
+    <span>Developer plan <b>docs/superpowers/plans/2026-11-14-feeder-census-demo.md</b></span>
+  </div>
+</header>
+
+<section>
+  <h2>What you will show</h2>
+  <div class="stones">
+    <div class="stone"><span class="when">Milestone A · 16:30</span><h3>It works on the laptop</h3><p>Live feed with boxes and species names, counts per hour, day and half-month, hours watched, evidence photos, CSV export. Uses ready-made models, so it does not wait for training.</p></div>
+    <div class="stone"><span class="when">Milestone B · 18:00</span><h3>It runs on the UNO Q</h3><p>The board does detection, counting and serves the page. The laptop is only its screen, connected over the USB cable.</p></div>
+    <div class="stone"><span class="when">Milestone C · 20:00</span><h3>Our own model is on the board</h3><p>A small detector trained today on Finnish feeder footage, with its accuracy measured on footage it never saw and shown on the page.</p></div>
+  </div>
+  <p>Each milestone is a demo you could show if everything after it failed.</p>
+</section>
+
+<section>
+  <h2>How it works</h2>
+  <h3>On the board, live</h3>
+  <div class="flow">
+    <div class="step"><b>Feeder video</b><span>plays like a camera, loops</span></div><span class="arrow">→</span>
+    <div class="step board"><b>Detector</b><span>a frame every 2 s: box and species per bird</span></div><span class="arrow">→</span>
+    <div class="step board"><b>Counting rule</b><span>largest number at once, sure identifications only</span></div><span class="arrow">→</span>
+    <div class="step board"><b>Record</b><span>hour, day, half-month, hours watched, one photo per record</span></div><span class="arrow">→</span>
+    <div class="step board"><b>Page and CSV</b><span>tables in the monitoring-form shape</span></div>
+  </div>
+  <h3>Today, to make our own model</h3>
+  <div class="flow">
+    <div class="step"><b>Your footage</b><span>Finnish or Nordic feeders</span></div><span class="arrow">→</span>
+    <div class="step cloud"><b>Teacher 1</b><span>large detector draws a box on every bird</span></div><span class="arrow">→</span>
+    <div class="step cloud"><b>Teachers 2 and 3</b><span>two species classifiers; a label counts only if they agree</span></div><span class="arrow">→</span>
+    <div class="step"><b>A person checks</b><span>15 minutes with contact sheets</span></div><span class="arrow">→</span>
+    <div class="step cloud"><b>Student</b><span>tiny detector trained on those labels</span></div><span class="arrow">→</span>
+    <div class="step board"><b>UNO Q</b><span>runs the student, no cloud</span></div>
+  </div>
+  <div class="legend"><span><i style="background:var(--spruce-soft);border-color:var(--spruce)"></i>runs on the board</span><span><i style="background:var(--sky-soft);border-color:var(--sky)"></i>runs on the Verda GPU machine</span><span><i style="background:var(--surface)"></i>files and people</span></div>
+</section>
+
+<section>
+  <h2>Your question: can smarter models train ours?</h2>
+  <div class="answer">
+    <p><b>Yes, and the plan does exactly that.</b> Three large models label your footage, and a model about 10 MB in size learns from those labels. It only has to know the handful of species at your feeders, which is why something that small can be accurate.</p>
+    <p><b>One correction.</b> Memory is not what limits the board: it has about 1.3 GB free and the model needs a few tens of MB. Speed is the limit. The board has no AI chip, so one frame takes roughly 0.3 to 0.8 seconds. Counting needs a frame every couple of seconds, so that is enough.</p>
+    <p><b>Why keep a ready-made model too.</b> Two small open models already exist that find birds and name all eight of the sketch's species without training. The demo is built on them first. Around 18:30 both are measured on unseen footage and the better one ships. If training goes wrong, you still have a demo.</p>
+  </div>
+</section>
+
+<section>
+  <h2>The day</h2>
+  <div class="scroll">
+    <div class="gantt">
+      <div></div>
+      <div class="hour">12</div><div class="hour">13</div><div class="hour">14</div><div class="hour">15</div><div class="hour">16</div><div class="hour">17</div><div class="hour">18</div><div class="hour">19</div><div class="hour">20</div><div class="hour">21</div><div class="hour">22</div><div class="hour">23</div>
+
+      <div class="lane">Demo software</div>
+      <div class="fill" style="grid-column: 2 / 3"></div>
+      <div class="bar a" style="grid-column: 3 / 4">Core</div>
+      <div class="bar a" style="grid-column: 4 / 6">Detector</div>
+      <div class="bar a" style="grid-column: 6 / 7">Store</div>
+      <div class="bar a" style="grid-column: 7 / 9">Camera, pipeline</div>
+      <div class="bar a" style="grid-column: 9 / 11">Page · A</div>
+      <div class="bar a" style="grid-column: 11 / 14">On the board · B</div>
+      <div class="fill" style="grid-column: 14 / 26"></div>
+
+      <div class="lane">Our model</div>
+      <div class="fill" style="grid-column: 2 / 4"></div>
+      <div class="bar b" style="grid-column: 4 / 6">Tools, GPU setup</div>
+      <div class="bar b" style="grid-column: 6 / 8">Label footage</div>
+      <div class="bar b" style="grid-column: 8 / 10">Train, round 1</div>
+      <div class="bar b" style="grid-column: 10 / 14">Fix labels, retrain</div>
+      <div class="bar b" style="grid-column: 14 / 16">Measure, choose</div>
+      <div class="bar gate" style="grid-column: 16 / 18">Ship · C</div>
+      <div class="fill" style="grid-column: 18 / 26"></div>
+
+      <div class="lane">You</div>
+      <div class="bar you" style="grid-column: 2 / 3">OK plan</div>
+      <div class="bar you" style="grid-column: 3 / 6">Footage, Verda</div>
+      <div class="fill" style="grid-column: 6 / 8"></div>
+      <div class="bar you" style="grid-column: 8 / 9">Check</div>
+      <div class="fill" style="grid-column: 9 / 14"></div>
+      <div class="bar you" style="grid-column: 14 / 16">Decide</div>
+      <div class="fill" style="grid-column: 16 / 18"></div>
+      <div class="bar you" style="grid-column: 18 / 22">Rehearse, record backup</div>
+      <div class="fill" style="grid-column: 22 / 26"></div>
+    </div>
+  </div>
+  <p>Both software rows start together at 13:00, after half an hour of shared groundwork. The model row does not wait for the demo software, only for footage and the GPU machine: while you collect footage it builds the labelling and training tools and loads the teacher models onto the GPU machine. Starting early buys a second round of fixing labels and retraining. 22:00 to midnight is slack.</p>
+</section>
+
+<section>
+  <h2>What I need from you</h2>
+  <ul class="todo">
+    <li><span class="by">now</span><div><b>Read this and say go</b><p>Also say how to run it: one session doing every task in order (faster, my recommendation), or a fresh agent per task with a reviewer after each (more thorough, slower).</p></div></li>
+    <li><span class="by">by 14:00</span><div><b>Footage, the earlier the better</b><p>Training: video from at least two different feeders, ideally Finnish or Nordic, 10 minutes or more each, fixed camera, daylight, 720p or better, birds reasonably large in the frame. Demo: 2 to 5 lively minutes from a third feeder that is not in the training set. Put them in <code>data/videos/train/</code> and <code>data/videos/demo/</code>. Prefer Creative Commons or your own footage.</p></div></li>
+    <li><span class="by">by 13:30</span><div><b>A Verda GPU machine</b><p>Start one L40S or A100-class instance with your SSH key and send me the address, for example <code>root@1.2.3.4</code>. Expected use tonight is 2 to 3 hours, a few euros. Stop it when we are done; it bills while it runs.</p></div></li>
+    <li><span class="by">about 15:00</span><div><b>15 minutes of label checking</b><p>I prepare contact sheets of bird crops per species and do a first pass. Someone who knows the birds confirms, mainly tree sparrow against house sparrow and willow tit against the other tits.</p></div></li>
+    <li><span class="by">all day</span><div><b>The board on the USB-C data cable</b><p>Directly to the laptop, not through the dongle. It is connected now. No Wi-Fi or camera needed.</p></div></li>
+    <li><span class="by">about 18:30</span><div><b>Look at the measured numbers</b><p>You see a table of precision and recall per species for the trained model and the ready-made one, and which one the rule picks.</p></div></li>
+  </ul>
+</section>
+
+<section>
+  <h2>Finnish birds and habitats</h2>
+  <p>Your note changed four things, none of them the architecture.</p>
+  <ul class="plain">
+    <li><b>Species list.</b> 22 Finnish winter feeder species, each with its Finnish name: the sketch's eight (talitiainen, keltasirkku, sinitiainen, pikkuvarpunen, punatulkku, mustarastas, viherpeippo, varpunen) plus forest and town birds such as hömötiainen, töyhtötiainen, käpytikka, närhi, naakka and harakka.</li>
+    <li><b>Footage.</b> Finnish or Nordic feeders, so the model learns the birds and backgrounds it will meet here.</li>
+    <li><b>Habitat mix.</b> The page groups the half-month counts into forest, farmland, town and generalist birds. This is the sketch's own idea for saying something about the surroundings, and the page labels it as our grouping, not yet checked against Luomus.</li>
+    <li><b>No overclaiming.</b> The page says one feeder is one data point. It reports counts and a species mix, not the state of an ecosystem.</li>
+  </ul>
+</section>
+
+<section>
+  <h2>Decisions I made for you</h2>
+  <p>The sketch left these open. Say so if you want any of them different.</p>
+  <div class="scroll"><table>
+    <tr><th>Question</th><th>Decision</th><th>Why</th></tr>
+    <tr><td>A video is minutes, the rule works in half-months</td><td>Simulated clock: 1 second of footage = 1 minute, daylight 08–16 only. The page says so.</td><td>Judges see hours and days fill up during a three-minute demo.</td></tr>
+    <tr><td>What is "surely identified"</td><td>Confidence above a threshold that is measured tonight so that at least 90% of named birds are right. Others are drawn as "unidentified" and not counted.</td><td>In monitoring data a wrong name is worse than no name.</td></tr>
+    <tr><td>One bad frame</td><td>A count must hold in two consecutive frames.</td><td>"Largest number seen" is exactly the statistic a single false detection ruins.</td></tr>
+    <tr><td>How many photos</td><td>One per species per day, the frame with the most birds.</td><td>The board has 3 GB free.</td></tr>
+    <tr><td>Zero or blank</td><td>A watched hour with no birds is 0. An unwatched hour, or a species the model cannot name, is blank.</td><td>The sketch's "a zero is a real zero".</td></tr>
+    <tr><td>How it runs on the board</td><td>Plain Python on the board's Linux side, viewed through the USB cable.</td><td>The board's App Lab software is an old 2025 build; plain Python avoids that risk.</td></tr>
+    <tr><td>Where training runs</td><td>Verda for everything tonight. Modal only if Verda has no machine.</td><td>Setting up two clouds in one evening buys nothing.</td></tr>
+  </table></div>
+</section>
+
+<section>
+  <h2>Risks</h2>
+  <div class="note"><p><b>The footage is the whole schedule.</b> The model can only learn a species it has seen about 60 times or more. Late footage, or footage with two species in it, means a model that knows two species. If nothing arrives by about 17:00, the trained model will not make midnight and the demo ships with the ready-made models.</p></div>
+  <ul class="plain">
+    <li><b>Accuracy is unknown until the first model is measured, around 16:00.</b> Nobody has measured these models on Finnish feeder video. The plan measures it and shows the number. Tree sparrow against house sparrow will be the weak spot.</li>
+    <li><b>Labels come from models.</b> The accuracy number is measured against teacher labels cleaned automatically; a person spot-checked samples, not against an expert's ground truth. The page and README say that.</li>
+    <li><b>Licence.</b> The student is trained with Ultralytics, which is AGPL-3.0 and claims the trained weights. Fine for a hackathon and an open repo, a problem for a closed product. The ready-made models are Apache-2.0.</li>
+    <li><b>Small birds.</b> If birds are tiny in the frame, neither model will name them. Footage where the feeder fills the picture matters more than resolution.</li>
+    <li><b>Still one feeder, recorded.</b> The sketch's weak points on impact and on having no camera are not fixed by this plan. The honest sentence stays: "This is footage from a feeder, standing in for our camera."</li>
+  </ul>
+</section>
+
+<section>
+  <h2>The nine tasks</h2>
+  <div class="scroll"><table>
+    <tr><th>#</th><th>Task</th><th>Result</th><th>Needs</th></tr>
+    <tr><td class="t">1</td><td>Scaffold and counting core</td><td>Finnish species list, half-month periods, the counting rule</td><td></td></tr>
+    <tr><td class="t">2</td><td>Store and export</td><td>Hour, day and half-month roll-ups, hours watched, CSV in the form shape</td><td></td></tr>
+    <tr><td class="t">3</td><td>Ready-made detector</td><td>Boxes and species from two small open models</td><td></td></tr>
+    <tr><td class="t">4</td><td>Camera, clock, pipeline</td><td>Video in, counts and evidence photos out</td><td>a clip, for the real check</td></tr>
+    <tr><td class="t">5</td><td>Demo page</td><td>Live feed, tables, habitat mix, evidence, model card <span class="tag">Milestone A</span></td><td></td></tr>
+    <tr><td class="t">6</td><td>On the UNO Q</td><td>Deploy script, measured speed on the board <span class="tag">Milestone B</span></td><td>board on USB</td></tr>
+    <tr><td class="t">7</td><td>Teacher labelling</td><td>Labelled frames and contact sheets</td><td>footage, Verda, 15 min of checking</td></tr>
+    <tr><td class="t">8</td><td>Train the student</td><td>Our own detector at two sizes</td><td>Verda</td></tr>
+    <tr><td class="t">9</td><td>Measure, choose, ship</td><td>Accuracy on unseen footage, best model on the board <span class="tag">Milestone C</span></td><td>your look at the numbers</td></tr>
+  </table></div>
+  <p>Every task is written test-first, with the exact tests in the developer plan.</p>
+</section>
+
+<section>
+  <h2>Cut for tonight</h2>
+  <p>All of these are in the sketch and none is needed for the demo: the squirrel and rat flag, the distance sensor that wakes the model, a live camera on the board, shrinking the model to 8-bit, parameter sweeps on Modal, and packaging as an App Lab app.</p>
+</section>
+
+</main>

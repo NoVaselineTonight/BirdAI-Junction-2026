@@ -1,0 +1,13 @@
+[Unit]
+Description=Feeder Census demo (camera, counting, page on port 8088)
+After=network.target arduino-router.service
+
+[Service]
+WorkingDirectory=/home/arduino/feeder-census
+ExecStart=/home/arduino/feeder-standalone/start.sh
+Restart=always
+RestartSec=5
+User=root
+
+[Install]
+WantedBy=multi-user.target
