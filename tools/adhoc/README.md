@@ -2,7 +2,8 @@
 
 These are the one-off scripts from the night of 14 to 15 November 2026. They were run by hand on rented GPU
 machines (and on the laptop and one main machine) to mine frames, label them, check the labels, build the datasets,
-train, search, score and export the shipped model. They are kept so that the way the model was made can be read.
+train, search, score and export the shipped model (the search's role in the shipped model is not shown by the
+scripts). They are kept so that the way the model was made can be read.
 
 Please read them as a record, not as a tool:
 
@@ -10,8 +11,9 @@ Please read them as a record, not as a tool:
 - They have hard-coded paths (`~/birdai/data/...`, `/root/birdai/...`), expect machines, accounts and files that
   are not in the repo, and will not run as they are.
 - Private details were replaced by placeholders: addresses of rented machines are `MACHINE_IP` (every distinct
-  machine got the same placeholder), the author's home folder is `$HOME` or `$HOME/WORKDIR`, SSH key names are `KEY`.
-  Nothing else was changed in the scripts. YouTube ids and channel names are left in, because they say which public
+  machine got the same placeholder), the author's home folder is `$HOME` or `$HOME/WORKDIR`, SSH key names are `KEY`,
+  the labels of the spare cloud accounts are `ACCOUNT_B`, `ACCOUNT_C`, `ACCOUNT_D`, and the ssh alias of the main
+  machine is `MAIN_HOST`. Nothing else was changed in the scripts. YouTube ids and channel names are left in, because they say which public
   footage was used.
 - Machine names such as `birdai-fast`, `birdai-check`, `scan3`, `g13` are the names the rented machines had that night.
 - Where a script has a reviewed copy in the repo it says so. The scripts in `tools/` (`mine_frames.py`,
@@ -52,11 +54,12 @@ Only what the scripts show. Steps that happened outside these scripts are marked
    (dataset v8), `labelling/run-fit.sh` for the 13 selection days and 5 exam days. Reviewed copies of `cand.py`,
    `judge.py`, `truth.py` are in `tools/label_check/`.
 5. Training, round 8 (25 training days). `training/run-train8.sh` runs `training/train_v8.py` on dataset v8: the 960 px
-   nano model (`v8a_960`) starts from the earlier v4 960 weights, 6 epochs; a 640 px one and two from-scratch runs
-   went alongside. The earlier rounds are `training/run-v1.sh`, `run-v2a.sh`, `run-v3-b.sh`, `train-v3.sh` to
+   nano model (`v8a_960`) starts from the earlier v4 960 weights, 6 epochs; a 640 px one (from the v4 640 weights, 8 epochs) and
+   two runs from the stock `yolo26n.pt` weights (20 and 14 epochs) went alongside. The earlier rounds are `training/run-v1.sh`, `run-v2a.sh`, `run-v3-b.sh`, `train-v3.sh` to
    `train-v7.sh`.
-6. Training, round 9 (38 training days). `training/run-v9.sh` checks the frames of 13 more days (steps 3 and 4 on
-   a new set), builds dataset v9 (the 25 checked days plus the 13 new ones) and runs `training/train_v9.py`: 8 more
+6. Training, round 9 (38 training days). `training/run-v9.sh` checks (step 4) the frames of 13 more days; the
+   frames were pushed by `machines/push-x2.sh`, and the scripts that mined and labelled them are not identified here.
+   It then builds dataset v9 (the 25 checked days plus the 13 new ones) and runs `training/train_v9.py`: 8 more
    epochs at 960 px from the `v8a_960` weights (`v9_960_e8`), plus a 14 epoch run, a 640 px run and a control on
    dataset v8. `run-v9c.sh` is the restart from the training step after a crash (`fix-v9.sh`, `fix-v9c.sh`).
    `training/run-v10.sh` is a later round (other-feeder frames added, a second seed); the scripts do not show that it
@@ -110,7 +113,7 @@ Only what the scripts show. Steps that happened outside these scripts are marked
 | `after-big.sh` | On the main machine: when the big teacher is trained, sends its weights to the workers; then merges frames in and lets the big teacher propose missed birds. |
 | `big_propose.py` | The camera-tuned big teacher proposes birds the first teacher missed (no overlap with an existing box) on training frames only. |
 | `birdness.py` | Scores every labelled box for "is this a bird at all" with a general CLIP model and writes contact sheets. |
-| `cand.py` | Label check, step 1: pools candidate birds per frame from the old label, three students and the camera-tuned teacher. Reviewed copy: `tools/label_check/cand.py` (7 lines differ). |
+| `cand.py` | Label check, step 1: pools candidate birds per frame from the old label, three students and the camera-tuned teacher. Reviewed copy: `tools/label_check/cand.py` (3 lines differ: a `--prefix` filter and `half=True`). |
 | `chain-d4.sh` | On the processing machine: when batch d3 is through, processes batch d4. |
 | `chain-xf2.sh` | On the processing machine: when wave xf1 is through, processes wave xf2 (videos arrive by relay). |
 | `cleanup-label.sh` | Stops every labelling and embedding run and its follow-up script on one machine. |

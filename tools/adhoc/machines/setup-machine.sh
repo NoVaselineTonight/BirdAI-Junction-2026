@@ -19,11 +19,11 @@ done
 echo "IP=$IP" >> $G/$NAME.env; say "running at $IP"
 ok=0; for i in $(seq 1 110); do ssh $K root@$IP 'nvidia-smi --query-gpu=name --format=csv,noheader | head -1' >> $G/$NAME.log 2>/dev/null && { ok=1; break; }; sleep 8; done
 [ $ok = 1 ] || fail "ssh never answered"
-PUB=$(timeout 20 ssh -o ConnectTimeout=10 birdai-verda 'cat ~/.ssh/id_ed25519.pub 2>/dev/null || cat ~/.ssh/id_rsa.pub')
+PUB=$(timeout 20 ssh -o ConnectTimeout=10 MAIN_HOST 'cat ~/.ssh/id_ed25519.pub 2>/dev/null || cat ~/.ssh/id_rsa.pub')
 ssh $K root@$IP "echo '$PUB' >> ~/.ssh/authorized_keys; mkdir -p ~/birdai/data/logs" || fail "could not add the main machine's key"
 TAG=$(echo $IP | tr . -)
-timeout 60 ssh -o ConnectTimeout=15 birdai-verda "cd ~/birdai; setsid -f bash data/push-to.sh $IP > /dev/null 2>&1; echo started" >> $G/$NAME.log 2>&1
-ok=0; for i in $(seq 1 240); do o=$(timeout 25 ssh -o ConnectTimeout=15 birdai-verda "grep -c 'push done' ~/birdai/data/logs/push-$TAG.log" 2>/dev/null); [ "${o:-0}" -ge 1 ] && { ok=1; break; }
+timeout 60 ssh -o ConnectTimeout=15 MAIN_HOST "cd ~/birdai; setsid -f bash data/push-to.sh $IP > /dev/null 2>&1; echo started" >> $G/$NAME.log 2>&1
+ok=0; for i in $(seq 1 240); do o=$(timeout 25 ssh -o ConnectTimeout=15 MAIN_HOST "grep -c 'push done' ~/birdai/data/logs/push-$TAG.log" 2>/dev/null); [ "${o:-0}" -ge 1 ] && { ok=1; break; }
   if [ $((i % 6)) = 0 ]; then st=$(VERDA_PROFILE=$PROFILE verda --agent vm describe $ID 2>/dev/null | python3 -c "import sys,json; print(json.load(sys.stdin).get('status'))" 2>/dev/null); [ "$st" = "discontinued" ] && fail "taken back by Verda during the data push"; fi
   sleep 10; done
 [ $ok = 1 ] || fail "data push did not finish in 40 minutes"
@@ -45,7 +45,7 @@ setsid -f bash data/score_loop.sh $NAME $IMGSZ > /dev/null 2>&1
 echo \"job exit \\\$? \\\$(date +%H:%M:%S)\" >> data/logs/job.log
 JOBEOF
 chmod +x data/run-job.sh; setsid -f bash data/run-job.sh > /dev/null 2>&1" || fail "could not start the size test"
-  timeout 30 ssh -o ConnectTimeout=15 birdai-verda "echo $IP:$NAME >> ~/birdai/data/sweep-machines.txt"
+  timeout 30 ssh -o ConnectTimeout=15 MAIN_HOST "echo $IP:$NAME >> ~/birdai/data/sweep-machines.txt"
   echo "JOB='size test $MODEL $IMGSZ px $EPOCHS epochs'" >> $G/$NAME.env
   say "SETUP OK $NAME $IP: size test $MODEL at $IMGSZ px, $EPOCHS epochs, $NGPU GPU(s)"
 else
@@ -59,7 +59,7 @@ cd ~/birdai
 echo \"job exit \\\$? \\\$(date +%H:%M:%S)\" >> data/logs/job.log
 JOBEOF
 chmod +x data/run-job.sh; setsid -f bash data/run-job.sh > /dev/null 2>&1" || fail "could not start the evolution run"
-  timeout 30 ssh -o ConnectTimeout=15 birdai-verda "echo $IP:$RUN >> ~/birdai/data/evo-machines.txt"
+  timeout 30 ssh -o ConnectTimeout=15 MAIN_HOST "echo $IP:$RUN >> ~/birdai/data/evo-machines.txt"
   echo "JOB='evolution $RUN, $((NGPU*PER)) variants'" >> $G/$NAME.env
   say "SETUP OK $NAME $IP: evolution $RUN, $((NGPU*PER)) variants on $NGPU GPU(s)"
 fi

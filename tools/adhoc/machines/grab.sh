@@ -4,7 +4,7 @@
 T=$HOME/WORKDIR; G=$T/grab; MAXPER=${MAXPER:-3}
 for round in $(seq 1 2000); do
   got=0
-  for p in team4 team2 team3; do
+  for p in ACCOUNT_D ACCOUNT_B ACCOUNT_C; do
     have=$(VERDA_PROFILE=$p verda --agent vm list 2>/dev/null | python3 -c "import sys,json; print(len(json.load(sys.stdin) or []))" 2>/dev/null); have=${have:-0}
     for mode in ondemand spot; do
       [ "$have" -ge "$MAXPER" ] && break

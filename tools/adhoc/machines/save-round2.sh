@@ -1,5 +1,5 @@
 #!/bin/bash
-# main: save what exists only on the rented training / footage machines to the store machine (team4)
+# main: save what exists only on the rented training / footage machines to the store machine (ACCOUNT_D)
 G18=MACHINE_IP; G13=MACHINE_IP; ST=MACHINE_IP; L=~/birdai/data/logs/save-round2.log; echo "save start $(date +%H:%M:%S)" > $L
 R="ssh -o ConnectTimeout=15 -o StrictHostKeyChecking=accept-new"
 $R root@$ST 'mkdir -p ~/birdai/data/from_g18 ~/birdai/data/from_g13'

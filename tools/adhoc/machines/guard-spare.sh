@@ -2,7 +2,7 @@
 # laptop: on each spare account, delete all its rented machines when the reported balance is at or under LINE euros
 LINE=${LINE:-12}
 for i in $(seq 1 3000); do
-  for p in team2 team3 team4; do
+  for p in ACCOUNT_B ACCOUNT_C ACCOUNT_D; do
     B=$(VERDA_PROFILE=$p verda --agent cost balance 2>/dev/null | python3 -c "import sys,json; print(json.load(sys.stdin)['amount'])" 2>/dev/null)
     [ -n "$B" ] || continue
     if python3 -c "import sys; sys.exit(0 if float('$B') <= $LINE else 1)"; then
