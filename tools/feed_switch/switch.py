@@ -159,7 +159,18 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(data)
 
+    def _from_this_pc(self):
+        """Only localhost:<port> or 127.0.0.1:<port>: a web page that points another name at 127.0.0.1 cannot
+        switch the board (DNS rebinding). Answers 403 otherwise."""
+        port = self.server.server_address[1]
+        if self.headers.get("Host") in (f"localhost:{port}", f"127.0.0.1:{port}"):
+            return True
+        self._send(403, "forbidden", "text/plain")
+        return False
+
     def do_GET(self):
+        if not self._from_this_pc():
+            return
         if self.path == "/":
             self._send(200, PAGE, "text/html; charset=utf-8")
         elif self.path == "/demo":
@@ -170,6 +181,8 @@ class Handler(BaseHTTPRequestHandler):
             self._send(404, "not found", "text/plain")
 
     def do_POST(self):
+        if not self._from_this_pc():
+            return
         if self.path != "/switch" or self.headers.get("Content-Type", "").split(";")[0] != "application/json":
             return self._send(404, "not found", "text/plain")
         try:

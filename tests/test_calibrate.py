@@ -35,6 +35,8 @@ def served(tmp_path):
     board = FakeBoard()
     angles = tmp_path / "data" / "latch_angles.json"
     server = make_server(board, angles, "127.0.0.1", 0)
+    assert board.calls == [("set_limits", 180, 0)]  # sent once at the start, see the tests below
+    board.calls.clear()
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     base = f"http://127.0.0.1:{server.server_address[1]}"
@@ -78,7 +80,7 @@ def test_state_before_anything_is_set_shows_the_defaults(served):
 
 
 def test_state_shows_the_saved_angles(tmp_path):
-    (tmp_path / "a.json").write_text('{"open": 20, "closed": 150}')
+    (tmp_path / "a.json").write_text('{"open": 150, "closed": 20}')
     board = FakeBoard()
     server = make_server(board, tmp_path / "a.json", "127.0.0.1", 0)
     thread = threading.Thread(target=server.serve_forever, daemon=True)
@@ -88,7 +90,8 @@ def test_state_shows_the_saved_angles(tmp_path):
     finally:
         server.shutdown()
         server.server_close()
-    assert state["open"] == 20 and state["closed"] == 150 and state["saved"] is True
+    assert state["open"] == 150 and state["closed"] == 20 and state["saved"] is True
+    assert board.calls == [("set_limits", 150, 20)]  # the saved angles went to the board at the start
 
 
 def test_angle_turns_the_servo(served):
@@ -177,18 +180,89 @@ def test_a_failed_set_limits_on_save_is_a_502(served):
 
 def test_a_test_moves_the_current_angle_to_the_limit_it_used(served):
     base, board, angles = served
-    call(base, "/angle", {"degrees": 25})
+    call(base, "/angle", {"degrees": 160})
     call(base, "/save", {"which": "open"})
-    call(base, "/angle", {"degrees": 140})
+    call(base, "/angle", {"degrees": 25})
     call(base, "/save", {"which": "closed"})
     call(base, "/angle", {"degrees": 77})  # a hand-set angle, not a saved one
-    assert call(base, "/test", {"closed": True}) == (200, {"closed": True, "angle": 140})
-    assert call(base, "/state")[1]["angle"] == 140
-    assert call(base, "/test", {"closed": False})[1]["angle"] == 25
+    assert call(base, "/test", {"closed": True}) == (200, {"closed": True, "angle": 25})
     assert call(base, "/state")[1]["angle"] == 25
-    assert call(base, "/test", {"closed": True})[0] == 200
-    assert call(base, "/save", {"which": "open"})[0] == 200  # saves where the servo is, the closed angle
-    assert json.loads(angles.read_text()) == {"open": 140, "closed": 140}
+    assert call(base, "/test", {"closed": False})[1]["angle"] == 160
+    assert call(base, "/state")[1]["angle"] == 160
+    assert call(base, "/test", {"closed": False})[0] == 200
+    assert call(base, "/save", {"which": "closed"})[0] == 400  # where the servo is, the open angle: refused
+    assert json.loads(angles.read_text()) == {"open": 160, "closed": 25}
+
+
+def test_test_close_then_save_as_open_is_refused_and_nothing_changes(served):
+    # the review's sequence: the page's angle becomes the closed angle (0), then "Save as OPEN" would write 0 / 0
+    base, board, angles = served
+    call(base, "/angle", {"degrees": 170})
+    call(base, "/save", {"which": "open"})
+    before = angles.read_text()
+    assert call(base, "/test", {"closed": True}) == (200, {"closed": True, "angle": 0})
+    calls_before = list(board.calls)
+    status, reply = call(base, "/save", {"which": "open"})
+    assert status == 400
+    assert reply["error"].startswith("Not saved: the open angle must be at least 20 degrees above the closed angle, "
+                                     "or the hatch could stay shut.")
+    assert angles.read_text() == before and board.calls == calls_before  # nothing written, nothing sent
+    state = call(base, "/state")[1]
+    assert (state["open"], state["closed"]) == (170, 0)
+
+
+def test_save_as_closed_too_close_to_the_open_angle_is_refused(served):
+    base, board, angles = served
+    call(base, "/angle", {"degrees": 161})
+    status, reply = call(base, "/save", {"which": "closed"})  # default open 180: 161 is only 19 below
+    assert status == 400 and reply["error"].startswith("Not saved:") and not angles.exists()
+    call(base, "/angle", {"degrees": 160})
+    assert call(base, "/save", {"which": "closed"}) == (200, {"open": 180, "closed": 160, "saved": True})
+
+
+def test_the_page_shows_a_refused_save_in_plain_words(served):
+    html = request(served[0], "/")[1].decode()
+    assert "if (!r.ok) { say(data.error" in html  # a 400 reply's error text is what the page says
+
+
+def test_the_saved_limits_go_to_the_board_once_at_the_start(tmp_path):
+    (tmp_path / "a.json").write_text('{"open": 170, "closed": 10}')
+    board = FakeBoard()
+    server = make_server(board, tmp_path / "a.json", "127.0.0.1", 0)
+    server.server_close()
+    assert board.calls == [("set_limits", 170, 10)]
+
+
+def test_a_board_that_does_not_answer_at_the_start_does_not_stop_the_page(tmp_path):
+    (tmp_path / "a.json").write_text('{"open": 170, "closed": 10}')
+    board = FakeBoard()
+    board.fail = "no answer from the board in 0.5 s"
+    server = make_server(board, tmp_path / "a.json", "127.0.0.1", 0)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        status, state = call(f"http://127.0.0.1:{server.server_address[1]}", "/state")
+    finally:
+        server.shutdown()
+        server.server_close()
+    assert status == 200 and (state["open"], state["closed"]) == (170, 10)
+    assert state["error"] == "no answer from the board in 0.5 s"
+
+
+def test_an_angles_file_that_could_leave_the_hatch_shut_starts_the_page_with_the_defaults(tmp_path, capsys):
+    (tmp_path / "a.json").write_text('{"open": 0, "closed": 0}')
+    board = FakeBoard()
+    server = make_server(board, tmp_path / "a.json", "127.0.0.1", 0)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        state = call(f"http://127.0.0.1:{server.server_address[1]}", "/state")[1]
+    finally:
+        server.shutdown()
+        server.server_close()
+    assert (state["open"], state["closed"], state["saved"]) == (180, 0, False)
+    assert board.calls == [("set_limits", 180, 0)]
+    assert "a.json" in capsys.readouterr().err
 
 
 def test_a_failed_test_leaves_the_current_angle_alone(served):

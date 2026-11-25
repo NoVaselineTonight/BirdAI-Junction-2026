@@ -253,6 +253,7 @@ async function pollLive() {
     j.photo_every_s = j.photo_every_s || null;
     j.source = j.source === "camera" ? "camera" : "recorded";
     j.two_feeds = j.two_feeds === true;
+    j.fast = j.fast === true;
     j.latch = j.latch || { mode: "off", closed: false, reason: null, error: null, reason_name: null, headline: "off" };
     live = j;
     // Watchdog: after a server restart an MJPEG <img> often just stops, with no error event to reconnect on,
@@ -461,6 +462,8 @@ const LIVE_NOTES = {
   camera: "Live picture from the camera.",
   recorded: "Recorded feeder footage, playing in real time, standing in for the camera.",
 };
+// with --fast the footage plays unpaced, so the note does not say "in real time"
+const LIVE_NOTE_FAST = "Recorded feeder footage, standing in for the camera.";
 const SPEC_SOURCES = { camera: "Live camera", recorded: "Recorded feeder footage" };
 let liveFeedStarted = false;
 
@@ -481,7 +484,7 @@ function renderFeeds() {
     ? "The photo the model analysed, with a box around each bird it found"
     : "Live view of the feeder with a box around each bird the model found";
   if (!two) return;
-  setText("live-note", LIVE_NOTES[live.source]);
+  setText("live-note", live.source === "recorded" && live.fast ? LIVE_NOTE_FAST : LIVE_NOTES[live.source]);
   setText("feed-note", `One photo every ${live.photo_every_s} s, with a box around each bird the model found.`);
   if (!liveFeedStarted) {
     liveFeedStarted = true;

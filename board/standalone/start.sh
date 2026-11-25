@@ -44,8 +44,11 @@ cap=cv2.VideoCapture(sys.argv[1], cv2.CAP_V4L2); ok,_=cap.read(); cap.release();
 fi
 if [ -n "$CAM" ]; then
   echo "feeder-standalone: camera $CAM"
+  # The webcam keeps its own census (and its evidence photos, which go beside the database), so what it sees
+  # never mixes with the reel's counts. The latch angles stay the ones the calibration page saves.
+  mkdir -p data/camera
   exec .venv/bin/python -m feeder_census --camera "$CAM" --camera-rotate "$ROTATE" --detector auto --latch "$LATCH" \
-    --db data/census.db --port "$PORT" --photo-every-s "$PHOTO" --pest-threshold "$PEST_THRESHOLD" --latch-close-frames "$CLOSE_FRAMES" --latch-open-frames "$OPEN_FRAMES"
+    --db data/camera/census.db --latch-angles data/latch_angles.json --port "$PORT" --photo-every-s "$PHOTO" --pest-threshold "$PEST_THRESHOLD" --latch-close-frames "$CLOSE_FRAMES" --latch-open-frames "$OPEN_FRAMES"
 fi
 echo "feeder-standalone: no camera found, playing the recorded reel"
 exec .venv/bin/python -m feeder_census --videos videos --detector auto --latch "$LATCH" --db data/census.db --port "$PORT" \

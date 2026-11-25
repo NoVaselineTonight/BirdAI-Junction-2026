@@ -4,7 +4,8 @@ import threading
 import pytest
 
 from feeder_census.latch import (
-    AnglesLatch, LatchController, LatchError, RouterLatch, load_angles, pack_request, save_angles, unpack,
+    DEFAULT_CLOSED, DEFAULT_OPEN, MIN_OPEN_ABOVE_CLOSED, AnglesLatch, LatchController, LatchError, RouterLatch,
+    load_angles, pack_request, save_angles, unpack,
 )
 
 SQ = {"red_squirrel": 1, "brown_rat": 0}
@@ -370,11 +371,38 @@ def test_get_angle_that_is_not_a_number_is_a_latch_error(tmp_path):
 def test_angles_file_round_trip(tmp_path):
     path = tmp_path / "data" / "latch_angles.json"
     assert load_angles(path) is None
-    save_angles(path, 20, 150)
-    assert load_angles(path) == (20, 150)
-    assert path.read_text().strip() == '{"open": 20, "closed": 150}'
-    save_angles(path, 0, 180)
-    assert load_angles(path) == (0, 180)
+    save_angles(path, 150, 20)
+    assert load_angles(path) == (150, 20)
+    assert path.read_text().strip() == '{"open": 150, "closed": 20}'
+    save_angles(path, 180, 0)
+    assert load_angles(path) == (180, 0)
+    save_angles(path, 20, 0)  # exactly MIN_OPEN_ABOVE_CLOSED apart is allowed
+    assert load_angles(path) == (20, 0)
+
+
+@pytest.mark.parametrize("text", ['{"open": 0, "closed": 0}', '{"open": 19, "closed": 0}', '{"open": 0, "closed": 180}',
+                                  '{"open": 100, "closed": 90}'])
+def test_an_angles_file_that_could_leave_the_hatch_shut_gives_the_defaults_and_says_so(tmp_path, text):
+    path = tmp_path / "latch_angles.json"
+    path.write_text(text)
+    said = []
+    assert load_angles(path, warn=said.append) == (DEFAULT_OPEN, DEFAULT_CLOSED) == (180, 0)
+    assert len(said) == 1 and "latch_angles.json" in said[0] and "at least 20 degrees" in said[0]
+
+
+def test_an_angles_file_that_could_leave_the_hatch_shut_is_reported_on_stderr_by_default(tmp_path, capsys):
+    path = tmp_path / "latch_angles.json"
+    path.write_text('{"open": 0, "closed": 0}')
+    assert load_angles(path) == (180, 0)
+    assert "latch_angles.json" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize("pair", [(0, 0), (19, 0), (0, 180), (100, 90)])
+def test_save_angles_refuses_a_pair_that_could_leave_the_hatch_shut(tmp_path, pair):
+    path = tmp_path / "latch_angles.json"
+    with pytest.raises(ValueError, match="at least 20 degrees"):
+        save_angles(path, *pair)
+    assert not path.exists()
 
 
 @pytest.mark.parametrize("text", [
@@ -433,3 +461,16 @@ def test_a_failing_set_limits_is_reported_but_the_latch_still_moves_and_is_tried
     assert link.limits == [(20, 150), (20, 150)]
     c.update(SQ)
     assert link.limits == [(20, 150), (20, 150)]  # sent once it worked
+
+
+def test_the_hatch_rule_is_twenty_degrees():
+    assert MIN_OPEN_ABOVE_CLOSED == 20
+
+
+def test_the_default_angles_match_the_sketch():
+    import re
+    from pathlib import Path
+
+    sketch = (Path(__file__).resolve().parents[1] / "board" / "latch" / "latch.ino").read_text()
+    found = {name: int(value) for name, value in re.findall(r"\b(servoOpen|servoClosed)\s*=\s*(\d+)", sketch)}
+    assert found == {"servoOpen": DEFAULT_OPEN, "servoClosed": DEFAULT_CLOSED}

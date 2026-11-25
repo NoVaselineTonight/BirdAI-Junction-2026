@@ -165,14 +165,22 @@ def _print_line(state: LiveState) -> None:
           flush=True)
 
 
-def _serve(app, port: int, stop: threading.Event, host: str = "127.0.0.1") -> None:
-    """Serve until Ctrl-C or SIGTERM. Open video streams end first, or the shutdown would wait on them."""
+def _serve(app, port: int, stop: threading.Event, host: str = "127.0.0.1",
+           quit_when: threading.Event | None = None) -> None:
+    """Serve until Ctrl-C or SIGTERM, or until `quit_when` is set (checked every 0.1 s). Open video streams end
+    first, or the shutdown would wait on them."""
 
     class Server(uvicorn.Server):
         def handle_exit(self, sig, frame) -> None:
             stop.set()
             app.state.stopping.set()
             super().handle_exit(sig, frame)
+
+        async def on_tick(self, counter: int) -> bool:
+            if quit_when is not None and quit_when.is_set():
+                app.state.stopping.set()
+                self.should_exit = True
+            return await super().on_tick(counter)
 
     shown = "localhost" if host in ("127.0.0.1", "0.0.0.0", "localhost", "::", "::1") else host  # works on this machine
     print(f"Feeder Census: http://{shown}:{port}", flush=True)
@@ -265,6 +273,9 @@ def main(argv: list[str] | None = None) -> int:
 
     stop = threading.Event()
     failure: list[BaseException] = []
+    # a live camera that fails ends the program, so the board's service (Restart=always) starts it again; with
+    # recorded video the page stays up and says the counter has stopped
+    camera_failed = threading.Event()
 
     def work() -> None:
         try:
@@ -273,6 +284,8 @@ def main(argv: list[str] | None = None) -> int:
             failure.append(exc)
             if pipeline.error is None:
                 pipeline.error = exc  # the page shows it instead of looking alive
+            if args.camera is not None:
+                camera_failed.set()
 
     # `kill` (SIGTERM) stops the run the same clean way as Ctrl-C
     signal.signal(signal.SIGTERM, lambda signum, frame: stop.set())
@@ -283,14 +296,18 @@ def main(argv: list[str] | None = None) -> int:
             while thread.is_alive():
                 thread.join(0.2)
         else:
-            _serve(create_app(pipeline, store, species, settings, model_card=card), settings.port, stop, args.host)
+            app = create_app(pipeline, store, species, settings, model_card=card, fast=args.fast)
+            _serve(app, settings.port, stop, args.host, quit_when=camera_failed)
     except KeyboardInterrupt:
         pass
     finally:  # also when uvicorn exits early, e.g. the port is taken
         stop.set()
         thread.join()
     if failure:
-        print(f"error: {failure[0]}", file=sys.stderr)
+        if args.camera is not None:
+            print(f"error: counting from camera {args.camera} stopped: {failure[0]}", file=sys.stderr)
+        else:
+            print(f"error: {failure[0]}", file=sys.stderr)
         return 1
     return 0
 

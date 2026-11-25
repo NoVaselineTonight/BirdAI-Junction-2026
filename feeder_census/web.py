@@ -37,9 +37,10 @@ class _Revalidated(StaticFiles):
 
 def create_app(
     pipeline: Pipeline, store: Store, species: Sequence[Species], settings: Settings, model_card: dict | None,
-    pests: Sequence[Species] | None = None,
+    pests: Sequence[Species] | None = None, fast: bool = False,
 ) -> FastAPI:
-    """The page and its API. Set `app.state.stopping` to end open MJPEG streams before the server shuts down."""
+    """The page and its API. Set `app.state.stopping` to end open MJPEG streams before the server shuts down.
+    `fast`: the recorded footage plays unpaced (--fast), so the page does not say it plays in real time."""
     app = FastAPI(title="Feeder Census", docs_url=None, redoc_url=None, openapi_url=None)
     app.state.stopping = threading.Event()
     app.mount("/static", _Revalidated(directory=STATIC), name="static")
@@ -66,7 +67,7 @@ def create_app(
             "now": s.now, "confirmed": s.confirmed, "unidentified": s.unidentified,
             "day_max": s.day_max, "visits_today": s.visits_today,  # visits are arrivals, not birds
             "time_scale": settings.time_scale, "footage_note": settings.footage_note,
-            "source": settings.source, "recorded": settings.source == "recorded",
+            "source": settings.source, "recorded": settings.source == "recorded", "fast": fast,
             "photo_every_s": settings.detect_every_s if settings.photo_mode else None,
             "two_feeds": settings.photo_mode,  # photo mode: the raw picture (/live.mjpg) beside the analysed photo
             "error": None if error is None else (str(error) or type(error).__name__),

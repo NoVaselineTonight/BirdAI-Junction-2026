@@ -208,6 +208,21 @@ def test_live_state_carries_the_footage_note(tmp_path, make_video, client):
         assert c.get("/api/live").json()["footage_note"] == "Edited to the busy parts of a longer recording."
 
 
+def test_live_state_says_whether_the_footage_plays_unpaced(tmp_path, make_video, client):
+    assert client.get("/api/live").json()["fast"] is False
+    _, store, pipeline = scripted_app(tmp_path / "fast", make_video, ["great_tit"], [[GT]], 1)
+    app = create_app(pipeline, store, SPECIES, pipeline.settings, model_card=None, fast=True)
+    with TestClient(app) as c:
+        assert c.get("/api/live").json()["fast"] is True
+
+
+def test_the_script_leaves_out_playing_in_real_time_with_fast(client):
+    js = client.get("/static/app.js").text
+    assert "j.fast = j.fast === true;" in js
+    assert "Recorded feeder footage, standing in for the camera." in js.split("const LIVE_NOTES")[1]
+    assert "live.fast" in js
+
+
 def test_live_state_says_the_photo_interval_in_photo_mode_and_null_otherwise(tmp_path, make_video, client):
     assert client.get("/api/live").json()["photo_every_s"] is None
     app, _, _ = scripted_app(tmp_path / "photo", make_video, ["great_tit"], [[GT]], 1, photo_mode=True, detect_every_s=5.0)

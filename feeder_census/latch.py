@@ -16,7 +16,7 @@ import socket
 import struct
 import sys
 import time
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol
@@ -25,6 +25,10 @@ MODES = ("off", "sim", "router")
 ROUTER_SOCKET = Path("/var/run/arduino-router.sock")
 DEFAULT_OPEN, DEFAULT_CLOSED = 180, 0  # the sketch's own start values (board/latch/latch.ino)
 MAX_DEGREES = 180
+# On this feeder the hatch is lifted (open) at the high angle and hangs shut at the low one. The sketch's 30 s
+# reopen and its 10 minute return both go to the open angle, so an open angle at or below the closed one could
+# leave the hatch shut for good: a pair closer than this is never saved and never used.
+MIN_OPEN_ABOVE_CLOSED = 20
 
 
 class LatchError(OSError):
@@ -213,9 +217,20 @@ def _check_degrees(*values: object) -> None:
             raise ValueError(f"an angle must be a whole number from 0 to {MAX_DEGREES}, got {value!r}")
 
 
-def load_angles(path: Path) -> tuple[int, int] | None:
+def angles_problem(open_degrees: int, closed_degrees: int) -> str | None:
+    """Why this (open, closed) pair could leave the hatch shut, in plain words; None when it is safe."""
+    if open_degrees < closed_degrees + MIN_OPEN_ABOVE_CLOSED:
+        return (f"the open angle must be at least {MIN_OPEN_ABOVE_CLOSED} degrees above the closed angle, "
+                "or the hatch could stay shut")
+    return None
+
+
+def load_angles(path: Path, warn: Callable[[str], None] | None = None) -> tuple[int, int] | None:
     """The saved (open, closed) angles, or None when the file does not exist. A file that cannot be read or holds
-    anything but `{"open": N, "closed": N}` with N from 0 to 180 raises LatchError naming the file."""
+    anything but `{"open": N, "closed": N}` with N from 0 to 180 raises LatchError naming the file.
+
+    A file whose open angle is not at least MIN_OPEN_ABOVE_CLOSED above its closed angle is not used: the
+    defaults (DEFAULT_OPEN, DEFAULT_CLOSED) come back instead and `warn` (default: a line on stderr) is told why."""
     path = Path(path)
     try:
         text = path.read_text()
@@ -230,12 +245,25 @@ def load_angles(path: Path) -> tuple[int, int] | None:
     if not (isinstance(data, dict) and _is_degrees(data.get("open")) and _is_degrees(data.get("closed"))):
         raise LatchError(f'{path} must look like {{"open": 180, "closed": 0}} with angles from 0 to {MAX_DEGREES}, '
                          f"got {text.strip()[:80]!r}")
+    problem = angles_problem(data["open"], data["closed"])
+    if problem is not None:
+        message = (f"{path} has open {data['open']}, closed {data['closed']}: {problem}; "
+                   f"using the defaults open {DEFAULT_OPEN}, closed {DEFAULT_CLOSED} instead")
+        if warn is None:
+            print(f"warning: {message}", file=sys.stderr, flush=True)
+        else:
+            warn(message)
+        return DEFAULT_OPEN, DEFAULT_CLOSED
     return data["open"], data["closed"]
 
 
 def save_angles(path: Path, open_degrees: int, closed_degrees: int) -> None:
-    """Writes the angles file (parent folder made when missing); the old file stays whole if the write fails."""
+    """Writes the angles file (parent folder made when missing); the old file stays whole if the write fails.
+    A pair that breaks the MIN_OPEN_ABOVE_CLOSED rule raises ValueError and writes nothing."""
     _check_degrees(open_degrees, closed_degrees)
+    problem = angles_problem(open_degrees, closed_degrees)
+    if problem is not None:
+        raise ValueError(f"not saved: {problem} (open {open_degrees}, closed {closed_degrees})")
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_name(path.name + ".tmp")

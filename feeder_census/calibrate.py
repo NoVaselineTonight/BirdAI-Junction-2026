@@ -17,7 +17,8 @@ from pathlib import Path
 from typing import Protocol
 
 from feeder_census.latch import (
-    DEFAULT_CLOSED, DEFAULT_OPEN, MAX_DEGREES, ROUTER_SOCKET, LatchError, RouterLatch, load_angles, save_angles,
+    DEFAULT_CLOSED, DEFAULT_OPEN, MAX_DEGREES, ROUTER_SOCKET, LatchError, RouterLatch, angles_problem, load_angles,
+    save_angles,
 )
 
 DEFAULT_ANGLES_FILE = Path("data/latch_angles.json")
@@ -43,13 +44,26 @@ class Calibration:
         self.angle: int | None = None  # the last angle turned to in this session
         self.error: str | None = None
         self._lock = threading.Lock()
-        saved = load_angles(self.angles_file)  # LatchError for a broken file: the caller says so and stops
+        unsafe: list[str] = []
+
+        def warn(message: str) -> None:  # a pair that could leave the hatch shut: the defaults, and say so
+            unsafe.append(message)
+            print(f"warning: {message}", file=sys.stderr, flush=True)
+
+        saved = load_angles(self.angles_file, warn)  # LatchError for a broken file: the caller says so and stops
         self.open, self.closed = saved if saved is not None else (DEFAULT_OPEN, DEFAULT_CLOSED)
+        self._file_used = saved is not None and not unsafe
+        # the board forgets angles set by hand when its microcontroller restarts: send them once now, so that
+        # "Test: close" uses these. Best effort: a board that does not answer shows on the page, nothing more.
+        try:
+            self._board_call(self.board.set_limits, self.open, self.closed)
+        except OSError:
+            pass
 
     def state(self) -> dict:
         with self._lock:
             return {"angle": self.angle, "open": self.open, "closed": self.closed,
-                    "saved": self.angles_file.exists(), "error": self.error}
+                    "saved": self._file_used, "error": self.error}
 
     def set_angle(self, body: object) -> dict:
         degrees = body.get("degrees") if isinstance(body, dict) else None
@@ -68,11 +82,14 @@ class Calibration:
             if self.angle is None:
                 raise _BadRequest("turn the servo first: there is no angle to save yet")
             open_degrees, closed_degrees = (self.angle, self.closed) if which == "open" else (self.open, self.angle)
+            problem = angles_problem(open_degrees, closed_degrees)
+            if problem is not None:  # nothing written, nothing sent to the board
+                raise _BadRequest(f"Not saved: {problem}. (OPEN would be {open_degrees}, CLOSED {closed_degrees}.)")
             try:
                 save_angles(self.angles_file, open_degrees, closed_degrees)
             except OSError as exc:
                 raise _ServerError(f"cannot write {self.angles_file}: {exc.strerror or exc}")
-            self.open, self.closed = open_degrees, closed_degrees
+            self.open, self.closed, self._file_used = open_degrees, closed_degrees, True
             self._board_call(self.board.set_limits, open_degrees, closed_degrees)
             return {"open": self.open, "closed": self.closed, "saved": True}
 

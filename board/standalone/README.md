@@ -25,7 +25,8 @@ put there by `board/deploy.sh`.
 
 ## Install, as it was done by hand
 
-Run the commands on the board as root (`adb shell`), with the files copied over first (`adb push`).
+Run the commands on the board as root (`adb shell`), with the files copied over first (`adb push`). The commands
+below are reconstructed afterwards from what was set up on the board; they are not a record of what was typed.
 
 1. Allow SSH for root with a key only. Create `/etc/ssh/sshd_config.d/50-birdai.conf` with the two lines
    `PasswordAuthentication no` and `PermitRootLogin prohibit-password`. Run `ssh-keygen -A`, put the laptop's
@@ -47,7 +48,7 @@ Run the commands on the board as root (`adb shell`), with the files copied over 
 
 - Edit `/home/arduino/feeder-standalone/config`, then run `systemctl restart feeder-census`. The feed switch
   (`tools/feed_switch/switch.py`) does exactly this to the `SOURCE` line.
-- Run `/home/arduino/feeder-standalone/undo.sh` as root to remove the service, the autostart entry, the
+- Run `/home/arduino/feeder-standalone/undo.sh` as root over `adb shell` (not over SSH: it turns SSH off) to remove the service, the autostart entry, the
   auto-login, the SSH setting, the swap file, and to set "password must be changed" again. It leaves
   `/home/arduino/feeder-standalone` and `/root/.ssh/authorized_keys` in place.
 
@@ -56,6 +57,10 @@ Run the commands on the board as root (`adb shell`), with the files copied over 
 - The webcam (USB id 1c45:6200) gave a garbled USB description behind the hub's inner hub port. It works on a
   first-level port. `start.sh` also tries a slower USB handshake and attaching the hub again.
 - `start.sh` falls back to the recorded reel when the camera gives no picture within 15 s.
+- The two sources keep separate counts: the webcam writes to `data/camera/census.db` (evidence photos in
+  `data/camera/evidence/`), the reel to `data/census.db`, so that after a feed switch the tables do not mix real
+  feeder birds with whatever the webcam saw in the room. Both use the same saved latch angles,
+  `data/latch_angles.json`.
 - After a restart of Linux the servo sketch must be reset, or `arduino-router` does not know its calls. The
   script does this through `/opt/openocd` when `LATCH=router`.
 - Done by hand once, on one board. There is no tested install script; check each step.

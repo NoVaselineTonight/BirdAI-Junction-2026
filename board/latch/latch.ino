@@ -37,7 +37,9 @@
     STEP_DEGREES (10) degrees, one step every STEP_INTERVAL_MS (100 ms); the last step may be shorter so
     it lands exactly on the target. A full 180 degree swing takes about 1.8 s. The bridge calls only set
     the target and return at once; loop() does the stepping. A new target during a move redirects the
-    walk from where the servo is now. The stepped movement has NOT YET been watched on the feeder.
+    walk from where the servo is now. On 15 November 2026 the team saw the servo move the hatch up and
+    down at the stand. Nobody has reported whether the stepped movement looks smooth, or whether the
+    servo buzzes or gets warm at rest at the open angle (see README.md, "What was seen on the board").
   - Rated torque is about 1.6 kg.cm at 4.8 V, so r = 1 cm gives about 1.6 kg at stall. Plan for well
     under half of that for both wires together (about 0.5 kg at r = 1 cm, 0.25 kg at r = 2 cm).
     A servo held stalled gets hot and can reset the board.

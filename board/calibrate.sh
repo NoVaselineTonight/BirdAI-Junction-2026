@@ -4,8 +4,9 @@
 #        board/calibrate.sh --stop
 # The page turns the latch servo by hand and saves its open and closed angles in data/latch_angles.json on the
 # board; the demo (board/run.sh --latch router) sends them to the sketch at its next start.
-# It does not start or stop the census demo. Stop the demo first (board/run.sh --stop) when it runs with
-# --latch router: both would command the same servo.
+# It does not start or stop the census demo. Stop the demo first when it runs with the latch on: both would
+# command the same servo. Started by board/run.sh --latch router: board/run.sh --stop. On the stand-alone board
+# (board/standalone/, the systemd service feeder-census): systemctl stop feeder-census, and start it again after.
 # Safe to run twice: an earlier calibration page is stopped first (SIGTERM, up to 10 s) and the forward is replaced.
 set -euo pipefail
 source "$(dirname "$0")/common.sh"
@@ -57,6 +58,9 @@ fi
 
 if [ -n "$(adb shell "[ -f $BOARD_DIR/run.pid ] && grep -qa feeder_census /proc/\$(cat $BOARD_DIR/run.pid)/cmdline 2>/dev/null && echo yes" | tr -d '\r' || true)" ]; then
     echo "note: the census demo is running on the board. If it runs with --latch router it commands the servo too; stop it with board/run.sh --stop"
+fi
+if [ "$(adb shell "systemctl is-active feeder-census 2>/dev/null" | tr -d '\r' || true)" = active ]; then
+    echo "note: the stand-alone demo (service feeder-census) is running on the board. If its LATCH is router it commands the servo too; stop it with: adb shell systemctl stop feeder-census (start it again after calibrating)"
 fi
 
 stop_calibration_on_board

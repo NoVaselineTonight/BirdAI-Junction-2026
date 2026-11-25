@@ -150,8 +150,8 @@ def run_auto(monkeypatch, tmp_path, make_video, card, *extra, detector=StubDetec
         def run(self, stop):
             pass
 
-    def fake_app(pipeline, store, species, settings, model_card):
-        seen["card"] = model_card
+    def fake_app(pipeline, store, species, settings, model_card, fast=False):
+        seen["card"], seen["fast"] = model_card, fast
 
     models = tmp_path / "models"
     if card is not None:
@@ -389,8 +389,8 @@ def run_router_cli(monkeypatch, tmp_path, make_video, *extra, angles=None, fail_
 
 
 def test_saved_angles_are_sent_before_the_first_latch_command(monkeypatch, tmp_path, make_video):
-    code, calls, state = run_router_cli(monkeypatch, tmp_path, make_video, angles='{"open": 20, "closed": 150}')
-    assert code == 0 and calls == [("limits", 20, 150), ("set", False)]
+    code, calls, state = run_router_cli(monkeypatch, tmp_path, make_video, angles='{"open": 150, "closed": 20}')
+    assert code == 0 and calls == [("limits", 150, 20), ("set", False)]
 
 
 def test_without_an_angles_file_nothing_extra_is_sent(monkeypatch, tmp_path, make_video):
@@ -400,16 +400,16 @@ def test_without_an_angles_file_nothing_extra_is_sent(monkeypatch, tmp_path, mak
 
 def test_the_angles_file_can_be_named(monkeypatch, tmp_path, make_video):
     other = tmp_path / "mine.json"
-    other.write_text('{"open": 5, "closed": 90}')
+    other.write_text('{"open": 90, "closed": 5}')
     code, calls, state = run_router_cli(monkeypatch, tmp_path, make_video, "--latch-angles", str(other))
-    assert code == 0 and calls == [("limits", 5, 90), ("set", False)]
+    assert code == 0 and calls == [("limits", 90, 5), ("set", False)]
 
 
 def test_a_failing_set_limits_does_not_stop_the_program(monkeypatch, tmp_path, make_video, capsys):
     code, calls, state = run_router_cli(
-        monkeypatch, tmp_path, make_video, angles='{"open": 20, "closed": 150}', fail_limits=True
+        monkeypatch, tmp_path, make_video, angles='{"open": 150, "closed": 20}', fail_limits=True
     )
-    assert code == 0 and calls == [("limits", 20, 150), ("set", False)]  # the open command still went out
+    assert code == 0 and calls == [("limits", 150, 20), ("set", False)]  # the open command still went out
     assert state.error == "no answer from the board" and state.headline == "not_answering"
 
 
@@ -417,6 +417,14 @@ def test_a_broken_angles_file_is_a_warning_not_a_stop(monkeypatch, tmp_path, mak
     code, calls, state = run_router_cli(monkeypatch, tmp_path, make_video, angles="not json")
     assert code == 0 and calls == [("set", False)]
     assert "latch_angles.json" in capsys.readouterr().err
+
+
+def test_an_angles_file_that_could_leave_the_hatch_shut_sends_the_defaults_and_says_so(
+        monkeypatch, tmp_path, make_video, capsys):
+    code, calls, state = run_router_cli(monkeypatch, tmp_path, make_video, angles='{"open": 0, "closed": 0}')
+    assert code == 0 and calls == [("limits", 180, 0), ("set", False)]  # the board's angles are put right too
+    err = capsys.readouterr().err
+    assert "latch_angles.json" in err and "at least 20 degrees" in err
 
 
 # --- the camera source: --camera instead of --videos ---
@@ -594,3 +602,39 @@ def test_bad_latch_rule_values_exit_2_naming_the_option(capsys, option, value):
     assert stop.value.code == 2
     err = capsys.readouterr().err
     assert option in err and "unrecognized" not in err
+
+
+# --- a camera fault ends the program, so the board's service (Restart=always) starts it again ---
+
+
+def run_main_in_a_thread(monkeypatch, argv, wait_s=30.0):
+    """Runs main() in a thread (signal handlers only work in the main thread, so they are left out) and returns its
+    exit code, or None when it was still running after wait_s."""
+    import threading
+    import signal as signal_module
+
+    monkeypatch.setattr(signal_module, "signal", lambda *args: None)
+    result = []
+    worker = threading.Thread(target=lambda: result.append(cli.main(argv)), daemon=True)
+    worker.start()
+    worker.join(wait_s)
+    return result[0] if result else None
+
+
+def test_a_camera_that_fails_while_served_ends_main_with_1_naming_the_camera(monkeypatch, tmp_path, capsys):
+    class FailingCamera:
+        def __init__(self, device, rotate=0):
+            self.device = device
+
+        def read(self):
+            raise ValueError(f"camera {self.device} gave no picture")
+
+        def close(self):
+            pass
+
+    monkeypatch.setattr(cli, "LiveCamera", FailingCamera)
+    argv = [a for a in cli_argv(tmp_path, "--camera", "/dev/video4") if a != "--no-web"] + ["--port", "0"]
+    assert run_main_in_a_thread(monkeypatch, argv) == 1
+    err = capsys.readouterr().err
+    assert err.strip().splitlines()[-1] == (
+        "error: counting from camera /dev/video4 stopped: camera /dev/video4 gave no picture")
